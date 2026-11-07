@@ -339,6 +339,41 @@ public class ElmModuleTypeInterfaceTests
             canonicalizationCache: cache).IsErrOrNull().Should().BeNull();
     }
 
+    [Theory]
+    [InlineData("Elm.Kernel.Debug.toString")]
+    [InlineData("Elm.Kernel.Debug.toString item")]
+    [InlineData("let stringify = Elm.Kernel.Debug.toString in stringify item")]
+    public void Type_only_interfaces_read_implicit_kernel_references_without_inventing_implementations(
+        string expression)
+    {
+        var declaration =
+            expression == "Elm.Kernel.Debug.toString"
+            ?
+            "render = " + expression
+            :
+            "render item = " + expression;
+
+        var tree =
+            Tree(
+                ("src/Main.elm",
+                "module Main exposing (..)\nimport Test.Internal\nvalue : String\nvalue = Test.Internal.render 42"),
+                ("elm-packages/elm-explorations/test/src/Test/Internal.elm",
+                "module Test.Internal exposing (render)\nrender : a -> String\n" + declaration));
+
+        var cache = new Canonicalization.DeclarationCache();
+
+        for (var attempt = 0; attempt < 2; attempt++)
+        {
+            ElmCompiler.AnalyzeApplication(tree, canonicalizationCache: cache).Should().BeEmpty();
+
+            ElmCompiler.QueryDeclaration(tree, Name("value"), canonicalizationCache: cache)
+                .Extract(error => throw new Exception(error)).Diagnostics.Should().BeEmpty();
+
+            ElmCompiler.CompileInteractiveEnvironment(tree, [Name("value")], canonicalizationCache: cache)
+                .IsErrOrNull().Should().Contain("Elm.Kernel.Debug.toString");
+        }
+    }
+
     [Fact]
     public void Type_only_interfaces_are_shared_with_unresolved_compiler_and_inference()
     {

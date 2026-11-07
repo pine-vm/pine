@@ -238,10 +238,7 @@ public partial class Canonicalization
             file =>
             useSourceModuleTypeInterfaces &&
             (file.ModuleDefinition.Value is Module.EffectModule ||
-            file.Imports.Any(
-                import =>
-                import.Value.ModuleName.Value is ["Elm", "Kernel", ..] or ["PineUnavailable", _, "Elm", "Kernel", ..] &&
-                !moduleNames.Any(module => ModuleNameComparer.Equal(module, import.Value.ModuleName.Value))))))
+            HasUnavailableKernelReferences(file))))
         {
             var moduleName = Module.GetModuleName(file.ModuleDefinition.Value).Value;
 
@@ -302,6 +299,79 @@ public partial class Canonicalization
                     }
                 }
             }
+        }
+
+        bool HasUnavailableKernelReferences(File file)
+        {
+            bool Unavailable(IReadOnlyList<string> name) =>
+                name is ["Elm", "Kernel", ..] or ["PineUnavailable", _, "Elm", "Kernel", ..] &&
+                !moduleNames.Any(module => ModuleNameComparer.Equal(module, name));
+
+            if (file.Imports.Any(import => Unavailable(import.Value.ModuleName.Value)))
+                return true;
+
+            return
+                file.Declarations.Any(
+                    declaration =>
+                    declaration.Value is Declaration.FunctionDeclaration function &&
+                    UsesKernel(function.Function.Declaration.Value.Expression));
+
+            bool UsesKernel(Node<Expression> node) =>
+                node.Value switch
+                {
+                    Expression.Identifier identifier =>
+                    Unavailable(identifier.ModuleName),
+
+                    Expression.Application application =>
+                    UsesKernel(application.Function) || application.Arguments.Any(UsesKernel),
+
+                    Expression.OperatorApplication application =>
+                    UsesKernel(application.Left) || UsesKernel(application.Right),
+
+                    Expression.IfBlock conditional =>
+                    UsesKernel(conditional.Condition) || UsesKernel(conditional.ThenBlock) ||
+                    UsesKernel(conditional.ElseBlock),
+
+                    Expression.CaseExpression cases =>
+                    UsesKernel(cases.CaseBlock.Expression) ||
+                    cases.CaseBlock.Cases.Any(arm => UsesKernel(arm.Expression)),
+
+                    Expression.LetExpression let =>
+                    UsesKernel(let.Value.Expression) ||
+                    let.Value.Declarations.Any(
+                        declaration => declaration.Value switch
+                        {
+                            Expression.LetDeclaration.LetFunction function =>
+                            UsesKernel(function.Function.Declaration.Value.Expression),
+
+                            Expression.LetDeclaration.LetDestructuring destructuring =>
+                            UsesKernel(destructuring.Expression),
+
+                            _ =>
+                            throw new NotImplementedException(
+                                $"{nameof(HasUnavailableKernelReferences)} does not handle let declaration variant: {declaration.Value.GetType().Name}")
+                        }),
+
+                    Expression.LambdaExpression lambda => UsesKernel(lambda.Lambda.Expression),
+                    Expression.Parenthesized parenthesized => UsesKernel(parenthesized.Expression),
+                    Expression.Negation negation => UsesKernel(negation.Expression),
+                    Expression.ListExpr list => list.Elements.Any(UsesKernel),
+                    Expression.TupledExpression tuple => tuple.Elements.Any(UsesKernel),
+                    Expression.RecordExpr record => record.Fields.Any(field => UsesKernel(field.ValueExpr)),
+                    Expression.RecordAccess access => UsesKernel(access.Record),
+
+                    Expression.RecordUpdateExpression update =>
+                    update.Fields.Any(field => UsesKernel(field.ValueExpr)),
+
+                    Expression.UnitExpr or Expression.StringLiteral or Expression.MultilineStringLiteral or
+                    Expression.CharLiteral or Expression.IntegerLiteral or Expression.FloatLiteral or
+                    Expression.PrefixOperator or Expression.RecordAccessFunction or Expression.GLSLExpression =>
+                    false,
+
+                    _ =>
+                    throw new NotImplementedException(
+                        $"{nameof(HasUnavailableKernelReferences)} does not handle expression variant: {node.Value.GetType().Name}")
+                };
         }
 
         var pending = new Queue<DeclQualifiedName>();

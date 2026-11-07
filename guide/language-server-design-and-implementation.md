@@ -16,6 +16,8 @@ The [2026-10-07 frontend design contract](../explore/internal-analysis/2026-10-0
 
 Application analysis selects no entry points and emits or executes no code. It returns source-located diagnostics across application declarations, including unused declarations, unused missing imports, and disconnected source modules. Independent declarations must still be analyzed after errors. Unrelated package declarations need not be diagnosed, but unavailable dependencies required by application code must be reported.
 
+Annotated package APIs backed by unavailable JavaScript kernels supply type-only signatures, including wrappers that reference `Elm.Kernel.*` without an explicit import. This does not provide executable kernel implementations: compilation still rejects demands for those bodies. Pattern bindings are inferred separately for each `case` branch from the matched value, so reusing a binding name in another branch cannot introduce a false type mismatch.
+
 This change retains today's type-checking coverage and regression behavior. Complete Elm-compatible type checking is a future project; an empty diagnostic list must not be advertised as proof that all types were checked.
 
 Definitions, inferred types, and other requested source information come from source queries rather than an application-analysis payload containing all semantic facts. The compiler's `QueryDeclaration` demands the information needed to answer a declaration query and returns reliable definition information despite analysis errors, with relevant diagnostics. Existing language-service query implementations remain available; this change does not replace all of them. Explain when an answer cannot be established rather than presenting an unavailable answer as "not found".

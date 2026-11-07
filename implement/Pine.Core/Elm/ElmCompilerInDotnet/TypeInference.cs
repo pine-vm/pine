@@ -1937,27 +1937,45 @@ public static partial class TypeInference
                 return s_unknownType;
             }
 
-            // Start with the type of the first case arm
-            var unifiedType =
+            var matchedType =
                 InferExpressionType(
-                    caseExpr.Cases[0].Expression,
+                    caseExpr.Expression,
                     parameterNames,
                     parameterTypes,
                     localBindingTypes,
                     currentModuleName,
                     functionTypes);
 
+            InferredType InferArmType(Case arm)
+            {
+                var bindings = localBindingTypes?.ToImmutableDictionary() ?? [];
+
+                foreach (var name in SyntaxAnalysis.CollectNamesBoundByPattern(arm.Pattern))
+                    bindings = bindings.SetItem(name, s_unknownType);
+
+                bindings =
+                    ExtractPatternBindingTypesFromInferredWithChoiceTagTypes(
+                        arm.Pattern,
+                        matchedType,
+                        bindings,
+                        functionTypes);
+
+                return
+                    InferExpressionType(
+                        arm.Expression,
+                        parameterNames,
+                        parameterTypes,
+                        bindings,
+                        currentModuleName,
+                        functionTypes);
+            }
+
+            var unifiedType = InferArmType(caseExpr.Cases[0]);
+
             // Unify with remaining case arm types
             for (var i = 1; i < caseExpr.Cases.Count; i++)
             {
-                var armType =
-                    InferExpressionType(
-                        caseExpr.Cases[i].Expression,
-                        parameterNames,
-                        parameterTypes,
-                        localBindingTypes,
-                        currentModuleName,
-                        functionTypes);
+                var armType = InferArmType(caseExpr.Cases[i]);
 
                 unifiedType = UnifyTypes(unifiedType, armType);
             }

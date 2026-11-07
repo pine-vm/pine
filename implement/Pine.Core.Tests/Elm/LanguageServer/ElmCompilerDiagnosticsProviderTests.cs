@@ -187,6 +187,98 @@ public class ElmCompilerDiagnosticsProviderTests
     }
 
     [Theory]
+    [InlineData(
+        """
+        type Opaque = Opaque
+        type alias Data = { get : String -> Maybe Opaque }
+        docs : Opaque -> String
+        docs _ = ""
+
+        value : Data -> String -> Dict.Dict String String -> String
+        value data key cache =
+            case Dict.get key cache of
+                Just imported ->
+                    imported
+
+                Nothing ->
+                    case data.get key of
+                        Just imported ->
+                            docs imported
+
+                        Nothing ->
+                            ""
+        """, false)]
+    [InlineData(
+        """
+        type Wrapped a = Wrapped a
+        type Pattern = Variable String | Alias Pattern (Wrapped String)
+        unwrap : Wrapped a -> a
+        unwrap (Wrapped item) = item
+
+        value : Pattern -> List String
+        value pattern =
+            case pattern of
+                Variable name ->
+                    [ name ]
+
+                Alias inner name ->
+                    unwrap name :: value inner
+        """, false)]
+    [InlineData(
+        """
+        value : Maybe String -> Int
+        value input =
+            case input of
+                Just item ->
+                    item
+
+                Nothing ->
+                    ""
+        """, true)]
+    public async Task Declaration_demand_compiler_diagnostics_keep_case_bindings_scoped(
+        string declarations,
+        bool expectTypeError)
+    {
+        var source = "module Main exposing (..)\nimport Dict\n" + declarations;
+
+        var (workspace, _) =
+            VirtualWorkspace.Create([(["elm.json"], Manifest), (["src", "Main.elm"], source)]);
+
+        var texts = new DocumentTexts();
+
+        var provider =
+            new ElmCompilerDiagnosticsProvider(
+                workspace,
+                texts,
+                (sources, manifestPath, token) => ElmResolvedBuildPreparation.PrepareForDeclarationDemandAsync(
+                    sources,
+                    manifestPath,
+                    [],
+                    ElmPackageSubstitutions.DefaultBuild.Value,
+                    cancellationToken: token));
+
+        var uri = VirtualWorkspace.DocumentUri("src", "Main.elm");
+
+        for (var attempt = 0; attempt < 3; attempt++)
+        {
+            if (attempt > 0)
+                texts.Texts[uri] = source;
+
+            var result =
+                (await provider.GetDiagnosticsAsync(uri, CancellationToken.None))
+                .Extract(error => throw new Exception(error.Message));
+
+            var diagnostics = result.Should().ContainSingle().Which.Diagnostics;
+
+            if (expectTypeError)
+                diagnostics.Should().Contain(diagnostic => diagnostic.Code == "elm-type");
+
+            else
+                diagnostics.Should().BeEmpty();
+        }
+    }
+
+    [Theory]
     [InlineData("Decode.Value", "Encode.string \"hello\"", false)]
     [InlineData("Decode.Decoder Decode.Value", "Decode.value", false)]
     [InlineData("Decode.Value -> Encode.Value", "identity", false)]
