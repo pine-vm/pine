@@ -17,6 +17,25 @@ namespace Pine.Core.Tests.Elm.LanguageServer;
 public class InvocationCacheStatisticsLogTests
 {
     [Fact]
+    public async Task Invocation_cache_statistics_logging_is_disabled_by_default_even_with_a_log_sink()
+    {
+        var clock = new RecordingTimeProvider();
+        var logs = new List<string>();
+
+        using var server =
+            CreateServer(
+                StubLanguageServiceSessionFactory.WithSession(new StatisticsSession(new())),
+                logs.Add,
+                clock,
+                collectStatistics: false);
+
+        Initialize(server);
+        await server.WorkspaceInitializationTask!;
+        clock.Created.Should().BeFalse();
+        Reports(logs).Should().BeEmpty();
+    }
+
+    [Fact]
     public async Task Invocation_cache_statistics_log_runs_every_five_minutes_with_totals_before_expressions()
     {
         var statistics = new InvocationCacheStatistics();
@@ -176,14 +195,17 @@ public class InvocationCacheStatisticsLogTests
         logs.Where(message => message.StartsWith("Invocation-cache statistics (", StringComparison.Ordinal));
 
     private static Core.Elm.LanguageServer.LanguageServer CreateServer(
-        ILanguageServiceSessionFactory factory, Action<string> log, TimeProvider clock) =>
+        ILanguageServiceSessionFactory factory,
+        Action<string> log,
+        TimeProvider clock,
+        bool collectStatistics = true) =>
         new(
             factory,
             VirtualWorkspace.Create([]).Workspace,
             EmptyElmPackageSource.Instance,
             new StubDiagnosticsProvider(),
             new StubDocumentFormatter(text => text),
-            new LanguageServerOptions("test"),
+            new LanguageServerOptions("test", collectInvocationCacheStatistics: collectStatistics),
             logDelegate: log,
             timeProvider: clock);
 

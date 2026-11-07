@@ -75,6 +75,8 @@ public class TestWatchCommandTests
         session.GenerationalInvocations.Options.RotationEntryCount.Should().Be(5_000);
         session.InvocationResults.Count.Should().Be(0);
         session.CacheLearning.Should().NotBeNull();
+        session.CacheStatistics.Should().BeNull();
+        session.GetCacheStatisticsSnapshot().Should().BeNull();
         session.CompilationCaches.OperatorLifetime.Should().NotBeNull();
         session.CompilationCaches.SemanticLifetime.Should().NotBeNull();
         session.CacheLearning!.CurrentPolicy.Should().BeSameAs(InvocationCachePolicy.Empty);
@@ -121,6 +123,8 @@ public class TestWatchCommandTests
         session.InvocationResults.Count.Should().BeGreaterThan(0);
         session.GenerationalInvocations.Should().BeNull();
         session.CacheLearning.Should().BeNull();
+        session.CacheStatistics.Should().BeNull();
+        session.GetCacheStatisticsSnapshot().Should().BeNull();
     }
 
     [Theory]
@@ -1147,7 +1151,8 @@ public class TestWatchCommandTests
                     MinimumInterval: TimeSpan.FromMilliseconds(100),
                     SampleCapacity: 2,
                     PendingCapacity: 16),
-                learningTimeout: TimeSpan.FromSeconds(30));
+                learningTimeout: TimeSpan.FromSeconds(30),
+                cacheStatistics: new());
 
         var completed = Channel.CreateUnbounded<ElmTestRunCacheSession>();
 
@@ -1181,7 +1186,7 @@ public class TestWatchCommandTests
             state.LastRun.Should().NotBeNull();
             state.LastRun!.SelectedCost.Should().BeLessThanOrEqualTo(state.LastRun.BaselineCost);
             session.CacheLearning.GetSnapshot().SwitchCount.Should().BeGreaterThan(0);
-            var hitsBeforeReruns = session.GetCacheStatisticsSnapshot().Totals.HitCount;
+            var hitsBeforeReruns = session.GetCacheStatisticsSnapshot()!.Totals.HitCount;
 
             for (var run = 0; run < 2; ++run)
             {
@@ -1190,7 +1195,7 @@ public class TestWatchCommandTests
                 (await output.NextRun()).Should().Contain("TEST RUN PASSED").And.Contain("Passed:   1");
             }
 
-            session.GetCacheStatisticsSnapshot().Totals.HitCount.Should().BeGreaterThan(hitsBeforeReruns);
+            session.GetCacheStatisticsSnapshot()!.Totals.HitCount.Should().BeGreaterThan(hitsBeforeReruns);
             session.GenerationalInvocations!.GetStatistics().PhysicalEntryCount.Should().BeGreaterThan(0);
             session.InvocationResults.Count.Should().Be(0);
         }

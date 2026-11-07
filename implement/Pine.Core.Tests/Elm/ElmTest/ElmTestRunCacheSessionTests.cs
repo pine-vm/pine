@@ -25,13 +25,59 @@ public class ElmTestRunCacheSessionTests(ITestOutputHelper output)
         session.GenerationalInvocations.Should().BeNull();
         session.CacheLearning.Should().BeNull();
         session.InvocationCacheConfiguration.Should().BeNull();
-        session.GetCacheStatisticsSnapshot().SharedCacheGenerations.Should().BeNull();
+        session.CacheStatistics.Should().BeNull();
+        session.GetCacheStatisticsSnapshot().Should().BeNull();
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void Cache_session_without_statistics_passes_an_unobserved_buffer_to_the_VM(bool generational)
+    {
+        using var session = new ElmTestRunCacheSession(generationOptions: generational ? new() : null);
+        var key = GenerationalInvocationCacheTests.BuildKey(1);
+
+        var context =
+            session.CreateExecutionContext(
+                cache =>
+                {
+                    cache.Should().BeOfType<BufferedInvocationCacheAccess>();
+                    cache.TryAdd(key, PineValue.EmptyList).Should().BeTrue();
+                    return new CallbackVm((_, _) => Result<string, PineValue>.ok(PineValue.EmptyList));
+                });
+
+        context.Statistics.Should().BeNull();
+        context.Run(_ => 0);
+        session.InvocationCache.TryGet(key, out _).Should().BeTrue();
+        session.GetCacheStatisticsSnapshot().Should().BeNull();
+    }
+
+    [Fact]
+    public void Cache_session_collects_statistics_only_when_a_collector_is_supplied()
+    {
+        var statistics = new InvocationCacheStatistics();
+        using var session = new ElmTestRunCacheSession(cacheStatistics: statistics);
+        var key = GenerationalInvocationCacheTests.BuildKey(1);
+
+        var context =
+            session.CreateExecutionContext(
+                cache =>
+                {
+                    cache.TryAdd(key, PineValue.EmptyList).Should().BeTrue();
+                    return new CallbackVm((_, _) => Result<string, PineValue>.ok(PineValue.EmptyList));
+                });
+
+        session.CacheStatistics.Should().BeSameAs(statistics);
+        context.Statistics.Should().BeSameAs(statistics);
+        context.Run(_ => session.GetCacheStatisticsSnapshot()!.Totals.AdmissionCount).Should().Be(1);
+        session.GetCacheStatisticsSnapshot()!.SharedCacheGenerations.Should().BeNull();
+        session.InvocationCache.TryGet(key, out _).Should().BeTrue();
     }
 
     [Fact]
     public async Task Cache_session_root_boundaries_rotate_promote_and_retire_generations()
     {
-        await using var session = new ElmTestRunCacheSession(generationOptions: new(2, 2));
+        await using var session = new ElmTestRunCacheSession(generationOptions: new(2, 2), cacheStatistics: new());
         var shared = session.GenerationalInvocations!;
         session.InvocationCache.Should().BeSameAs(shared);
         var hot = GenerationalInvocationCacheTests.BuildKey(1);
@@ -110,7 +156,7 @@ public class ElmTestRunCacheSessionTests(ITestOutputHelper output)
         shared.MayContainExpression(hot.ExprValue).Should().BeFalse();
         shared.GetStatistics().RetiredEntries.Should().Be(4);
         session.InvocationResults.Count.Should().Be(0);
-        var snapshot = session.GetCacheStatisticsSnapshot();
+        var snapshot = session.GetCacheStatisticsSnapshot()!;
         snapshot.SharedCacheGenerations!.UniqueEntryCount.Should().Be(2);
         snapshot.Totals.HitCount.Should().Be(1);
         creations.Should().Be(3);
@@ -121,7 +167,7 @@ public class ElmTestRunCacheSessionTests(ITestOutputHelper output)
     [InlineData(true)]
     public async Task Cache_session_failed_or_cancelled_root_publishes_completed_frames(bool cancel)
     {
-        await using var session = new ElmTestRunCacheSession(generationOptions: new(2, 1));
+        await using var session = new ElmTestRunCacheSession(generationOptions: new(2, 1), cacheStatistics: new());
         var key = GenerationalInvocationCacheTests.BuildKey(1);
 
         var context =
@@ -141,7 +187,7 @@ public class ElmTestRunCacheSessionTests(ITestOutputHelper output)
         run.Should().Throw<Exception>();
         await WaitUntil(() => session.GenerationalInvocations!.GetStatistics().Rotations == 1);
         session.InvocationCache.TryGet(key, out _).Should().BeTrue();
-        session.GetCacheStatisticsSnapshot().Totals.AdmissionCount.Should().Be(1);
+        session.GetCacheStatisticsSnapshot()!.Totals.AdmissionCount.Should().Be(1);
     }
 
     [Fact]
@@ -247,6 +293,8 @@ public class ElmTestRunCacheSessionTests(ITestOutputHelper output)
             "learning starts with an empty admission policy");
 
         session.InvocationResults.Count.Should().Be(0);
+        session.CacheStatistics.Should().BeNull();
+        session.GetCacheStatisticsSnapshot().Should().BeNull();
     }
 
     [Fact]

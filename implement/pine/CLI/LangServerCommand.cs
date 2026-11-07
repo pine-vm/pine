@@ -26,6 +26,12 @@ public static class LangServerCommand
 
         var logFileDirOption = new Option<string?>("--log-dir");
 
+        var cacheStatisticsOption =
+            new Option<bool>("--cache-statistics")
+            {
+                Description = "Collect and log invocation-cache statistics every five minutes. Disabled by default."
+            };
+
         var stdioOption =
             /*
              * The client in VSCode extension sample was observed to add this option automatically:
@@ -35,6 +41,7 @@ public static class LangServerCommand
 
         command.Add(logFileDirOption);
         command.Add(stdioOption);
+        command.Add(cacheStatisticsOption);
 
         command.SetAction(
             (parseResult) =>
@@ -190,7 +197,8 @@ public static class LangServerCommand
                 using var languageServer =
                     global::Pine.Elm.LanguageServerAdapters.LanguageServerComposition.CreateLanguageServer(
                         pineAppVersionId: PineCliCommand.AppVersionId,
-                        logDelegate: Log);
+                        logDelegate: Log,
+                        collectInvocationCacheStatistics: parseResult.GetValue(cacheStatisticsOption));
 
                 var rpcHandler =
                     new StreamJsonRpc.HeaderDelimitedMessageHandler(

@@ -583,7 +583,7 @@ public partial class LanguageServer(
                 _ownedSession?.Dispose();
                 _ownedSession = languageServiceState;
 
-                if (_logDelegate is { } logStatistics)
+                if (options.CollectInvocationCacheStatistics && _logDelegate is { } logStatistics)
                 {
                     _statisticsLog?.Dispose();
 

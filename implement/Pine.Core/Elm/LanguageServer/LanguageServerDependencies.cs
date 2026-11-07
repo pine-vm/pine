@@ -227,15 +227,18 @@ public sealed record LanguageServerOptions
     /// <param name="serverVersion">Version reported to the client in the <c>initialize</c> response.</param>
     /// <param name="maxConcurrencyCount">Maximum number of exclusively leased language-service workers.</param>
     /// <param name="invocationCacheOptions">Optional invocation-generation limits; other VM caches are unchanged.</param>
+    /// <param name="collectInvocationCacheStatistics">Opt in to cumulative VM-facing cache-operation counters.</param>
     public LanguageServerOptions(
         string serverVersion,
         int maxConcurrencyCount = 4,
-        InvocationCacheGenerationOptions? invocationCacheOptions = null)
+        InvocationCacheGenerationOptions? invocationCacheOptions = null,
+        bool collectInvocationCacheStatistics = false)
     {
         System.ArgumentOutOfRangeException.ThrowIfLessThan(maxConcurrencyCount, 1);
 
         ServerVersion = serverVersion;
         MaxConcurrencyCount = maxConcurrencyCount;
+        CollectInvocationCacheStatistics = collectInvocationCacheStatistics;
 
         InvocationCacheOptions =
             invocationCacheOptions ??
@@ -254,4 +257,7 @@ public sealed record LanguageServerOptions
 
     /// <summary>Gets the background invocation-cache maintenance policy shared by this session's workers.</summary>
     public InvocationCacheGenerationOptions InvocationCacheOptions { get; }
+
+    /// <summary>Whether to collect VM-facing cache-operation counters; disabled by default.</summary>
+    public bool CollectInvocationCacheStatistics { get; }
 }

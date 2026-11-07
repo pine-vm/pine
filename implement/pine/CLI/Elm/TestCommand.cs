@@ -27,7 +27,8 @@ public static class TestCommand
         Action<string>? logDelegate = null,
         InvocationCacheGenerationOptions? generationOptions = null,
         ContinuousInvocationCacheLearningOptions? learningOptions = null,
-        TimeSpan? learningTimeout = null)
+        TimeSpan? learningTimeout = null,
+        InvocationCacheStatistics? cacheStatistics = null)
     {
         var learning =
             IntermediateVM.InvocationCacheLearning.Create(
@@ -43,7 +44,8 @@ public static class TestCommand
                 new(
                     IntermediateVM.SetupVM.DefaultPrecompiledLeaves,
                     generationOptions: generationOptions ?? InvocationCacheGenerationOptions.Default,
-                    cacheLearning: learning);
+                    cacheLearning: learning,
+                    cacheStatistics: cacheStatistics);
         }
         catch
         {

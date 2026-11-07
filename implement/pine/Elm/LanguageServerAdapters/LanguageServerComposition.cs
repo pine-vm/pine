@@ -127,10 +127,12 @@ public static class LanguageServerComposition
     /// Directories searched for Elm packages. Defaults to
     /// <see cref="DefaultElmPackagesSearchDirectories"/>.
     /// </param>
+    /// <param name="collectInvocationCacheStatistics">Opt in to cache-operation counters and periodic logging.</param>
     public static Core.Elm.LanguageServer.LanguageServer CreateLanguageServer(
         string pineAppVersionId,
         Action<string>? logDelegate = null,
-        IReadOnlyList<string>? elmPackagesSearchDirectories = null)
+        IReadOnlyList<string>? elmPackagesSearchDirectories = null,
+        bool collectInvocationCacheStatistics = false)
     {
         var workspace = new FileSystemWorkspace();
 
@@ -170,7 +172,10 @@ public static class LanguageServerComposition
                 elmPackageSource: elmPackageSource,
                 diagnosticsProvider: diagnosticsProvider,
                 documentFormatter: CreateDocumentFormatter(logDelegate),
-                options: new LanguageServerOptions(serverVersion: pineAppVersionId),
+                options:
+                new LanguageServerOptions(
+                    serverVersion: pineAppVersionId,
+                    collectInvocationCacheStatistics: collectInvocationCacheStatistics),
                 logDelegate: logDelegate,
                 formattingDiagnosticsProvider: syntaxDiagnosticsProvider,
                 testCommitSource: new GitElmTestCommitSource());

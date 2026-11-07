@@ -24,13 +24,15 @@ namespace Pine.Core.Elm.Testing;
 /// <remarks>
 /// Creates a session with fixed native leaves and optional generational storage and background learning.
 /// Without generation options, invocation storage remains unbounded. The session owns the supplied learner.
+/// Cache-operation statistics are collected only when a caller supplies a collector.
 /// </remarks>
 public sealed class ElmTestRunCacheSession(
     IReadOnlyDictionary<PineValue, PrecompiledLeaf>? precompiledLeaves = null,
     InvocationCacheGenerationOptions? generationOptions = null,
     ContinuousInvocationCacheLearning? cacheLearning = null,
     SourceCompilationCaches? compilationCaches = null,
-    ElmTestDiscoveryCaches? discoveryCaches = null) : IDisposable, IAsyncDisposable
+    ElmTestDiscoveryCaches? discoveryCaches = null,
+    InvocationCacheStatistics? cacheStatistics = null) : IDisposable, IAsyncDisposable
 {
     /// <summary>
     /// Retained pure source transformations. Supply alternate stores or cascades here;
@@ -71,15 +73,21 @@ public sealed class ElmTestRunCacheSession(
     public IInvocationCacheAccess InvocationCache =>
         (IInvocationCacheAccess?)GenerationalInvocations ?? InvocationResults;
 
-    /// <summary>Cumulative VM-facing cache operations across executions.</summary>
-    public InvocationCacheStatistics CacheStatistics { get; } = new();
+    /// <summary>Optional caller-supplied cumulative VM-facing cache operations across executions.</summary>
+    public InvocationCacheStatistics? CacheStatistics { get; } = cacheStatistics;
 
     /// <summary>Optional session-owned background learner and its current state.</summary>
     public ContinuousInvocationCacheLearning? CacheLearning { get; } = cacheLearning;
 
-    /// <summary>Captures cache operations and, when configured, generational storage statistics.</summary>
-    public InvocationCacheStatisticsSnapshot GetCacheStatisticsSnapshot() =>
-        CacheStatistics.GetSnapshot() with { SharedCacheGenerations = GenerationalInvocations?.GetStatistics() };
+    /// <summary>
+    /// Captures cache operations and generational storage statistics, or returns null when collection is disabled.
+    /// </summary>
+    public InvocationCacheStatisticsSnapshot? GetCacheStatisticsSnapshot() =>
+        CacheStatistics?.GetSnapshot() is { } snapshot
+        ?
+        snapshot with { SharedCacheGenerations = GenerationalInvocations?.GetStatistics() }
+        :
+        null;
 
     internal InvocationCacheConfiguration? InvocationCacheConfiguration =>
         CacheLearning is null ? null : new(0, 0, 0, 0);

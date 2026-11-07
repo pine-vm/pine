@@ -105,6 +105,31 @@ Caller-supplied caches and diagnostic callbacks must also be safe for concurrent
 use when sharing a VM. `PineVMSharedCaches` provides thread-safe compilation caches
 for reuse across VM instances with identical compilation configuration.
 
+## Optional invocation-cache statistics
+
+`InvocationCacheStatistics` is an explicit observer, not part of invocation
+storage. Pass a collector via the `statistics` constructor argument of
+`InvocationCacheExecutionContext` to observe VM-facing operations once,
+including local-buffer hits. Omitting it installs no observer and performs no
+collection work on cache operations. Snapshot requests do not enable collection
+retroactively.
+
+Recording threads use independent counter shards, so even a shared observer
+does not serialize workers on one statistics lock. A thread registers its shard
+on first recording; later records synchronize only with snapshot readers of
+that shard. Snapshots freeze all registered shards in a fixed order before
+aggregating, preserving a consistent, immutable, cumulative point-in-time view.
+Counters from threads that have exited remain included. Snapshots retain only
+expression keys and numeric counters, not invocation arguments or return values.
+
+`ElmTestRunCacheSession` defaults to no collector. Callers that need counters
+can supply `cacheStatistics: new InvocationCacheStatistics()` and read
+`GetCacheStatisticsSnapshot()`. This method and `CacheStatistics` return `null`
+when collection was not enabled. Generational storage diagnostics remain
+available independently from `GenerationalInvocations.GetStatistics()`.
+Policy-learning simulations still collect the operation counts consumed by
+their cost model; this opt-out does not remove those algorithmic inputs.
+
 ## Compilation Units and Specializations
 
 When compiling Pine expressions to sequential representations, the most common specialization targets a subset of `Environment` values. Under such constraints, expressions that depend on `Environment` can be reduced and simplified at compile time.

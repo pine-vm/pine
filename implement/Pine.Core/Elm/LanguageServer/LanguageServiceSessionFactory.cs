@@ -90,7 +90,7 @@ public class LanguageServiceSessionFactory : ILanguageServiceSessionFactory
 
         var sharedCache = new GenerationalInvocationCache(options.InvocationCacheOptions);
         var sharedPineVMCaches = new PineVMSharedCaches();
-        var cacheStatistics = new InvocationCacheStatistics();
+        var cacheStatistics = options.CollectInvocationCacheStatistics ? new InvocationCacheStatistics() : null;
         var cacheLearning = _createCacheLearning?.Invoke();
 
         InvocationCacheExecutionContext<IPineVM> CreateWorker() =>

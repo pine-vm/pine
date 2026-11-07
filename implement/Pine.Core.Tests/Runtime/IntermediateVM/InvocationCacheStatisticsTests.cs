@@ -4,6 +4,7 @@ using Pine.Core.Runtime.IntermediateVM;
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Threading;
 using System.Threading.Tasks;
 using Xunit;
 
@@ -164,6 +165,147 @@ public class InvocationCacheStatisticsTests
                         }))));
 
         statistics.GetSnapshot().Totals.Should().Be(new InvocationCacheExpressionStatistics(800, 0, 800, 800, 0, 0));
+    }
+
+    [Fact]
+    public async Task Invocation_cache_statistics_recording_on_one_thread_does_not_serialize_another()
+    {
+        var statistics = new InvocationCacheStatistics();
+        var cache = statistics.Observe(new ProbeOnlyCache());
+        using var entered = new ManualResetEventSlim();
+        using var release = new ManualResetEventSlim();
+        var blocked = 0;
+
+        var expression =
+            new CallbackHashValue(
+                () =>
+                {
+                    if (Interlocked.Exchange(ref blocked, 1) is 0)
+                    {
+                        entered.Set();
+
+                        if (!release.Wait(TimeSpan.FromSeconds(10)))
+                            throw new TimeoutException("The statistics test did not release the first recording thread.");
+                    }
+
+                    return 42;
+                });
+
+        var first =
+            Task.Factory.StartNew(
+                () => cache.MayContainExpression(expression),
+                CancellationToken.None,
+                TaskCreationOptions.LongRunning,
+                TaskScheduler.Default);
+
+        Task<bool>? second = null;
+
+        try
+        {
+            entered.Wait(TimeSpan.FromSeconds(10)).Should().BeTrue();
+
+            second =
+                Task.Factory.StartNew(
+                    () => cache.MayContainExpression(PineValue.EmptyList),
+                    CancellationToken.None,
+                    TaskCreationOptions.LongRunning,
+                    TaskScheduler.Default);
+
+            (await second.WaitAsync(TimeSpan.FromSeconds(5))).Should().BeFalse();
+        }
+        finally
+        {
+            release.Set();
+            await first.WaitAsync(TimeSpan.FromSeconds(10));
+
+            if (second is not null)
+                await second.WaitAsync(TimeSpan.FromSeconds(10));
+        }
+
+        statistics.GetSnapshot().Totals.Should().Be(new InvocationCacheExpressionStatistics(2, 2, 0, 0, 0, 0));
+    }
+
+    [Fact]
+    public async Task Invocation_cache_statistics_shared_observer_preserves_each_expression_after_threads_exit()
+    {
+        var statistics = new InvocationCacheStatistics();
+        var cache = statistics.Observe(new ProbeOnlyCache());
+        var expressions = Enumerable.Range(0, 8).Select(index => PineValue.Blob([(byte)index])).ToArray();
+
+        await Task.WhenAll(
+            expressions.Select(
+                expression =>
+                Task.Factory.StartNew(
+                    () =>
+                    {
+                        for (var index = 0; index < 100; ++index)
+                            cache.MayContainExpression(expression).Should().BeFalse();
+                    },
+                    CancellationToken.None,
+                    TaskCreationOptions.LongRunning,
+                    TaskScheduler.Default)));
+
+        var snapshot = statistics.GetSnapshot();
+        snapshot.Totals.Should().Be(new InvocationCacheExpressionStatistics(800, 800, 0, 0, 0, 0));
+        snapshot.PerExpression.Should().HaveCount(8);
+
+        foreach (var expression in expressions)
+        {
+            snapshot.PerExpression[expression].Should().Be(
+                new InvocationCacheExpressionStatistics(100, 100, 0, 0, 0, 0));
+        }
+
+        cache.MayContainExpression(expressions[0]);
+        snapshot.Totals.ExpressionCheckCount.Should().Be(800);
+        statistics.GetSnapshot().Totals.ExpressionCheckCount.Should().Be(801);
+    }
+
+    [Fact]
+    public async Task Invocation_cache_statistics_snapshot_failure_releases_all_shards()
+    {
+        var statistics = new InvocationCacheStatistics();
+        var cache = statistics.Observe(new ProbeOnlyCache());
+        var fail = false;
+        var expression = new CallbackHashValue(() => fail ? throw new InvalidOperationException("hash failure") : 42);
+
+        await Task.Factory.StartNew(
+            () => cache.MayContainExpression(PineValue.EmptyList),
+            CancellationToken.None,
+            TaskCreationOptions.LongRunning,
+            TaskScheduler.Default);
+
+        cache.MayContainExpression(expression);
+        fail = true;
+        var snapshot = () => statistics.GetSnapshot();
+        snapshot.Should().Throw<InvalidOperationException>().WithMessage("hash failure");
+        fail = false;
+
+        var recoveredSnapshot =
+            await Task.Factory.StartNew(
+                () =>
+                {
+                    cache.MayContainExpression(PineValue.EmptyList);
+                    return statistics.GetSnapshot();
+                },
+                CancellationToken.None,
+                TaskCreationOptions.LongRunning,
+                TaskScheduler.Default).WaitAsync(TimeSpan.FromSeconds(10));
+
+        recoveredSnapshot.Totals.Should().Be(new InvocationCacheExpressionStatistics(3, 3, 0, 0, 0, 0));
+    }
+
+    private sealed record CallbackHashValue(Func<int> ComputeHash) : PineValue
+    {
+        public override int GetHashCode() => ComputeHash();
+    }
+
+    private sealed class ProbeOnlyCache : IInvocationCacheAccess
+    {
+        public bool MayContainExpression(PineValue expressionValue) => false;
+
+        public bool TryGet(EvalCacheEntryKey key, out PineValue value) => throw new NotSupportedException();
+
+        public bool TryAdd(EvalCacheEntryKey key, PineValue value) => throw new NotSupportedException();
     }
 
     private sealed class BatchOnlyCache : IInvocationCacheAccess

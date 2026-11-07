@@ -56,13 +56,22 @@ public sealed record InvocationCacheStatisticsSnapshot(
 /// <summary>
 /// Thread-safe, opt-in cache instrumentation. Observe the outermost VM-facing cache to count
 /// local and shared hits once, without counting internal probes, promotions or buffer publication.
-/// Snapshots are cumulative for this collector's lifetime and do not reset counters.
+/// Recording uses thread-local shards, shared only with snapshot readers. Snapshots are cumulative
+/// for this collector's lifetime and do not reset counters.
 /// </summary>
 public sealed class InvocationCacheStatistics
 {
-    private readonly Lock _lock = new();
+    private readonly Lock _shardsLock = new();
 
-    private readonly Dictionary<PineValue, InvocationCacheExpressionStatistics> _perExpression = [];
+    private readonly List<Shard> _shards = [];
+
+    private readonly ThreadLocal<Shard> _currentShard;
+
+    /// <summary>Creates an opt-in collector; shards are allocated on first use by each recording thread.</summary>
+    public InvocationCacheStatistics()
+    {
+        _currentShard = new(CreateShard);
+    }
 
     /// <summary>
     /// Wraps a cache, preserving its results and sharing this collector's counters.
@@ -77,24 +86,67 @@ public sealed class InvocationCacheStatistics
     /// <summary>Copies counters consistently, including expressions with only misses or skipped lookups.</summary>
     public InvocationCacheStatisticsSnapshot GetSnapshot()
     {
-        lock (_lock)
+        lock (_shardsLock)
         {
-            var totals = new InvocationCacheExpressionStatistics();
+            var lockedCount = 0;
 
-            foreach (var counters in _perExpression.Values)
-                totals = totals.Add(counters);
+            try
+            {
+                // Freeze every shard before copying so the snapshot represents one point in time.
+                for (; lockedCount < _shards.Count; ++lockedCount)
+                    _shards[lockedCount].Lock.Enter();
 
-            return new(totals, _perExpression.ToImmutableDictionary());
+                var perExpression = ImmutableDictionary.CreateBuilder<PineValue, InvocationCacheExpressionStatistics>();
+                var totals = new InvocationCacheExpressionStatistics();
+
+                foreach (var shard in _shards)
+                {
+                    foreach (var (expression, counters) in shard.PerExpression)
+                    {
+                        perExpression.TryGetValue(expression, out var previous);
+                        perExpression[expression] = previous.Add(counters);
+                        totals = totals.Add(counters);
+                    }
+                }
+
+                return new(totals, perExpression.ToImmutable());
+            }
+            finally
+            {
+                for (var index = lockedCount - 1; index >= 0; --index)
+                    _shards[index].Lock.Exit();
+            }
         }
+    }
+
+    private Shard CreateShard()
+    {
+        var shard = new Shard();
+
+        lock (_shardsLock)
+        {
+            _shards.Add(shard);
+        }
+
+        return shard;
     }
 
     private void Record(PineValue expression, InvocationCacheExpressionStatistics counters)
     {
-        lock (_lock)
+        var shard = _currentShard.Value!;
+
+        lock (shard.Lock)
         {
-            _perExpression.TryGetValue(expression, out var previous);
-            _perExpression[expression] = previous.Add(counters);
+            shard.PerExpression.TryGetValue(expression, out var previous);
+            shard.PerExpression[expression] = previous.Add(counters);
         }
+    }
+
+    private sealed class Shard
+    {
+        public Lock Lock { get; } = new();
+
+        public Dictionary<PineValue, InvocationCacheExpressionStatistics> PerExpression { get; } = [];
     }
 
     private sealed class ObservedCache(

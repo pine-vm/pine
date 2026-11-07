@@ -127,6 +127,9 @@ public class LanguageServiceTests
         new LanguageServerOptions(serverVersion: "test")
             .InvocationCacheOptions.Should().Be(InvocationCacheGenerationOptions.Default);
 
+        new LanguageServerOptions(serverVersion: "test")
+            .CollectInvocationCacheStatistics.Should().BeFalse();
+
         var constructWithInvalidConcurrency =
             () =>
             new LanguageServerOptions(
@@ -134,6 +137,42 @@ public class LanguageServiceTests
                 maxConcurrencyCount: 0);
 
         constructWithInvalidConcurrency.Should().Throw<ArgumentOutOfRangeException>();
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void Language_service_cache_statistics_are_opt_in(bool collectStatistics)
+    {
+        IInvocationCacheAccess? observedCache = null;
+
+        var factory =
+            new LanguageServiceSessionFactory(
+                (cache, _) =>
+                {
+                    observedCache = cache;
+                    cache.MayContainExpression(PineValue.EmptyList).Should().BeFalse();
+                    throw new InvalidOperationException("Stop before compiling the language service.");
+                },
+                logDelegate: _ => { });
+
+        Action create =
+            () => factory.CreateSessionAsync(
+                collectStatistics
+                ?
+                new LanguageServerOptions("test", collectInvocationCacheStatistics: true)
+                :
+                new LanguageServerOptions("test"),
+                CancellationToken.None);
+
+        create.Should().Throw<InvalidOperationException>().WithMessage("Stop before compiling the language service.");
+        observedCache.Should().NotBeNull();
+
+        if (collectStatistics)
+            observedCache.Should().NotBeOfType<BufferedInvocationCacheAccess>();
+
+        else
+            observedCache.Should().BeOfType<BufferedInvocationCacheAccess>();
     }
 
     [Fact]
