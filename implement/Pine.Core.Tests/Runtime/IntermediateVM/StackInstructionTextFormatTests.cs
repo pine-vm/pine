@@ -136,7 +136,7 @@ public class StackInstructionTextFormatTests
                     StackInstructionKind.Return,
                     LocalIndices: [],
                     SliceSwitchCases: [],
-                    SwitchJumpTable: ImmutableDictionary<PineValue, int>.Empty),
+                    SwitchJumpTable: []),
                 new(StackInstructionKind.Local_Set, LocalIndices: [0]),
                 StackInstruction.Local_Set([0], popCount: 0),
                 StackInstruction.Int_Mul_Const_Add_Binary(-1),

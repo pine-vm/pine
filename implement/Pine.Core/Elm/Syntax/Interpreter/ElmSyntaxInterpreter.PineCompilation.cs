@@ -51,11 +51,11 @@ public partial class ElmSyntaxInterpreter
 
         private readonly Queue<(DeclQualifiedName Name, PineValueInProcess Value)> m_pending = new();
 
-        private readonly Dictionary<DeclQualifiedName, AST.Declaration> m_generated = new();
+        private readonly Dictionary<DeclQualifiedName, AST.Declaration> m_generated = [];
 
-        private readonly Dictionary<DeclQualifiedName, Model.Expression> m_bodies = new();
+        private readonly Dictionary<DeclQualifiedName, Model.Expression> m_bodies = [];
 
-        private readonly Dictionary<DeclQualifiedName, (string Name, Model.Expression Value)[]> m_captures = new();
+        private readonly Dictionary<DeclQualifiedName, (string Name, Model.Expression Value)[]> m_captures = [];
 
         private int m_nextName;
 

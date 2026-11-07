@@ -64,7 +64,7 @@ public partial class ElmSyntaxInterpreter
             var values =
                 BindingCount is 0
                 ?
-                Array.Empty<PineValueInProcess>()
+                []
                 :
                 new PineValueInProcess[BindingCount];
 

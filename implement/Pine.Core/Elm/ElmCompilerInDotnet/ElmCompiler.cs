@@ -109,7 +109,7 @@ public partial class ElmCompiler
             ?
             ElmModuleTypeInterface.Standard
             :
-            ImmutableDictionary<string, ElmModuleTypeInterface>.Empty;
+            [];
 
         var canonicalizationResult =
             ParseAndCanonicalizeForLowering(

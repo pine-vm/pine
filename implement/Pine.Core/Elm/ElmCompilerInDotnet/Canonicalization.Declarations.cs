@@ -815,7 +815,7 @@ public partial class Canonicalization
         {
             var existing =
                 exports.GetValueOrDefault(name) ??
-                new ModuleExports([], [], ImmutableDictionary<string, ImmutableList<string>>.Empty);
+                new ModuleExports([], [], []);
 
             exports =
                 exports.SetItem(

@@ -32,7 +32,7 @@ internal static class ElmFuzzPackageSources
             .Add("elm/json", "1.0.0 <= v < 2.0.0")
             .Add("elm/virtual-dom", "1.0.0 <= v < 2.0.0")
             :
-            ImmutableDictionary<string, string>.Empty)
+            [])
             .Add("elm/core", "1.0.0 <= v < 2.0.0")
             .Add("elm/random", "1.0.0 <= v < 2.0.0"),
         };

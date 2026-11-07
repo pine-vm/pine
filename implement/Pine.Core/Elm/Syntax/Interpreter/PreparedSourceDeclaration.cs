@@ -21,9 +21,9 @@ public sealed record PreparedDeclarationInput(DeclQualifiedName Name, Abstract.D
 {
     private sealed record Digest(ReadOnlyMemory<byte> Bytes);
 
-    private static readonly ConditionalWeakTable<Abstract.Declaration, Digest> s_syntaxHashes = new();
+    private static readonly ConditionalWeakTable<Abstract.Declaration, Digest> s_syntaxHashes = [];
 
-    private static readonly ConditionalWeakTable<Concrete.Declaration, Abstract.Declaration> s_normalizedSyntax = new();
+    private static readonly ConditionalWeakTable<Concrete.Declaration, Abstract.Declaration> s_normalizedSyntax = [];
 
     /// <summary>
     /// Normalizes canonical CST once per immutable object, with weak ownership. Repeated canonical-cache

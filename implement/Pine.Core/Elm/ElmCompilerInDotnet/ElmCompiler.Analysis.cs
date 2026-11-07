@@ -104,7 +104,7 @@ public partial class ElmCompiler
             ?
             ElmModuleTypeInterface.Standard
             :
-            ImmutableDictionary<string, ElmModuleTypeInterface>.Empty;
+            [];
 
         var parseDiagnostics = new List<ElmCompilerDiagnostic>();
 
@@ -212,7 +212,7 @@ public partial class ElmCompiler
             ?
             ElmModuleTypeInterface.Standard
             :
-            ImmutableDictionary<string, ElmModuleTypeInterface>.Empty;
+            [];
 
         var diagnostics = new List<ElmCompilerDiagnostic>();
 

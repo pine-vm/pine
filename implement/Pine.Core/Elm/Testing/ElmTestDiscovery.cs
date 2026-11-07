@@ -674,7 +674,7 @@ public static class ElmTestDiscovery
                                     item.Kind is ElmTestDiscoveryItemKind.Unit or ElmTestDiscoveryItemKind.Fuzz).ToArray();
 
                         if (selected.Length == 0)
-                            return ImmutableDictionary<string, ElmTestExecutionEntry>.Empty;
+                            return [];
 
                         var runners =
                             selected.ToDictionary(
@@ -1113,7 +1113,7 @@ public sealed record ElmTestDiscoveryResult
     { get; init; }
 
     internal ImmutableDictionary<string, uint> FuzzRunOverrides { get; init; } =
-        ImmutableDictionary<string, uint>.Empty;
+        [];
 
     /// <summary>Default execution settings for this view of the constructed inventory.</summary>
     [JsonIgnore]
@@ -1169,7 +1169,7 @@ public sealed record ElmTestDiscoveryResult
             GetExecutionFilter(id);
 
         if (ids.Count == 0)
-            return ImmutableDictionary<string, ElmTestExecutionEntry>.Empty;
+            return [];
 
         return
             (CompileExecution ?? throw new InvalidOperationException("This discovery result has no prepared code."))

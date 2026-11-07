@@ -25,7 +25,7 @@ public sealed record SourceTransformationInput(
 {
     private sealed record Digest(ReadOnlyMemory<byte> Bytes);
 
-    private static readonly ConditionalWeakTable<Declaration, Digest> s_syntaxHashes = new();
+    private static readonly ConditionalWeakTable<Declaration, Digest> s_syntaxHashes = [];
 
     /// <summary>
     /// Derives a domain-separated SHA-256 address. Syntax encoding is memoized by immutable object

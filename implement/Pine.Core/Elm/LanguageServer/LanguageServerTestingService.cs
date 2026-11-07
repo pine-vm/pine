@@ -7,7 +7,6 @@ using Pine.Core.LanguageServerProtocol;
 using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
-using System.Collections.Immutable;
 using System.Diagnostics;
 using System.IO;
 using System.Linq;
@@ -318,7 +317,7 @@ public sealed class LanguageServerTestingService(
             var entries =
                 executable.Length == 0
                 ?
-                ImmutableDictionary<string, ElmTestExecutionEntry>.Empty
+                []
                 :
                 await Task.Run(
                     () =>

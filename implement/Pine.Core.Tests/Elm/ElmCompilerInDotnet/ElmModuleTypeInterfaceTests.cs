@@ -6,7 +6,6 @@ using Pine.Core.Files;
 using Pine.Core.Functional;
 using System;
 using System.Collections.Generic;
-using System.Collections.Immutable;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
@@ -389,7 +388,7 @@ public class ElmModuleTypeInterfaceTests
 
         var environment =
             new TypeInference.FunctionInferenceEnvironment(
-                ImmutableDictionary<string, TypeInference.InferredType>.Empty);
+                []);
 
         var function =
             new Core.Elm.Syntax.Abstract.Expression.Application(
