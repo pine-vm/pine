@@ -63,14 +63,14 @@ public class CollectedTemplateEnvironmentsTests
         snapshotField.GetValue(prefix).Should().BeNull();
 
         prefix[0].Should().BeSameAs(PineValueInProcess.EmptyBlob);
-        var snapshot = snapshotField.GetValue(prefix);
-        snapshot.Should().NotBeNull();
+        snapshotField.GetValue(prefix).Should().BeNull();
 
         prefix.ToArray().Should().Equal(
             new[] { PineValueInProcess.EmptyBlob, PineValueInProcess.EmptyList },
             (actual, expected) => ReferenceEquals(actual, expected));
 
-        snapshotField.GetValue(prefix).Should().BeSameAs(snapshot);
+        var snapshot = snapshotField.GetValue(prefix);
+        snapshot.Should().NotBeNull();
 
         var extended = prefix.Append(PineValueInProcess.CreateInteger(37));
         snapshotField.GetValue(extended).Should().BeNull();
@@ -88,5 +88,27 @@ public class CollectedTemplateEnvironmentsTests
 
         snapshotField.GetValue(extended).Should().BeSameAs(extendedSnapshot);
         snapshotField.GetValue(prefix).Should().BeSameAs(snapshot);
+    }
+
+    [Fact]
+    public void Two_environment_indexing_allocates_no_snapshot()
+    {
+        var history =
+            CollectedTemplateEnvironments.Empty.Append(PineValueInProcess.EmptyBlob).Append(
+                PineValueInProcess.EmptyList);
+
+        var before = GC.GetAllocatedBytesForCurrentThread();
+        var correct = true;
+
+        for (var index = 0; index < 1000; ++index)
+        {
+            correct &=
+                ReferenceEquals(history[0], PineValueInProcess.EmptyBlob) &&
+                ReferenceEquals(history[1], PineValueInProcess.EmptyList);
+        }
+
+        var allocated = GC.GetAllocatedBytesForCurrentThread() - before;
+        correct.Should().BeTrue();
+        allocated.Should().Be(0);
     }
 }

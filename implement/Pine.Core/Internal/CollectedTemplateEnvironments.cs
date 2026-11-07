@@ -46,6 +46,9 @@ internal sealed class CollectedTemplateEnvironments : IReadOnlyList<PineValueInP
             if (index == Count - 1)
                 return _last!;
 
+            if (index == Count - 2)
+                return _previous!._last!;
+
             return Indexed()[index];
         }
     }

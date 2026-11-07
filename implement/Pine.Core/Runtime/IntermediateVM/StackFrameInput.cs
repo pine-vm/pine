@@ -63,7 +63,7 @@ public record StackFrameInput
         if (_evaluatedArguments is { } evaluatedArguments)
             return evaluatedArguments;
 
-        evaluatedArguments = new PineValue[Arguments.Count];
+        evaluatedArguments = Arguments.Count is 0 ? [] : new PineValue[Arguments.Count];
 
         for (var i = 0; i < Arguments.Count; i++)
         {
@@ -111,7 +111,12 @@ public record StackFrameInput
         PineValue environmentValue,
         StaticFunctionInterface parameters)
     {
-        var arguments = new PineValueInProcess[parameters.ParamsPaths.Count];
+        var arguments =
+            parameters.ParamsPaths.Count is 0
+            ?
+            []
+            :
+            new PineValueInProcess[parameters.ParamsPaths.Count];
 
         for (var i = 0; i < parameters.ParamsPaths.Count; i++)
         {
@@ -139,7 +144,12 @@ public record StackFrameInput
         PineValueInProcess environmentValue,
         StaticFunctionInterface parameters)
     {
-        var arguments = new PineValueInProcess[parameters.ParamsPaths.Count];
+        var arguments =
+            parameters.ParamsPaths.Count is 0
+            ?
+            []
+            :
+            new PineValueInProcess[parameters.ParamsPaths.Count];
 
         for (var i = 0; i < parameters.ParamsPaths.Count; i++)
         {

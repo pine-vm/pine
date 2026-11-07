@@ -144,6 +144,15 @@ internal abstract record TemplateValueRecipe
 
     public PineValueInProcess Instantiate(IReadOnlyList<PineValueInProcess> environments)
     {
+        Dictionary<TemplateValueRecipe, PineValueInProcess>? memo = null;
+        return Instantiate(environments, ref memo, preserveSharing: true);
+    }
+
+    internal PineValueInProcess Instantiate(
+        IReadOnlyList<PineValueInProcess> environments,
+        ref Dictionary<TemplateValueRecipe, PineValueInProcess>? instantiated,
+        bool preserveSharing)
+    {
         PineVMWorkProfile.Current?.Count(PineVMWorkProfile.Metric.RecipeInstantiateCalls);
 
         switch (this)
@@ -160,7 +169,10 @@ internal abstract record TemplateValueRecipe
                     ?? PineValueInProcess.EmptyList;
 
             case List list:
-                return InstantiateShared(list, environments, new(ReferenceEqualityComparer.Instance));
+                if (preserveSharing)
+                    instantiated ??= new(ReferenceEqualityComparer.Instance);
+
+                return InstantiateShared(list, environments, instantiated);
 
             default:
                 throw new NotImplementedException(
@@ -171,12 +183,12 @@ internal abstract record TemplateValueRecipe
     private static PineValueInProcess InstantiateShared(
         TemplateValueRecipe recipe,
         IReadOnlyList<PineValueInProcess> environments,
-        Dictionary<TemplateValueRecipe, PineValueInProcess> instantiated)
+        Dictionary<TemplateValueRecipe, PineValueInProcess>? instantiated)
     {
         var profile = PineVMWorkProfile.Current;
         profile?.Count(PineVMWorkProfile.Metric.RecipeInstantiateSharedCalls);
 
-        if (instantiated.TryGetValue(recipe, out var cached))
+        if (instantiated is not null && instantiated.TryGetValue(recipe, out var cached))
         {
             profile?.Count(PineVMWorkProfile.Metric.RecipeInstantiateSharedMemoHits);
             return cached;
@@ -209,7 +221,9 @@ internal abstract record TemplateValueRecipe
                     "InstantiateShared does not handle recipe variant: " + recipe.GetType().Name);
         }
 
-        instantiated[recipe] = value;
+        if (instantiated is not null)
+            instantiated[recipe] = value;
+
         return value;
     }
 

@@ -452,12 +452,16 @@ public class PineVM : ICancellablePineVM
         StackFrameInput stackFrameInput,
         StackFrameProfilingBaseline profilingBaseline)
     {
-        var localsValues =
-            new PineValueInProcess[instructions.LocalsCount];
+        var storageCount = checked(instructions.LocalsCount + instructions.MaxStackUsage);
+
+        var storage =
+            storageCount is 0 ? [] : new PineValueInProcess[storageCount];
+
+        var localsValues = storage.AsMemory(0, instructions.LocalsCount);
 
         for (var i = 0; i < stackFrameInput.Arguments.Count; ++i)
         {
-            localsValues[i] = stackFrameInput.Arguments[i];
+            localsValues.Span[i] = stackFrameInput.Arguments[i];
         }
 
         return
@@ -466,7 +470,8 @@ public class PineVM : ICancellablePineVM
                 expression,
                 instructions,
                 InputValues: stackFrameInput,
-                StackValues: new PineValueInProcess[instructions.MaxStackUsage],
+                StackValues:
+                new Memory<PineValueInProcess?>(storage, instructions.LocalsCount, instructions.MaxStackUsage),
                 LocalsValues: localsValues,
                 ProfilingBaseline: profilingBaseline,
                 Specialization: null);
@@ -1157,12 +1162,19 @@ public class PineVM : ICancellablePineVM
 
             for (var i = 0; i < newEnvironmentCount; ++i)
             {
-                _workProfile?.Checkpoint();
-                _workProfile?.Count(PineVMWorkProfile.Metric.TemplateEnvironmentStagesCollected);
-                combinedEnvironments = combinedEnvironments.Append(newEnvironments[i]);
+                combinedEnvironments = AppendEnvironment(combinedEnvironments, newEnvironments[i]);
             }
 
             return combinedEnvironments;
+        }
+
+        CollectedTemplateEnvironments AppendEnvironment(
+            CollectedTemplateEnvironments existingEnvironments,
+            PineValueInProcess environment)
+        {
+            _workProfile?.Checkpoint();
+            _workProfile?.Count(PineVMWorkProfile.Metric.TemplateEnvironmentStagesCollected);
+            return existingEnvironments.Append(environment);
         }
 
         PineValueInProcess CreateDeferredTemplateValue(
@@ -1198,7 +1210,7 @@ public class PineVM : ICancellablePineVM
             evaluated = true;
 
             var combinedEnvironments =
-                CombineEnvironments(existingEnvironments, [environment], newEnvironmentCount: 1);
+                AppendEnvironment(existingEnvironments, environment);
 
             if (combinedEnvironments.Count < plan!.EnvironmentCount)
             {
@@ -1228,16 +1240,8 @@ public class PineVM : ICancellablePineVM
             var instructions =
                 compilation.SelectInstructionsForTemplate(plan.TerminalEnvironmentRecipe, environments);
 
-            var parameters = compilation.Generic.Parameters;
-            var arguments = new PineValueInProcess[parameters.ParamsPaths.Count];
-
-            for (var index = 0; index < arguments.Length; ++index)
-            {
-                arguments[index] =
-                    plan.TerminalEnvironmentRecipe.Project(parameters.ParamsPaths[index]).Instantiate(environments);
-            }
-
-            return (instructions, StackFrameInput.FromArguments(parameters, arguments));
+            var prepared = PreparedTemplateInput.Get(compilation, plan.TerminalEnvironmentRecipe);
+            return (instructions, prepared.Instantiate(environments));
         }
 
         (PineValueInProcess? environment, Func<PrecompiledResult>? selected) SelectTemplateNative(
