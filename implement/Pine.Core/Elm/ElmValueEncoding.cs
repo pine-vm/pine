@@ -13,9 +13,13 @@ namespace Pine.Core.Elm;
 /// Encoding and decoding helpers between <see cref="PineValue"/> and the Elm-facing <see cref="ElmValue"/> model.
 /// </summary>
 /// <remarks>
+/// Implements the normative public interchange contract in
+/// <see href="../../../guide/elm-value-encoding.md">Elm Value Encoding</see>.
+/// <para>
 /// Provides bidirectional conversions and utilities used by Elm interop, including fast paths for common Elm types
 /// like String, Record, Bytes.Bytes, and Float. Most conversion APIs return a <see cref="Result{ErrT, OkT}"/> where the
 /// error is a descriptive message (<see cref="string"/>) and the success contains the converted value.
+/// </para>
 /// </remarks>
 public static class ElmValueEncoding
 {

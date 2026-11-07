@@ -1,6 +1,6 @@
 # Elm Compiler Implementation Guide
 
-For semantics of the Elm programming language, consult the file 'elm-programming-language-semantics.md'
+For semantics of the Elm programming language, consult [Elm Programming Language Semantics](../../../../guide/elm-programming-language-semantics.md). The public Elm-to-Pine interchange contract is defined by [Elm Value Encoding](../../../../guide/elm-value-encoding.md); this implementation guide is downstream of that specification.
 
 ## Entry Point
 
@@ -10,26 +10,11 @@ The entry point for compilation is the declaration in one of the Elm modules in 
 
 To serve its role in connecting to other systems, an entry point must support incoming values and encode outgoing values using predictable, stable, legible encodings.
 
-For parameters and return values of entry points, the encoding of Elm values follows the model established in the `ElmValueEncoding.cs` file. The definitions in `ElmValueEncoding.cs` cover the encoding of all Elm values except functions. Functions are encoded according to the model in FunctionValueBuilder.cs.
+For parameters and return values of interfaces selected by the integrating application, the encoding of non-function Elm values MUST follow [Elm Value Encoding](../../../../guide/elm-value-encoding.md). `ElmValueEncoding.cs` implements that specification and is not the authority for the contract. Function values use the compiler-specific convention described below and implemented by `FunctionValueBuilder.cs`.
 
 ### Choice values
 
-Elm choice-type constructors use this flat Pine list representation:
-
-```text
-[<Choice>, tagName, arg0, arg1, ...]
-```
-
-The marker and constructor name occupy the first two items. A constructor with
-no arguments therefore has two items, and argument `N` is stored at index
-`N + 2`. `String`, `Bytes.Bytes`, and `Float` use the same choice layout with
-their established constructor names and payload encodings.
-
-Newly compiled Elm code consumes only this canonical representation. Host-side
-decoders in `ElmValueEncoding.cs` also accept the legacy 2025 representation
-`[tagName, [arg0, arg1, ...]]` so persisted values can still be inspected and
-migrated. The retired Elm-in-Elm compiler and the general Pine
-sequential IR are separate from this encoding.
+Choice values at selected interfaces follow [the choice-value specification](../../../../guide/elm-value-encoding.md#choice-values), with the separately specified primitive representations for booleans, strings, bytes, and floats. Emission and argument projections derive their physical layout from that contract.
 
 The sequential IR compiler folds a list expression's leading constant items into
 the literal prefix of a `Build_List_With_Prefix` instruction.
@@ -393,21 +378,11 @@ Where the type is constrained to `Int`, we lower `Basics.add` and `Basics.mul` f
 
 ## Records
 
-For Elm code producing record values, we always produce records with fields sorted alphabetically by field name. This makes subsequent operations on these values, like equality checks, simpler.
+At selected public interfaces, Elm records follow [the record encoding specification](../../../../guide/elm-value-encoding.md#records), including its field-ordering requirement. Private record representations may differ when the compiler preserves the boundary contract.
 
 ### On-the-wire layout
 
-A record is encoded as a flat Pine list with an odd number of items:
-
-```text
-[<Record>, fieldName0, fieldValue0, fieldName1, fieldValue1, ...]
-```
-
-The first item is the tag (the UTF-32 encoding of the literal string `<Record>`); the remaining items are field-name and field-value pairs interleaved, with the field names sorted alphabetically (ordinal). The empty record is `[<Record>]` (length 1).
-
-The new tag uses characters that are not legal in Elm identifiers, so it cannot be confused with a user-defined custom-type constructor.
-
-For values still persisted in the legacy nested layout `[Elm_Record, [[ [name, value], ... ]]]` produced by older versions of the compiler (or by the Elm self-hosting compiler), the decoder in `ElmValueEncoding.cs` keeps a parallel `_2025`-suffixed code path. New code should always emit the flat layout.
+The marker, field-name/value positions, and empty-record representation are defined in [Elm Value Encoding](../../../../guide/elm-value-encoding.md#records), not by this implementation guide or its decoding helpers.
 
 ### Record Access and Record Update
 
