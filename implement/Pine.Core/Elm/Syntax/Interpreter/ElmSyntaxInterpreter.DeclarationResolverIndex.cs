@@ -63,7 +63,11 @@ public partial class ElmSyntaxInterpreter
         public sealed record Function(
             DeclQualifiedName DeclarationName,
             PreparedFunctionImplementation Implementation)
-            : DeclarationResolverCandidate(DeclarationName);
+            : DeclarationResolverCandidate(DeclarationName)
+        {
+            public ApplicationResolution.ContinueWithFunction Resolution { get; } =
+                new(Implementation, DeclarationName);
+        }
 
         public sealed record RecordAlias(
             DeclQualifiedName DeclarationName,
@@ -245,10 +249,7 @@ public partial class ElmSyntaxInterpreter
             switch (candidate)
             {
                 case DeclarationResolverCandidate.Function function:
-                    return
-                        new ApplicationResolution.ContinueWithFunction(
-                            function.Implementation,
-                            ResolvedName: function.DeclarationName);
+                    return function.Resolution;
 
                 case DeclarationResolverCandidate.RecordAlias recordAlias:
                     {

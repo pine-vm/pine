@@ -1131,8 +1131,8 @@ public partial class ElmSyntaxInterpreter
 
         // Either: (currentExpr, currentEnv) is the next thing to evaluate ("Eval" mode),
         // or currentValue holds the value about to be returned to the top kont ("Return" mode).
-        PreparedExpression? currentExpr;
-        ApplicationContext currentEnv;
+        PreparedExpression? currentExpr = initialExpression;
+        ApplicationContext currentEnv = initialEnv;
         PineValueInProcess? currentValue = null;
 
         if (initialApplication is not null)
@@ -1150,44 +1150,16 @@ public partial class ElmSyntaxInterpreter
                     invocationLogger: invocationLogger,
                     nullaryValues: nullaryValues);
 
-            if (applyCallResult.IsOkOrNull() is { } applyOk)
-            {
-                switch (applyOk)
-                {
-                    case ApplyCallOutcome.ResolvedValue resolvedValue:
-                        return resolvedValue.Value;
+            if (applyCallResult.MoveTo(ref currentExpr, ref currentEnv, ref currentValue) is { } applyErr)
+                return applyErr;
 
-                    case ApplyCallOutcome.ContinueEvaluating continueEvaluating:
-                        currentExpr = continueEvaluating.Expression;
-                        currentEnv = continueEvaluating.Env;
-                        break;
-
-                    default:
-                        throw new NotImplementedException(
-                            "Unexpected ApplyCallOutcome shape.");
-                }
-            }
-            else
-            {
-                if (applyCallResult.IsErrOrNull() is { } applyErr)
-                {
-                    return applyErr;
-                }
-
-                throw new NotImplementedException(
-                    "ApplyResolvedCall did not return a value or an error: " + applyCallResult.GetType().FullName);
-            }
+            if (currentExpr is null)
+                return currentValue!;
         }
-        else
+        else if (initialExpression is null)
         {
-            if (initialExpression is null)
-            {
-                throw new ArgumentException(
-                    "RunTrampoline requires either initialExpression or initialApplication.");
-            }
-
-            currentExpr = initialExpression;
-            currentEnv = initialEnv;
+            throw new ArgumentException(
+                "RunTrampoline requires either initialExpression or initialApplication.");
         }
 
         while (true)
@@ -1346,37 +1318,10 @@ public partial class ElmSyntaxInterpreter
                                     invocationLogger: invocationLogger,
                                     nullaryValues: nullaryValues);
 
-                            if (applyResult.IsOkOrNull() is { } outcome)
-                            {
-                                switch (outcome)
-                                {
-                                    case ApplyCallOutcome.ResolvedValue resolvedValue:
-                                        currentValue = resolvedValue.Value;
-                                        currentExpr = null;
-                                        break;
+                            if (applyResult.MoveTo(ref currentExpr, ref currentEnv, ref currentValue) is { } error)
+                                return error;
 
-                                    case ApplyCallOutcome.ContinueEvaluating continueEvaluating:
-                                        currentExpr = continueEvaluating.Expression;
-                                        currentEnv = continueEvaluating.Env;
-                                        break;
-
-                                    default:
-                                        throw new NotImplementedException(
-                                            $"Unknown ApplyCallOutcome: {outcome}");
-                                }
-
-                                break;
-                            }
-                            else
-                            {
-                                if (applyResult.IsErrOrNull() is { } error)
-                                {
-                                    return error;
-                                }
-
-                                throw new NotImplementedException(
-                                    "Unexpected type of application result: " + applyResult.GetType().FullName);
-                            }
+                            break;
                         }
 
                     case PreparedExpression.Application application:
@@ -1502,22 +1447,10 @@ public partial class ElmSyntaxInterpreter
                                             localBindings: letBindings),
                                         kstack: kstack);
 
-                                if (beginNextResult.IsOkOrNullable() is { } beginNextOk)
-                                {
-                                    (currentExpr, currentEnv) = beginNextOk;
+                                if (beginNextResult.MoveTo(ref currentExpr, ref currentEnv, ref currentValue) is { } beginNextErr)
+                                    return beginNextErr;
 
-                                    break;
-                                }
-                                else
-                                {
-                                    if (beginNextResult.IsErrOrNull() is { } beginNextErr)
-                                    {
-                                        return beginNextErr;
-                                    }
-
-                                    throw new NotImplementedException(
-                                        "Unexpected type of result: " + beginNextResult.GetType().FullName);
-                                }
+                                break;
                             }
                             else
                             {
@@ -1829,41 +1762,8 @@ public partial class ElmSyntaxInterpreter
                                         kstack: kstack,
                                         invocationLogger: invocationLogger);
 
-                                if (localResult.IsOkOrNull() is { } localOutcome)
-                                {
-                                    switch (localOutcome)
-                                    {
-                                        case ApplyCallOutcome.ResolvedValue resolvedValue:
-                                            currentValue = resolvedValue.Value;
-                                            currentExpr = null;
-                                            break;
-
-                                        case ApplyCallOutcome.ContinueEvaluating continueEvaluating:
-                                            currentExpr = continueEvaluating.Expression;
-                                            currentEnv = continueEvaluating.Env;
-                                            currentValue = null;
-                                            break;
-
-                                        default:
-                                            throw new NotImplementedException(
-                                                $"Unknown ApplyCallOutcome: {localOutcome.GetType().FullName}");
-                                    }
-                                }
-                                else
-                                {
-                                    // The call produced a runtime error (for example an
-                                    // quota-exhaustion report). Propagate it instead of
-                                    // silently dropping it: swallowing it here would leave
-                                    // the just-pushed CallFrame on the stack with a stale
-                                    // currentValue, so the frame would pop returning the
-                                    // call's argument, surfacing later as a confusing
-                                    // "Case expression did not match any arm" error.
-                                    if (localResult.IsErrOrNull() is { } localErr)
-                                        return localErr;
-
-                                    throw new NotImplementedException(
-                                        $"ApplyFunctionValue returned a result that is neither Ok nor Err: {localResult.GetType().FullName}");
-                                }
+                                if (localResult.MoveTo(ref currentExpr, ref currentEnv, ref currentValue) is { } localErr)
+                                    return localErr;
 
                                 break;
                             }
@@ -1878,36 +1778,10 @@ public partial class ElmSyntaxInterpreter
                                     invocationLogger: invocationLogger,
                                     nullaryValues: nullaryValues);
 
-                            if (applyResult.IsOkOrNull() is { } outcome)
-                            {
-                                switch (outcome)
-                                {
-                                    case ApplyCallOutcome.ResolvedValue resolvedValue:
-                                        currentValue = resolvedValue.Value;
-                                        currentExpr = null;
-                                        break;
+                            if (applyResult.MoveTo(ref currentExpr, ref currentEnv, ref currentValue) is { } applyErr)
+                                return applyErr;
 
-                                    case ApplyCallOutcome.ContinueEvaluating continueEvaluating:
-                                        currentExpr = continueEvaluating.Expression;
-                                        currentEnv = continueEvaluating.Env;
-                                        currentValue = null;
-                                        break;
-
-                                    default:
-                                        throw new NotImplementedException(
-                                            $"Unknown ApplyCallOutcome: {outcome.GetType().FullName}");
-                                }
-
-                                break;
-                            }
-                            else
-                            {
-                                if (applyResult.IsErrOrNull() is { } applyErr)
-                                    return applyErr;
-
-                                throw new NotImplementedException(
-                                    $"ApplyFunctionOrValue returned a result that is neither Ok nor Err: {applyResult.GetType().FullName}");
-                            }
+                            break;
                         }
 
                     case Kont.Kind.BuildArgsForValue:
@@ -1951,30 +1825,10 @@ public partial class ElmSyntaxInterpreter
                                     kstack: kstack,
                                     invocationLogger: invocationLogger);
 
-                            if (applyResult.IsOkOrNull() is { } applyOutcome)
-                            {
-                                switch (applyOutcome)
-                                {
-                                    case ApplyCallOutcome.ResolvedValue resolvedValue:
-                                        currentValue = resolvedValue.Value;
-                                        currentExpr = null;
-                                        break;
-
-                                    case ApplyCallOutcome.ContinueEvaluating continueEvaluating:
-                                        currentExpr = continueEvaluating.Expression;
-                                        currentEnv = continueEvaluating.Env;
-                                        currentValue = null;
-                                        break;
-                                }
-
-                                break;
-                            }
-
-                            if (applyResult.IsErrOrNull() is { } applyErr)
+                            if (applyResult.MoveTo(ref currentExpr, ref currentEnv, ref currentValue) is { } applyErr)
                                 return applyErr;
 
-                            throw new NotImplementedException(
-                                $"ApplyFunctionValue returned a result that is neither Ok nor Err: {applyResult.GetType().FullName}");
+                            break;
                         }
 
                     case Kont.Kind.AfterCall:
@@ -1991,30 +1845,10 @@ public partial class ElmSyntaxInterpreter
                                     kstack: kstack,
                                     invocationLogger: invocationLogger);
 
-                            if (afterCallApplyResult.IsOkOrNull() is { } afterCallApplyOutcome)
-                            {
-                                switch (afterCallApplyOutcome)
-                                {
-                                    case ApplyCallOutcome.ResolvedValue resolvedValue:
-                                        currentValue = resolvedValue.Value;
-                                        currentExpr = null;
-                                        break;
-
-                                    case ApplyCallOutcome.ContinueEvaluating continueEvaluating:
-                                        currentExpr = continueEvaluating.Expression;
-                                        currentEnv = continueEvaluating.Env;
-                                        currentValue = null;
-                                        break;
-                                }
-
-                                break;
-                            }
-
-                            if (afterCallApplyResult.IsErrOrNull() is { } afterCallApplyErr)
+                            if (afterCallApplyResult.MoveTo(ref currentExpr, ref currentEnv, ref currentValue) is { } afterCallApplyErr)
                                 return afterCallApplyErr;
 
-                            throw new NotImplementedException(
-                                $"ApplyFunctionValue (for AfterCall) returned a result that is neither Ok nor Err: {afterCallApplyResult.GetType().FullName}");
+                            break;
                         }
 
                     case Kont.Kind.LetBindFunction:
@@ -2031,19 +1865,10 @@ public partial class ElmSyntaxInterpreter
                                     outerEnv: letBindFunction.Outer,
                                     kstack: kstack);
 
-                            if (beginNextResult.IsOkOrNullable() is { } beginNextOutcome)
-                            {
-                                (currentExpr, currentEnv) = beginNextOutcome;
-
-                                currentValue = null;
-                                break;
-                            }
-
-                            if (beginNextResult.IsErrOrNull() is { } beginNextErr)
+                            if (beginNextResult.MoveTo(ref currentExpr, ref currentEnv, ref currentValue) is { } beginNextErr)
                                 return beginNextErr;
 
-                            throw new NotImplementedException(
-                                $"BeginNextLetDecl returned a result that is neither Ok nor Err: {beginNextResult.GetType().FullName}");
+                            break;
                         }
 
                     case Kont.Kind.LetBindDestructure:
@@ -2078,20 +1903,9 @@ public partial class ElmSyntaxInterpreter
                                     outerEnv: letBindDestructure.Outer,
                                     kstack: kstack);
 
-                            if (beginNextResult.IsOkOrNullable() is { } beginNextOutcome)
-                            {
-                                (currentExpr, currentEnv) = beginNextOutcome;
-                            }
-                            else
-                            {
-                                if (beginNextResult.IsErrOrNull() is { } beginNextErr)
-                                    return beginNextErr;
+                            if (beginNextResult.MoveTo(ref currentExpr, ref currentEnv, ref currentValue) is { } beginNextErr)
+                                return beginNextErr;
 
-                                throw new NotImplementedException(
-                                    $"BeginNextLetDecl returned a result that is neither Ok nor Err: {beginNextResult.GetType().FullName}");
-                            }
-
-                            currentValue = null;
                             break;
                         }
 
@@ -2349,18 +2163,68 @@ public partial class ElmSyntaxInterpreter
     /// <summary>
     /// Shape returned by <see cref="ApplyFunctionOrValue"/> / <see cref="ApplyResolvedCall"/>:
     /// either the call has already produced a fully-resolved value, or the trampoline should
-    /// continue by evaluating an expression (the callee's body) in a new environment. In the
-    /// latter case, a <see cref="Kont.CallFrame"/> has already been pushed on the kont stack.
+    /// continue by evaluating an expression in an environment, or propagate an error.
+    /// Call helpers push a <see cref="Kont.CallFrame"/> before returning a continuation.
     /// </summary>
-    private abstract record ApplyCallOutcome
+    private readonly struct ApplyCallOutcome
     {
-        public sealed record ResolvedValue(PineValueInProcess Value)
-            : ApplyCallOutcome;
+        private readonly Kind _kind;
 
-        public sealed record ContinueEvaluating(
-            PreparedExpression Expression,
-            ApplicationContext Env)
-            : ApplyCallOutcome;
+        // All payloads are reference types; sharing this slot does not box the outcome.
+        private readonly object _valueOrExpressionOrError;
+
+        private readonly ApplicationContext? _env;
+
+        private enum Kind
+        {
+            None,
+            ResolvedValue,
+            ContinueEvaluating,
+            Error
+        }
+
+        private ApplyCallOutcome(Kind kind, object valueOrExpressionOrError, ApplicationContext? env = null)
+        {
+            _kind = kind;
+            _valueOrExpressionOrError = valueOrExpressionOrError;
+            _env = env;
+        }
+
+        public static ApplyCallOutcome ResolvedValue(PineValueInProcess value) =>
+            new(Kind.ResolvedValue, value);
+
+        public static ApplyCallOutcome ContinueEvaluating(PreparedExpression expression, ApplicationContext env) =>
+            new(Kind.ContinueEvaluating, expression, env);
+
+        public static implicit operator ApplyCallOutcome(ElmInterpretationError error) =>
+            new(Kind.Error, error);
+
+        public ElmInterpretationError? MoveTo(
+            ref PreparedExpression? expression,
+            ref ApplicationContext env,
+            ref PineValueInProcess? value)
+        {
+            switch (_kind)
+            {
+                case Kind.ResolvedValue:
+                    value = (PineValueInProcess)_valueOrExpressionOrError;
+                    expression = null;
+                    return null;
+
+                case Kind.ContinueEvaluating:
+                    expression = (PreparedExpression)_valueOrExpressionOrError;
+                    env = _env!;
+                    value = null;
+                    return null;
+
+                case Kind.Error:
+                    return (ElmInterpretationError)_valueOrExpressionOrError;
+
+                default:
+                    throw new NotImplementedException(
+                        "ApplyCallOutcome.MoveTo does not handle outcome kind: " + _kind);
+            }
+        }
     }
 
     /// <summary>
@@ -2440,7 +2304,7 @@ public partial class ElmSyntaxInterpreter
         public int IncrementUserCallDepth() => 0;
     }
 
-    private static Result<ElmInterpretationError, ApplyCallOutcome> ApplyFunctionOrValue(
+    private static ApplyCallOutcome ApplyFunctionOrValue(
         PreparedExpression.Identifier functionOrValue,
         IReadOnlyList<PineValueInProcess> arguments,
         ApplicationContext env,
@@ -2464,7 +2328,7 @@ public partial class ElmSyntaxInterpreter
         return ApplyResolvedCall(application, resolveApplication, kstack, invocationLogger, nullaryValues);
     }
 
-    private static Result<ElmInterpretationError, ApplyCallOutcome> ApplyResolvedCall(
+    private static ApplyCallOutcome ApplyResolvedCall(
         Application application,
         Func<Application, ApplicationResolution> resolveApplication,
         Stack<Kont> kstack,
@@ -2493,7 +2357,7 @@ public partial class ElmSyntaxInterpreter
         switch (resolution)
         {
             case ApplicationResolution.Resolved resolved:
-                return new ApplyCallOutcome.ResolvedValue(resolved.Value);
+                return ApplyCallOutcome.ResolvedValue(resolved.Value);
 
             case ApplicationResolution.ContinueWithFunction continueWithFunction:
                 {
@@ -2510,7 +2374,7 @@ public partial class ElmSyntaxInterpreter
                     if (memoEntry?.Value is { } cachedValue)
                     {
                         nullaryValues!.Replay(memoEntry);
-                        return new ApplyCallOutcome.ResolvedValue(cachedValue);
+                        return ApplyCallOutcome.ResolvedValue(cachedValue);
                     }
 
                     // The top-level scope to evaluate the body under. Prefer the resolved
@@ -2532,7 +2396,7 @@ public partial class ElmSyntaxInterpreter
                                 Implementation: functionImpl);
 
                         return
-                            new ApplyCallOutcome.ResolvedValue(
+                            ApplyCallOutcome.ResolvedValue(
                                 new ElmClosureInProcess(
                                     sourceRef,
                                     parameterCount: expectedArity,
@@ -2614,9 +2478,9 @@ public partial class ElmSyntaxInterpreter
                             saturatingArgs));
 
                     return
-                        new ApplyCallOutcome.ContinueEvaluating(
-                            Expression: functionImpl.Expression,
-                            Env: innerContext);
+                        ApplyCallOutcome.ContinueEvaluating(
+                            expression: functionImpl.Expression,
+                            env: innerContext);
                 }
 
             default:
@@ -2634,7 +2498,7 @@ public partial class ElmSyntaxInterpreter
     /// extended argument list and the same captured environment.</item>
     /// <item><b>Saturation</b> (combined == arity): binds the parameter patterns, restores the
     /// captured environment plus the bound arguments, pushes a <see cref="Kont.CallFrame"/> for
-    /// the call, and returns a <see cref="ApplyCallOutcome.ContinueEvaluating"/> for the body.</item>
+    /// the call, and returns a continuation outcome for the body.</item>
     /// <item><b>Over-application</b> (combined &gt; arity): saturates with the first <c>arity</c>
     /// arguments and pushes a <see cref="Kont.AfterCall"/> with the remainder so that the body's
     /// returned value is in turn applied to those leftover arguments.</item>
@@ -2643,7 +2507,7 @@ public partial class ElmSyntaxInterpreter
     /// raised when <paramref name="functionValue"/> is not callable; it is <c>null</c> for
     /// callable values that have no syntactic name (the result of a sub-expression).
     /// </summary>
-    private static Result<ElmInterpretationError, ApplyCallOutcome>
+    private static ApplyCallOutcome
         ApplyFunctionValue(
         PineValueInProcess functionValue,
         string? functionRenderForError,
@@ -2653,7 +2517,7 @@ public partial class ElmSyntaxInterpreter
         IInvocationLogger invocationLogger)
     {
         if (newArguments.Count is 0)
-            return new ApplyCallOutcome.ResolvedValue(functionValue);
+            return ApplyCallOutcome.ResolvedValue(functionValue);
 
         invocationLogger.OnFunctionValueApplication(functionValue, newArguments);
 
@@ -2687,7 +2551,7 @@ public partial class ElmSyntaxInterpreter
                 }
             }
 
-            return new ApplyCallOutcome.ResolvedValue(currentValue);
+            return ApplyCallOutcome.ResolvedValue(currentValue);
         }
 
         if (functionValue is ElmChoiceTagConstructorInProcess choiceTagConstructor)
@@ -2714,7 +2578,7 @@ public partial class ElmSyntaxInterpreter
                         PineValueInProcess.Create(StringEncoding.ValueFromString(choiceTagConstructor.TagName)),
                         combinedArgs);
 
-                return new ApplyCallOutcome.ResolvedValue(finalValue);
+                return ApplyCallOutcome.ResolvedValue(finalValue);
             }
 
             if (remainingArgs < 0)
@@ -2727,7 +2591,7 @@ public partial class ElmSyntaxInterpreter
             }
 
             return
-                new ApplyCallOutcome.ResolvedValue(
+                ApplyCallOutcome.ResolvedValue(
                     choiceTagConstructor.WithArgumentsApplied(newArguments));
         }
 
@@ -2758,7 +2622,7 @@ public partial class ElmSyntaxInterpreter
                 var finalValue =
                     BuildRecordValue([.. fields]);
 
-                return new ApplyCallOutcome.ResolvedValue(finalValue);
+                return ApplyCallOutcome.ResolvedValue(finalValue);
             }
 
             if (remainingArgs < 0)
@@ -2771,7 +2635,7 @@ public partial class ElmSyntaxInterpreter
             }
 
             return
-                new ApplyCallOutcome.ResolvedValue(
+                ApplyCallOutcome.ResolvedValue(
                     recordTypeConstructor.WithArgumentsApplied(newArguments));
         }
 
@@ -2781,7 +2645,7 @@ public partial class ElmSyntaxInterpreter
             {
                 // Nothing to apply — pass the value through. This case shouldn't be reachable
                 // from the public eval paths but the explicit branch keeps the helper total.
-                return new ApplyCallOutcome.ResolvedValue(functionValue);
+                return ApplyCallOutcome.ResolvedValue(functionValue);
             }
 
             var rendered =
@@ -2806,7 +2670,7 @@ public partial class ElmSyntaxInterpreter
         if (newArguments.Count is 0)
         {
             // No extra arguments supplied: the closure as-is is the result.
-            return new ApplyCallOutcome.ResolvedValue(closure);
+            return ApplyCallOutcome.ResolvedValue(closure);
         }
 
         // Combine previously-collected and newly-supplied arguments.
@@ -2826,7 +2690,7 @@ public partial class ElmSyntaxInterpreter
         {
             // Still under-applied: produce a new closure.
             return
-                new ApplyCallOutcome.ResolvedValue(
+                ApplyCallOutcome.ResolvedValue(
                     closure.With(combined));
         }
 
@@ -2908,9 +2772,9 @@ public partial class ElmSyntaxInterpreter
                 saturatingArgs));
 
         return
-            new ApplyCallOutcome.ContinueEvaluating(
-                Expression: bodyExpression,
-                Env: innerContext);
+            ApplyCallOutcome.ContinueEvaluating(
+                expression: bodyExpression,
+                env: innerContext);
     }
 
     /// <summary>
@@ -2938,7 +2802,7 @@ public partial class ElmSyntaxInterpreter
     /// <c>LetFunction</c> bindings have already been materialised as closures in
     /// <paramref name="extended"/> by that helper and are not present in <paramref name="decls"/>.
     /// </remarks>
-    private static Result<ElmInterpretationError, (PreparedExpression Expr, ApplicationContext Env)> BeginNextLetDecl(
+    private static ApplyCallOutcome BeginNextLetDecl(
         IReadOnlyList<PreparedLetDeclaration> decls,
         int nextIndex,
         Dictionary<string, PineValueInProcess> extended,
@@ -2969,11 +2833,6 @@ public partial class ElmSyntaxInterpreter
                                     kstack);
                         }
 
-                        var innerEnv =
-                            new ApplicationContext(
-                                currentTopLevel: outerEnv.CurrentTopLevel,
-                                localBindings: outerEnv.LocalBindingEnvironment);
-
                         kstack.Push(
                             new Kont.LetBindFunction(
                                 BindingName: functionImpl.Name,
@@ -2983,16 +2842,11 @@ public partial class ElmSyntaxInterpreter
                                 Body: body,
                                 Outer: outerEnv));
 
-                        return (functionImpl.Expression, innerEnv);
+                        return ApplyCallOutcome.ContinueEvaluating(functionImpl.Expression, outerEnv);
                     }
 
                 case PreparedLetDeclaration.LetDestructuring letDestructuring:
                     {
-                        var innerEnv =
-                            new ApplicationContext(
-                                currentTopLevel: outerEnv.CurrentTopLevel,
-                                localBindings: outerEnv.LocalBindingEnvironment);
-
                         kstack.Push(
                             new Kont.LetBindDestructure(
                                 Pattern: letDestructuring.Pattern,
@@ -3002,7 +2856,7 @@ public partial class ElmSyntaxInterpreter
                                 Body: body,
                                 Outer: outerEnv));
 
-                        return (letDestructuring.Expression, innerEnv);
+                        return ApplyCallOutcome.ContinueEvaluating(letDestructuring.Expression, outerEnv);
                     }
 
                 default:
@@ -3012,12 +2866,7 @@ public partial class ElmSyntaxInterpreter
         }
 
         // All declarations processed: evaluate the body under the extended environment.
-        var bodyEnv =
-            new ApplicationContext(
-                currentTopLevel: outerEnv.CurrentTopLevel,
-                localBindings: outerEnv.LocalBindingEnvironment);
-
-        return (body, bodyEnv);
+        return ApplyCallOutcome.ContinueEvaluating(body, outerEnv);
     }
 
     /// <summary>
