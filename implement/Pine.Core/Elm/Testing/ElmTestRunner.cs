@@ -30,6 +30,19 @@ using SyntaxTypes = Pine.Core.Elm.Syntax.Concrete;
 
 namespace Pine.Core.Elm.Testing;
 
+/// <summary>Preparation phases reported before their work begins; test selection signals execution readiness.</summary>
+public enum ElmTestPreparationPhase
+{
+    /// <summary>Load project sources and resolve their package dependencies.</summary>
+    SourceResolution,
+
+    /// <summary>Prepare declarations, construct test suites and select tests.</summary>
+    Discovery,
+
+    /// <summary>Compile selected test callbacks for execution.</summary>
+    RunnerCompilation
+}
+
 /// <summary>
 /// Compiles, runs, and renders Elm tests.
 /// </summary>
@@ -85,7 +98,8 @@ public static class ElmTestRunner
         Action<ElmDependencyResolutionReport>? onDependenciesResolved = null,
         ElmFuzzOptions? fuzzOptions = null,
         ElmTestInstrumentation? instrumentation = null,
-        Action<int, int>? onTestsSelected = null)
+        Action<int, int>? onTestsSelected = null,
+        Action<ElmTestPreparationPhase>? onPreparationPhaseStarting = null)
     {
         cacheSession?.ValidateInstrumentation(instrumentation);
 
@@ -105,7 +119,8 @@ public static class ElmTestRunner
                 instrumentation,
                 cacheSession,
                 onTestsSelected,
-                useSyntaxDiscovery: true);
+                useSyntaxDiscovery: true,
+                onPreparationPhaseStarting: onPreparationPhaseStarting);
     }
 
 
@@ -323,7 +338,8 @@ public static class ElmTestRunner
         ElmTestInstrumentation? instrumentation,
         ElmTestRunCacheSession? cacheSession,
         Action<int, int>? onTestsSelected,
-        bool useSyntaxDiscovery = false)
+        bool useSyntaxDiscovery = false,
+        Action<ElmTestPreparationPhase>? onPreparationPhaseStarting = null)
     {
         if (workers < 1)
             throw new ArgumentOutOfRangeException(nameof(workers), "Worker count must be at least one.");
@@ -353,6 +369,8 @@ public static class ElmTestRunner
 
         if (!Directory.Exists(appDirectory))
             throw new DirectoryNotFoundException("Elm project directory not found: " + appDirectory);
+
+        onPreparationPhaseStarting?.Invoke(ElmTestPreparationPhase.SourceResolution);
 
         using var sourceResolutionScope =
             new TimedScope(() => instrumentation?.EnterScope("source-resolution", appDirectory));
@@ -559,6 +577,8 @@ public static class ElmTestRunner
             environmentCompilationScope.Dispose();
             environmentCompilationDuration = environmentCompilationScope.Elapsed;
         }
+
+        onPreparationPhaseStarting?.Invoke(ElmTestPreparationPhase.Discovery);
 
         using var discoveryPhaseScope =
             new TimedScope(() => instrumentation?.EnterScope("discovery", appDirectory));
@@ -854,6 +874,8 @@ public static class ElmTestRunner
 
         if (syntaxDiscovery is not null)
         {
+            onPreparationPhaseStarting?.Invoke(ElmTestPreparationPhase.RunnerCompilation);
+
             using var runnerCompilationScope =
                 new TimedScope(() => instrumentation?.EnterScope("runner-compilation", appDirectory));
 

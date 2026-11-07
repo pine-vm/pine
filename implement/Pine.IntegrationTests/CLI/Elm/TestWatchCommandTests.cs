@@ -25,6 +25,38 @@ public class TestWatchCommandTests
     private static readonly TimeSpan s_wait = TimeSpan.FromSeconds(60);
 
     [Fact]
+    public void Preparation_progress_is_flushed_before_watch_cache_initialization()
+    {
+        using var directory = new TestDirectory();
+        File.WriteAllText(Path.Combine(directory.Path, "elm.json"), ElmJson);
+        using var session = CreateSmallWatchCacheSession();
+        using var cancellation = new CancellationTokenSource(s_wait);
+        var output = new FlushTrackingWriter();
+        var console = CreateConsole(output);
+        var factoryCalled = false;
+
+        TestCommand.ExecuteCore(
+            directory.Path,
+            watch: true,
+            console: console,
+            errorConsole: console,
+            offline: true,
+            cancellationToken: cancellation.Token,
+            createWatcher: _ => new FakeTestWatcher(),
+            createWatchCacheSession:
+            () =>
+            {
+                output.LastFlushedOutput.Should().Be("Preparing Elm test watcher..." + Environment.NewLine);
+                factoryCalled = true;
+                cancellation.Cancel();
+                return session;
+            }).Should().Be(130);
+
+        factoryCalled.Should().BeTrue();
+        output.ToString().Should().NotContain("Running ");
+    }
+
+    [Fact]
     public async Task Watch_factory_uses_generational_storage_and_starts_learning_with_empty_policy()
     {
         var configured = new TaskCompletionSource<string>(TaskCreationOptions.RunContinuationsAsynchronously);
@@ -1348,6 +1380,17 @@ public class TestWatchCommandTests
             IsStarted.Should().BeFalse();
             HasSubscriptions.Should().BeFalse();
             IsDisposed = true;
+        }
+    }
+
+    private sealed class FlushTrackingWriter : StringWriter
+    {
+        public string? LastFlushedOutput { get; private set; }
+
+        public override void Flush()
+        {
+            LastFlushedOutput = ToString();
+            base.Flush();
         }
     }
 

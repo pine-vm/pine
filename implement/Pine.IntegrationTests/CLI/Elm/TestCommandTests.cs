@@ -23,6 +23,87 @@ namespace Pine.IntegrationTests.CLI.Elm;
 public class TestCommandTests
 {
     [Theory]
+    [InlineData(false, null)]
+    [InlineData(true, null)]
+    [InlineData(false, "not a discovered test")]
+    public void Preparation_progress_is_flushed_in_order_without_claiming_unstarted_phases(
+        bool listTests,
+        string? filter)
+    {
+        var directory = CreateTestProject(PassingTestsModule);
+        var writer = new ProgressWriter();
+        var (console, _) = CreateConsole(AnsiSupport.No, writer);
+
+        try
+        {
+            var exitCode =
+                TestCommand.Execute(
+                    directory,
+                    colorMode: CommandLineColorMode.Never,
+                    console: console,
+                    errorConsole: console,
+                    listTests: listTests,
+                    filter: filter,
+                    offline: true);
+
+            var output = writer.ToString().ReplaceLineEndings("\n");
+
+            var expected =
+                new List<string>
+                {
+                    "Preparing Elm tests...",
+                    "Loading Elm test sources and resolving dependencies...",
+                    "Discovering Elm tests..."
+                };
+
+            if (!listTests && filter is null)
+            {
+                expected.Add("Compiling Elm test runners...");
+                expected.Add("Running 1 test.");
+            }
+            else
+            {
+                output.Should().NotContain("Compiling Elm test runners...").And.NotContain("Running ");
+            }
+
+            output.Should().StartWith(string.Join("\n", expected) + "\n");
+            writer.FlushedOutputs.First().ReplaceLineEndings("\n").Should().Be("Preparing Elm tests...\n");
+
+            foreach (var message in expected)
+            {
+                writer.FlushedOutputs.Should().Contain(
+                    snapshot => snapshot.ReplaceLineEndings("\n").TrimEnd().EndsWith(message, StringComparison.Ordinal));
+            }
+
+            exitCode.Should().Be(filter is null ? 0 : 1);
+        }
+        finally
+        {
+            Directory.Delete(directory, recursive: true);
+        }
+    }
+
+    [Fact]
+    public void Preparation_progress_precedes_source_errors_without_claiming_discovery_or_execution()
+    {
+        var directory = Path.Combine(Path.GetTempPath(), "pine-missing-project-" + Guid.NewGuid().ToString("N"));
+        var writer = new ProgressWriter();
+        var (console, _) = CreateConsole(AnsiSupport.No, writer);
+
+        TestCommand.Execute(
+            directory,
+            colorMode: CommandLineColorMode.Never,
+            console: console,
+            errorConsole: console,
+            offline: true).Should().Be(1);
+
+        writer.FlushedOutputs.First().ReplaceLineEndings("\n").Should().Be("Preparing Elm tests...\n");
+
+        writer.ToString().Should().Contain("Error:").And.NotContain("Discovering Elm tests...")
+            .And.NotContain("Compiling Elm test runners...").And.NotContain("Running ");
+    }
+
+    [Theory]
     [InlineData(true, false, 0)]
     [InlineData(false, true, 0)]
     [InlineData(false, false, 1)]
@@ -1768,7 +1849,10 @@ public class TestCommandTests
             }
 
             output.ToString().ReplaceLineEndings("\n").Should().Contain(runningMessage + "\n\n")
-                .And.Contain("TEST RUN PASSED").And.Contain("metrics aggregate all selected tests");
+                .And.Contain("TEST RUN PASSED").And.Contain("metrics aggregate all selected tests")
+                .And.Contain("Preparing Elm tests...")
+                .And.Contain("Discovering Elm tests...")
+                .And.Contain("Compiling Elm test runners...");
 
             using var json = JsonDocument.Parse(File.ReadAllText(Path.Combine(project, "profile.json")));
             json.RootElement.GetProperty("SelectedTests").GetArrayLength().Should().Be(count);
@@ -3105,6 +3189,9 @@ public class TestCommandTests
 
             output.ToString().Replace("\r\n", "\n").Trim().Should().Be(
                 """
+                Preparing Elm tests...
+                Loading Elm test sources and resolving dependencies...
+                Discovering Elm tests...
                 Tests remaining after filtering (1)
                 ├── tests/ExcludedFile.elm (0)
                 │   ├── Excluded File Group (0)
@@ -3152,6 +3239,9 @@ public class TestCommandTests
 
             output.ToString().ReplaceLineEndings("\n").Trim().Should().Be(
                 $$"""
+                Preparing Elm tests...
+                Loading Elm test sources and resolving dependencies...
+                Discovering Elm tests...
                 {{expectedHeading}}
                 └── tests/Tests.elm (3)
                     └── Root (3)
@@ -3336,9 +3426,10 @@ public class TestCommandTests
 
 
     private static (IAnsiConsole console, StringWriter output) CreateConsole(
-        AnsiSupport ansi)
+        AnsiSupport ansi,
+        StringWriter? output = null)
     {
-        var output = new StringWriter();
+        output ??= new StringWriter();
 
         var console =
             AnsiConsole.Create(
@@ -3351,6 +3442,17 @@ public class TestCommandTests
                 });
 
         return (console, output);
+    }
+
+    private sealed class ProgressWriter : StringWriter
+    {
+        public List<string> FlushedOutputs { get; } = [];
+
+        public override void Flush()
+        {
+            FlushedOutputs.Add(ToString());
+            base.Flush();
+        }
     }
 
 

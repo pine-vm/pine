@@ -614,6 +614,12 @@ public static class TestCommand
             return 1;
         }
 
+        void WriteProgress(string message)
+        {
+            console.Profile.Out.Writer.WriteLine(message);
+            console.Profile.Out.Writer.Flush();
+        }
+
         if (watch)
         {
             errorConsole ??= CreateSystemConsole(Console.Error, resolvedColorMode);
@@ -639,6 +645,8 @@ public static class TestCommand
 
                 return 1;
             }
+
+            WriteProgress("Preparing Elm test watcher...");
 
             using var ownedCacheSession =
                 cacheSession is null
@@ -722,6 +730,8 @@ public static class TestCommand
             }
         }
 
+        WriteProgress("Preparing Elm tests...");
+
         if (instrumentation is null && (effectiveLimits.HasCustomLimits || showEffectiveLimits))
             TestBudgetOptions.PrintEffective(console.Profile.Out.Writer, effectiveLimits);
 
@@ -765,7 +775,22 @@ public static class TestCommand
             }
 
             console.Write(new Text(message + "\n\n"));
+            console.Profile.Out.Writer.Flush();
         }
+
+        void WritePreparationPhase(ElmTestPreparationPhase phase) =>
+            WriteProgress(
+                phase switch
+                {
+                    ElmTestPreparationPhase.SourceResolution =>
+                    "Loading Elm test sources and resolving dependencies...",
+
+                    ElmTestPreparationPhase.Discovery => "Discovering Elm tests...",
+                    ElmTestPreparationPhase.RunnerCompilation => "Compiling Elm test runners...",
+
+                    _ =>
+                    throw new NotImplementedException("Unknown Elm test preparation phase: " + phase)
+                });
 
         try
         {
@@ -807,7 +832,8 @@ public static class TestCommand
                     filter: filter,
                     listTests: listTests,
                     instrumentation: instrumentation,
-                    onTestsSelected: WriteRunningMessage)
+                    onTestsSelected: WriteRunningMessage,
+                    onPreparationPhaseStarting: WritePreparationPhase)
                 :
                 ElmTestRunner.DiscoverAndRunTests(
                     appDirectory: projectSource.DirectoryPath,
@@ -835,7 +861,8 @@ public static class TestCommand
                     filter: filter,
                     listTests: listTests,
                     instrumentation: instrumentation,
-                    onTestsSelected: WriteRunningMessage);
+                    onTestsSelected: WriteRunningMessage,
+                    onPreparationPhaseStarting: WritePreparationPhase);
 
             if (cacheSession is not null)
                 onCacheSession?.Invoke(cacheSession);

@@ -24,6 +24,49 @@ namespace Pine.Core.Tests.Elm.ElmTest;
 public class ElmTestTests
 {
     [Theory]
+    [InlineData(false, null)]
+    [InlineData(true, null)]
+    [InlineData(false, "not a discovered test")]
+    public void Preparation_progress_reports_only_entered_phases_before_workers_start(bool listTests, string? filter)
+    {
+        using var project = new ElmFuzzTests.Project("suite = Test.test \"passes\" (\\_ -> Expect.pass)");
+        var events = new List<string>();
+
+        var run =
+            ElmTestRunner.DiscoverAndRunTests(
+                project.Directory,
+                listTests: listTests,
+                filter: filter,
+                onPreparationPhaseStarting: phase => events.Add(phase.ToString()),
+                onDependenciesResolved:
+                _ =>
+                {
+                    events.Should().Equal("SourceResolution");
+                    events.Add("resolved");
+                },
+                onTestsSelected: (_, _) => events.Add("selected"),
+                pineVmFactory:
+                (_, _) =>
+                {
+                    events.Should().Equal("SourceResolution", "resolved", "Discovery", "RunnerCompilation", "selected");
+                    return DirectInterpreter.WithoutEvalCaching(new PineVMParseCache());
+                });
+
+        if (listTests || filter is not null)
+        {
+            events.Should().Equal("SourceResolution", "resolved", "Discovery");
+            run.Should().BeOfType(listTests ? typeof(ElmTestRun.Listed) : typeof(ElmTestRun.NoMatchingTests));
+        }
+        else
+        {
+            events.Should().Equal("SourceResolution", "resolved", "Discovery", "RunnerCompilation", "selected");
+
+            run.Should().BeOfType<ElmTestRun.Completed>().Which.Tests
+                .Should().ContainSingle().Which.Kind.Should().Be(CompletedTestKind.Passed);
+        }
+    }
+
+    [Theory]
     [InlineData(true, false)]
     [InlineData(false, false)]
     [InlineData(true, true)]
