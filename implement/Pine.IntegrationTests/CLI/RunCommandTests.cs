@@ -434,7 +434,6 @@ public sealed class RunCommandTests : IDisposable
 
         try
         {
-            await process.StandardInput.WriteAsync("hello\n");
             process.StandardInput.Close();
             await process.WaitForExitAsync().WaitAsync(TimeSpan.FromSeconds(60));
             var diagnostics = await error;
@@ -1599,7 +1598,9 @@ public sealed class RunCommandTests : IDisposable
 
             try
             {
-                await process.StandardInput.WriteAsync("hello\n");
+                if (!batchOnly)
+                    await process.StandardInput.WriteAsync("hello\n");
+
                 process.StandardInput.Close();
                 await process.WaitForExitAsync().WaitAsync(TimeSpan.FromSeconds(60));
                 var errors = await error;
