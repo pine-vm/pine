@@ -87,6 +87,8 @@ public sealed class InvocationCachePolicy : IEquatable<InvocationCachePolicy>
     private sealed class PolicyCache(IInvocationCacheAccess cache, InvocationCachePolicy policy)
         : IInvocationCacheAccess
     {
+        public long? ExpressionMembershipVersion => cache.ExpressionMembershipVersion;
+
         public bool ShouldAdmitExpression(PineValue expressionValue) =>
             policy.Expressions.Contains(expressionValue) && cache.ShouldAdmitExpression(expressionValue);
 

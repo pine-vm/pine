@@ -5,9 +5,11 @@ using Pine.Core.IO;
 using Pine.Core.PineLanguage;
 using Pine.Core.PineVM;
 using System;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Threading;
 
 namespace Pine.Core.Runtime.IntermediateVM;
 
@@ -30,7 +32,12 @@ public sealed class ConcurrentInvocationCache : IInvocationCacheAccess
 
     private readonly Dictionary<EvalCacheEntryKey, PineValue> _entries = [];
 
-    private readonly HashSet<PineValue> _expressionsWithEntries = [];
+    private readonly ConcurrentDictionary<PineValue, byte> _expressionsWithEntries = [];
+
+    private long _expressionMembershipVersion;
+
+    /// <inheritdoc/>
+    public long? ExpressionMembershipVersion => Volatile.Read(ref _expressionMembershipVersion);
 
     /// <summary>
     /// Gets the number of shared entries.
@@ -47,13 +54,8 @@ public sealed class ConcurrentInvocationCache : IInvocationCacheAccess
     }
 
     /// <inheritdoc/>
-    public bool MayContainExpression(PineValue expressionValue)
-    {
-        lock (_lock)
-        {
-            return _expressionsWithEntries.Contains(expressionValue);
-        }
-    }
+    public bool MayContainExpression(PineValue expressionValue) =>
+        _expressionsWithEntries.ContainsKey(expressionValue);
 
     /// <inheritdoc/>
     public bool TryGet(
@@ -82,7 +84,7 @@ public sealed class ConcurrentInvocationCache : IInvocationCacheAccess
                 return false;
             }
 
-            _expressionsWithEntries.Add(key.ExprValue);
+            PublishExpression(key.ExprValue);
 
             return true;
         }
@@ -99,9 +101,16 @@ public sealed class ConcurrentInvocationCache : IInvocationCacheAccess
             foreach (var entry in entries)
             {
                 if (_entries.TryAdd(entry.Key, entry.Value))
-                    _expressionsWithEntries.Add(entry.Key.ExprValue);
+                    PublishExpression(entry.Key.ExprValue);
             }
         }
+    }
+
+    private void PublishExpression(PineValue expressionValue)
+    {
+        // Publish the result first, then membership, then invalidate request-local negatives.
+        if (_expressionsWithEntries.TryAdd(expressionValue, 0))
+            Interlocked.Increment(ref _expressionMembershipVersion);
     }
 }
 
@@ -110,6 +119,8 @@ public sealed class ConcurrentInvocationCache : IInvocationCacheAccess
 /// </summary>
 public sealed class BufferedInvocationCacheAccess : IInvocationCacheAccess
 {
+    private const int MaximumNegativeExpressionCount = 1024;
+
     private readonly IInvocationCacheAccess _sharedCache;
 
     private readonly InvocationCache _localEntries = [];
@@ -117,6 +128,12 @@ public sealed class BufferedInvocationCacheAccess : IInvocationCacheAccess
     private readonly InvocationCacheAccessFromDictionary _localCache;
 
     private readonly int _maxEntryCount;
+
+    private HashSet<PineValue>? _negativeExpressions;
+
+    private PineValue? _lastNegativeExpression;
+
+    private long _negativeExpressionVersion;
 
     /// <summary>
     /// Creates a worker-owned buffer over the supplied shared cache.
@@ -137,9 +154,43 @@ public sealed class BufferedInvocationCacheAccess : IInvocationCacheAccess
     public int BufferedEntryCount => _localEntries.Count;
 
     /// <inheritdoc/>
-    public bool MayContainExpression(PineValue expressionValue) =>
-        _localCache.MayContainExpression(expressionValue) ||
-        _sharedCache.MayContainExpression(expressionValue);
+    public bool MayContainExpression(PineValue expressionValue)
+    {
+        if (_localCache.MayContainExpression(expressionValue))
+            return true;
+
+        if (_sharedCache.ExpressionMembershipVersion is not { } version)
+            return _sharedCache.MayContainExpression(expressionValue);
+
+        if (_negativeExpressionVersion != version)
+        {
+            _negativeExpressions?.Clear();
+            _lastNegativeExpression = null;
+            _negativeExpressionVersion = version;
+        }
+
+        if (_lastNegativeExpression is not null && ReferenceEquals(_lastNegativeExpression, expressionValue))
+            return false;
+
+        if (_negativeExpressions?.Contains(expressionValue) is true)
+        {
+            _lastNegativeExpression = expressionValue;
+            return false;
+        }
+
+        var result = _sharedCache.MayContainExpression(expressionValue);
+
+        // A miss spanning publication must not be associated with the newer version.
+        if (!result &&
+            _sharedCache.ExpressionMembershipVersion == version &&
+            (_negativeExpressions?.Count ?? 0) < MaximumNegativeExpressionCount)
+        {
+            (_negativeExpressions ??= []).Add(expressionValue);
+            _lastNegativeExpression = expressionValue;
+        }
+
+        return result;
+    }
 
     /// <inheritdoc/>
     public bool TryGet(
@@ -178,6 +229,8 @@ public sealed class BufferedInvocationCacheAccess : IInvocationCacheAccess
         {
             _localEntries.Clear();
             _localCache.RefreshExpressionIndex();
+            _negativeExpressions = null;
+            _lastNegativeExpression = null;
         }
     }
 }
@@ -335,6 +388,16 @@ public sealed class PersistentInvocationCacheAccess : IInvocationCacheAccess
 /// </summary>
 public interface IInvocationCacheAccess
 {
+    /// <summary>
+    /// Optional publication version for caching negative expression-membership answers.
+    /// Every change that can make a previous negative positive must advance this version
+    /// after membership is visible and before publication returns, including partial publication
+    /// before an exception. Two equal version reads spanning a miss permit retaining that miss.
+    /// Null means readers must probe directly; adapters with independently mutable membership
+    /// sources must not simply forward another cache's version.
+    /// </summary>
+    long? ExpressionMembershipVersion => null;
+
     /// <summary>
     /// Checks expression admission before the VM materializes the cache key or return value.
     /// Numeric work thresholds still apply after this check. Existing caches admit all expressions.

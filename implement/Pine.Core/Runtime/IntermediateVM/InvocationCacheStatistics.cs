@@ -153,6 +153,8 @@ public sealed class InvocationCacheStatistics
         IInvocationCacheAccess cache,
         InvocationCacheStatistics statistics) : IInvocationCacheAccess
     {
+        public long? ExpressionMembershipVersion => cache.ExpressionMembershipVersion;
+
         public bool ShouldAdmitExpression(PineValue expressionValue) =>
             cache.ShouldAdmitExpression(expressionValue);
 

@@ -1,5 +1,6 @@
 using Pine.Core.PineLanguage;
 using System;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading;
@@ -37,8 +38,8 @@ public sealed record InvocationCacheGenerationOptions
 
 /// <summary>
 /// A thread-safe invocation cache with unbounded admission. Hits promote into the newest dictionary;
-/// retiring a generation also retires its expression index. All dictionary access and rotation
-/// use the same lock. Argument materialization happens outside that lock.
+/// retiring a generation also retires its expression index. Result access and rotation use
+/// the same lock; expression-membership reads do not. Argument materialization happens outside that lock.
 /// </summary>
 public sealed class GenerationalInvocationCache : IInvocationCacheAccess
 {
@@ -52,6 +53,13 @@ public sealed class GenerationalInvocationCache : IInvocationCacheAccess
     private readonly Lock _lock = new();
 
     private readonly List<Generation> _generations = [new()];
+
+    private readonly ConcurrentDictionary<PineValue, int> _expressionGenerationCounts = [];
+
+    private long _expressionMembershipVersion;
+
+    /// <inheritdoc/>
+    public long? ExpressionMembershipVersion => Volatile.Read(ref _expressionMembershipVersion);
 
     private int _newestGenerationEntryCount;
 
@@ -88,19 +96,8 @@ public sealed class GenerationalInvocationCache : IInvocationCacheAccess
     }
 
     /// <inheritdoc/>
-    public bool MayContainExpression(PineValue expressionValue)
-    {
-        lock (_lock)
-        {
-            foreach (var generation in _generations)
-            {
-                if (generation.Expressions.Contains(expressionValue))
-                    return true;
-            }
-
-            return false;
-        }
-    }
+    public bool MayContainExpression(PineValue expressionValue) =>
+        _expressionGenerationCounts.ContainsKey(expressionValue);
 
     /// <inheritdoc/>
     public bool TryGet(EvalCacheEntryKey key, out PineValue value)
@@ -257,7 +254,7 @@ public sealed class GenerationalInvocationCache : IInvocationCacheAccess
             return;
 
         newest.Entries.Add(key, value);
-        newest.Expressions.Add(key.ExprValue);
+        PublishExpression(newest, key.ExprValue);
         PublishCountsAfterInsertion();
         ++_promotions;
     }
@@ -275,7 +272,7 @@ public sealed class GenerationalInvocationCache : IInvocationCacheAccess
 
         var newest = _generations[0];
         newest.Entries.Add(key, value);
-        newest.Expressions.Add(key.ExprValue);
+        PublishExpression(newest, key.ExprValue);
         PublishCountsAfterInsertion();
         return true;
     }
@@ -286,13 +283,42 @@ public sealed class GenerationalInvocationCache : IInvocationCacheAccess
         Volatile.Write(ref _physicalEntryCount, _physicalEntryCount + 1);
     }
 
+    private void PublishExpression(Generation generation, PineValue expressionValue)
+    {
+        if (!generation.Expressions.Add(expressionValue))
+            return;
+
+        if (_expressionGenerationCounts.TryGetValue(expressionValue, out var count))
+        {
+            _expressionGenerationCounts[expressionValue] = count + 1;
+        }
+        else
+        {
+            _expressionGenerationCounts[expressionValue] = 1;
+            Interlocked.Increment(ref _expressionMembershipVersion);
+        }
+    }
+
     private void AdvanceGenerationLocked(int maxGenerationCount)
     {
         _generations.Insert(0, new Generation());
 
         while (_generations.Count > maxGenerationCount)
         {
-            var retiredCount = _generations[^1].Entries.Count;
+            var retired = _generations[^1];
+            var retiredCount = retired.Entries.Count;
+
+            foreach (var expression in retired.Expressions)
+            {
+                var count = _expressionGenerationCounts[expression];
+
+                if (count is 1)
+                    _expressionGenerationCounts.TryRemove(expression, out _);
+
+                else
+                    _expressionGenerationCounts[expression] = count - 1;
+            }
+
             _retiredEntries += retiredCount;
             Volatile.Write(ref _physicalEntryCount, _physicalEntryCount - retiredCount);
             _generations.RemoveAt(_generations.Count - 1);
