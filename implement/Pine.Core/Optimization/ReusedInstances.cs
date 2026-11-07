@@ -217,7 +217,9 @@ public record ReusedInstances(
             }
         }
 
-        var valueListsDict = new Dictionary<PineValue.ListValue.ListValueStruct, PineValue.ListValue>();
+        var valueListsDict =
+            new Dictionary<PineValue.ListValue.ListValueStruct, PineValue.ListValue>(
+                bundledDeclarations.DecodedSequence.Count);
 
         foreach (var item in bundledDeclarations.DecodedSequence)
         {
@@ -327,7 +329,7 @@ public record ReusedInstances(
         IReadOnlyDictionary<PineValue.ListValue.ListValueStruct, PineValue.ListValue> PineValueLists;
 
         {
-            var tempEncodingDict = new Dictionary<PineValue, ElmValue>();
+            var tempEncodingDict = new Dictionary<PineValue, ElmValue>(valueRootsFromProgramsSorted.Count);
 
             foreach (var valueInCompiler in valueRootsFromProgramsSorted)
             {
@@ -350,7 +352,8 @@ public record ReusedInstances(
                 .OrderBy(kvp => kvp.Key)
                 .ToList();
 
-            var tempElmValueEncodingDict = new Dictionary<ElmValue, PineValue>();
+            var tempElmValueEncodingDict =
+                new Dictionary<ElmValue, PineValue>(sourceElmValuesByDepth.Sum(group => group.Value.Count));
 
             foreach (var depthGroup in sourceElmValuesByDepth)
             {
@@ -378,7 +381,7 @@ public record ReusedInstances(
                 .ToArray();
 
             var reusedListsDictInConstruction =
-                new Dictionary<PineValue.ListValue, PineValue.ListValue>();
+                new Dictionary<PineValue.ListValue, PineValue.ListValue>(allListsComponents.Count);
 
             foreach (var depthGroup in allListComponentsByDepthSorted)
             {
@@ -489,7 +492,7 @@ public record ReusedInstances(
                 .OrderBy(expression => expression.SubexpressionCount)
                 .ToList();
 
-            var reusedInstancesInConstruction = new Dictionary<Expression, Expression>();
+            var reusedInstancesInConstruction = new Dictionary<Expression, Expression>(allExpressionDescendants.Count);
 
             Expression ReuseInstance(Expression expression) =>
                 reusedInstancesInConstruction[expression];
@@ -547,8 +550,8 @@ public record ReusedInstances(
         }
 
         {
-            var encodedDict = new Dictionary<Expression, PineValue.ListValue>();
-            var decodedDict = new Dictionary<PineValue.ListValue, Expression>();
+            var encodedDict = new Dictionary<Expression, PineValue.ListValue>(Expressions.Count);
+            var decodedDict = new Dictionary<PineValue.ListValue, Expression>(Expressions.Count);
 
             foreach (var expression in Expressions)
             {
@@ -582,7 +585,7 @@ public record ReusedInstances(
                 .OrderBy(kvp => kvp.Key)
                 .ToList();
 
-            var elmValueReusedInstances = new Dictionary<ElmValue, ElmValue>();
+            var elmValueReusedInstances = new Dictionary<ElmValue, ElmValue>(coveredElmValues.Count);
 
             foreach (var elmValue in coveredElmValuesByDepth[0].Value)
             {
@@ -642,7 +645,7 @@ public record ReusedInstances(
                     keySelector: tag => new ElmValue.ElmTag.ElmTagStruct(tag.TagName, tag.Arguments),
                     elementSelector: tag => tag);
 
-            var encodedForCompilerDict = new Dictionary<PineValue, ElmValue>();
+            var encodedForCompilerDict = new Dictionary<PineValue, ElmValue>(valuesExpectedInCompilerSorted.Count);
 
             foreach (var pineValueBeforeRef in valuesExpectedInCompilerSorted)
             {
@@ -692,7 +695,7 @@ public record ReusedInstances(
         }
 
         {
-            var encodedDict = new Dictionary<ElmValue, PineValue>();
+            var encodedDict = new Dictionary<ElmValue, PineValue>(ElmValues.Count);
 
             var elmValuesByDepth =
                 GroupValuesByDepth(ElmValues)
@@ -926,16 +929,15 @@ public record ReusedInstances(
     public static IReadOnlySet<ElmValue> CollectAllComponentsFromRoots(
         IEnumerable<ElmValue> roots)
     {
-        var componentValues = new HashSet<ElmValue>();
+        roots.TryGetNonEnumeratedCount(out var rootCount);
+        var componentValues = new HashSet<ElmValue>(rootCount);
 
         var stack = new Stack<ElmValue>(roots);
 
         while (stack.TryPop(out var elmValue))
         {
-            if (componentValues.Contains(elmValue))
+            if (!componentValues.Add(elmValue))
                 continue;
-
-            componentValues.Add(elmValue);
 
             var childItems =
                 elmValue switch
@@ -978,7 +980,8 @@ public record ReusedInstances(
     private static IEnumerable<ElmValue> ProduceElmValuesEncodedInCompiler(
         IEnumerable<PineValue> pineValues)
     {
-        var encodedForCompilerDict = new Dictionary<PineValue, ElmValue>();
+        pineValues.TryGetNonEnumeratedCount(out var rootCount);
+        var encodedForCompilerDict = new Dictionary<PineValue, ElmValue>(rootCount);
 
         /*
          * Encode the smaller values first, so that the larger values can reuse the instances of smaller values.
