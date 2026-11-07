@@ -78,3 +78,15 @@ controller and versioned test-source documents have separate IDs.
 Both extensions can be installed together, but enabling both in the same workspace
 runs two language servers and can duplicate language features and tests. Disable
 the release extension **for this workspace** while testing Pine Dev if desired.
+
+### Dependency maintenance
+
+Run `npm audit` in both this directory and `client` to check the separate dependency
+trees. The manifests use targeted overrides for patched transitive dependencies
+until upstream packages adopt those versions. Recheck the overrides when updating
+Mocha, VSCE, TypeScript ESLint or the language client.
+
+After changing client runtime dependencies, keep the `.vscodeignore` allowlist in
+sync and run `npm run test:package`. Its dependency check ensures the VSIX includes
+production package manifests, JavaScript and JSON files. Run the extension tests
+with `npm test` to check compatibility with the updated tooling and language client.

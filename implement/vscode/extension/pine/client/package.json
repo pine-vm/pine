@@ -15,6 +15,11 @@
 	"dependencies": {
 		"vscode-languageclient": "^10.1.0"
 	},
+	"overrides": {
+		"vscode-languageclient": {
+			"minimatch": "^11.0.1"
+		}
+	},
 	"devDependencies": {
 		"@types/vscode": "~1.93.0",
 		"@vscode/test-electron": "^2.5.2"

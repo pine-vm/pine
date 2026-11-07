@@ -1,5 +1,8 @@
 const assert = require('node:assert/strict');
+const fs = require('node:fs');
+const path = require('node:path');
 const { test } = require('node:test');
+const { listFiles, PackageManager } = require('@vscode/vsce');
 const { developmentManifest } = require('./package-dev.cjs');
 const { extensionIdentity, identityFromManifest, localizeCodeLens } = require('../client/out/identity');
 const release = require('../package.json');
@@ -27,6 +30,26 @@ test('release, development and lockfile versions stay aligned', () => {
     assert.equal(lockfile.version, release.version);
     assert.equal(lockfile.packages[''].version, release.version);
     assert.equal(developmentManifest(release).version, release.version);
+});
+
+test('VSIX includes every production dependency manifest and JavaScript file', async () => {
+    const root = path.resolve(__dirname, '..');
+    const files = new Set(await listFiles({ cwd: root, packageManager: PackageManager.None }));
+    const lockfile = require('../client/package-lock.json');
+    const dependencies = Object.entries(lockfile.packages).filter(([directory, dependency]) =>
+        directory.startsWith('node_modules/') && !dependency.dev);
+    assert.ok(dependencies.length > 0);
+    for (const [directory] of dependencies) {
+        const dependencyRoot = path.join(root, 'client', directory);
+        assert.ok(files.has(`client/${directory}/package.json`), `${directory} manifest is missing from the VSIX`);
+        for (const file of fs.readdirSync(dependencyRoot, { recursive: true })) {
+            if (!/\.(?:[cm]?js|json)$/.test(file) || file.split(path.sep).includes('node_modules')) {
+                continue;
+            }
+            const relative = path.relative(root, path.join(dependencyRoot, file)).split(path.sep).join('/');
+            assert.ok(files.has(relative), `${relative} is missing from the VSIX`);
+        }
+    }
 });
 
 test('release runtime identity remains unchanged', () => {
