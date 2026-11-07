@@ -706,6 +706,7 @@ public static class ElmValueEncoding
 
     /// <summary>
     /// Converts an <see cref="ElmValue"/> to its <see cref="PineValue"/> representation.
+    /// Cache hits return the existing instance without allocation or invoking <paramref name="reportNewEncoding"/>.
     /// </summary>
     /// <param name="elmValue">The Elm value to encode.</param>
     /// <param name="additionalReusableEncodings">Optional cache of precomputed encodings to reuse.</param>
@@ -751,16 +752,7 @@ public static class ElmValueEncoding
                 PineKernelValues.FalseValue,
 
                 ElmValue.ElmTag elmTag =>
-                TagAsPineValue(
-                    elmTag.TagName,
-                    [
-                    ..elmTag.Arguments
-                    .Select(
-                        item => ElmValueAsPineValue(
-                            item,
-                            additionalReusableEncodings,
-                            reportNewEncoding))
-                    ]),
+                ElmTagAsPineValue(elmTag, additionalReusableEncodings, reportNewEncoding),
 
                 ElmValue.ElmRecord elmRecord =>
                 ElmRecordAsPineValue(
@@ -797,6 +789,20 @@ public static class ElmValueEncoding
         reportNewEncoding?.Invoke(elmValue, encoded);
 
         return encoded;
+    }
+
+    private static PineValue ElmTagAsPineValue(
+        ElmValue.ElmTag elmTag,
+        IReadOnlyDictionary<ElmValue, PineValue>? additionalReusableEncodings,
+        Action<ElmValue, PineValue>? reportNewEncoding)
+    {
+        var arguments = elmTag.Arguments;
+        var encodedArguments = new PineValue[arguments.Count];
+
+        for (var i = 0; i < arguments.Count; i++)
+            encodedArguments[i] = ElmValueAsPineValue(arguments[i], additionalReusableEncodings, reportNewEncoding);
+
+        return TagAsPineValue(elmTag.TagName, encodedArguments);
     }
 
     /// <summary>
@@ -1126,13 +1132,17 @@ public static class ElmValueEncoding
     /// <param name="tagName">The tag name to encode.</param>
     /// <param name="tagArguments">The list of argument values.</param>
     /// <returns>The encoded <see cref="PineValue"/>.</returns>
-    public static PineValue TagAsPineValue(string tagName, IReadOnlyList<PineValue> tagArguments) =>
-        PineValue.List(
-            [
-            StringEncoding.ValueFromString(ElmValue.ElmChoiceTypeTagName),
-            StringEncoding.ValueFromString(tagName),
-            ..tagArguments
-            ]);
+    public static PineValue TagAsPineValue(string tagName, IReadOnlyList<PineValue> tagArguments)
+    {
+        var items = new PineValue[tagArguments.Count + 2];
+        items[0] = StringEncoding.ValueFromString(ElmValue.ElmChoiceTypeTagName);
+        items[1] = StringEncoding.ValueFromString(tagName);
+
+        for (var i = 0; i < tagArguments.Count; i++)
+            items[i + 2] = tagArguments[i];
+
+        return PineValue.List(items);
+    }
 
     /// <summary>
     /// Encodes an Elm tag using the legacy nested 2025 layout.
