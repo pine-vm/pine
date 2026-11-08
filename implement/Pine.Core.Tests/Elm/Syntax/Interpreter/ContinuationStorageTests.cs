@@ -83,6 +83,9 @@ public class ContinuationStorageTests
         if (type.IsGenericType && type.GetGenericTypeDefinition() == typeof(IReadOnlyList<>))
             return Array.CreateInstance(type.GetGenericArguments()[0], 0);
 
+        if (type.IsGenericType && type.GetGenericTypeDefinition() == typeof(List<>))
+            return Activator.CreateInstance(type)!;
+
         if (type == typeof(Engine.PreparedExpression))
             return new Engine.PreparedExpression.ValueLiteral(PineValueInProcess.CreateInteger(1));
 

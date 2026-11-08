@@ -27,6 +27,7 @@ public partial class ElmSyntaxInterpreter
             None,
             ObserveResult,
             MemoizeResult,
+            CacheApplicationResult,
             Negate,
             BuildList,
             IfBranch,
@@ -46,6 +47,8 @@ public partial class ElmSyntaxInterpreter
         public readonly record struct ObserveResult(Action<PineValueInProcess> Observer);
 
         public readonly record struct MemoizeResult(NullaryValueCache.Entry Entry);
+
+        public readonly record struct CacheApplicationResult(List<ApplicationCacheExecution.Entry> Entries);
 
         public readonly record struct Negate;
 
@@ -94,6 +97,8 @@ public partial class ElmSyntaxInterpreter
         public ObserveResult AsObserveResult => new((Action<PineValueInProcess>)first!);
 
         public MemoizeResult AsMemoizeResult => new((NullaryValueCache.Entry)first!);
+
+        public CacheApplicationResult AsCacheApplicationResult => new((List<ApplicationCacheExecution.Entry>)first!);
 
         public BuildList AsBuildList =>
             new(
@@ -175,6 +180,8 @@ public partial class ElmSyntaxInterpreter
         public static implicit operator Kont(ObserveResult value) => new(Kind.ObserveResult, value.Observer);
 
         public static implicit operator Kont(MemoizeResult value) => new(Kind.MemoizeResult, value.Entry);
+
+        public static implicit operator Kont(CacheApplicationResult value) => new(Kind.CacheApplicationResult, value.Entries);
 
         public static implicit operator Kont(Negate value) => new(Kind.Negate);
 

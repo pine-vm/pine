@@ -11,8 +11,15 @@ public partial class ElmSyntaxInterpreter
 {
     // Only interpreter-owned resolver compositions carry this capability. An arbitrary delegate
     // (including a composition with custom resolvers) is not assumed to be referentially transparent.
-    private sealed class DefaultApplicationResolver(Func<Application, ApplicationResolution> resolve)
+    private sealed class DefaultApplicationResolver(
+        Func<Application, ApplicationResolution> resolve,
+        Prepared program,
+        bool enableDefaultBuiltins = true)
     {
+        public Prepared Program { get; } = program;
+
+        public bool EnableDefaultBuiltins { get; } = enableDefaultBuiltins;
+
         public ApplicationResolution Resolve(Application application) => resolve(application);
     }
 

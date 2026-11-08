@@ -59,6 +59,14 @@ Use `ConvertFromConcrete` to convert syntax nodes from `Pine.Core.Elm.Syntax.Con
 
 The Elm compiler canonicalizes concrete syntax while keeping source ranges available for diagnostics, then converts directly to abstract syntax for optimization and type inference. Compiler passes must not round-trip through the legacy syntax model. Source-oriented features, such as applying inferred annotations, retain the original concrete file for output.
 
+### Interpreter application identity
+
+The syntax interpreter can construct dependency-closed runtime graphs for function
+applications, including closures and partial applications inside arguments. These
+graphs erase package and module ownership rather than using qualified syntax as
+application-cache keys. See [Elm syntax interpreter application caching](elm-syntax-interpreter-application-caching.md)
+for the storage interface, selection policy, cryptographic addresses and eligibility boundaries.
+
 ## Stil4mElmSyntax7
 
 The syntax model in the namespace `Stil4mElmSyntax7` was the first one implemented and originally used in more applications. Later, we split the syntax model into concrete and abstract forms, and since then, `Stil4mElmSyntax7` has only been used for backward compatibility with certain tools.

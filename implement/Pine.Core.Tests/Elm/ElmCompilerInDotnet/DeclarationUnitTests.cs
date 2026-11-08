@@ -39,7 +39,7 @@ public class DeclarationUnitTests
     private sealed record Package(ElmPackageIdentity Identity, FileTree Sources);
 
     /// <summary>A closed, deterministic in-memory application and published-package world.</summary>
-    private sealed class World : IElmPackageProvider
+    internal sealed class World : IElmPackageProvider
     {
         private readonly Dictionary<ElmPackageIdentity, Package> _packages = [];
 

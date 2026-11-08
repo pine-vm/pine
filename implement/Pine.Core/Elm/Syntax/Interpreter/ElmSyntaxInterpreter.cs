@@ -299,6 +299,9 @@ public partial class ElmSyntaxInterpreter
         /// <summary>Cancels interpretation cooperatively, including recursive test construction.</summary>
         public System.Threading.CancellationToken CancellationToken { get; init; }
 
+        /// <summary>Caller-selected storage and function policy; null preserves the default execution path.</summary>
+        public ApplicationCaching? ApplicationCache { get; init; }
+
         /// <summary>
         /// Bounded defaults used by interpreter entry points without an explicit configuration.
         /// </summary>
@@ -918,12 +921,15 @@ public partial class ElmSyntaxInterpreter
         var invocationCounter = new InvocationCounter();
 
         var combined =
-            CombineResolvers(
-                [
-                DebugResolver,
-                app => PineBuiltinResolverCounting(app, invocationCounter),
-                app => UserDefinedResolver(app, declarations),
-                ]);
+            new DefaultApplicationResolver(
+                CombineResolvers(
+                    [
+                    DebugResolver,
+                    app => PineBuiltinResolverCounting(app, invocationCounter),
+                    app => UserDefinedResolver(app, declarations),
+                    ]),
+                new Prepared(GetOrConvertDeclarations(declarations)),
+                enableDefaultBuiltins: false).Resolve;
 
         var rootContext =
             new ApplicationContext(
@@ -1010,12 +1016,15 @@ public partial class ElmSyntaxInterpreter
         var invocationCounter = new InvocationCounter(onApplication);
 
         var combined =
-            CombineResolvers(
-                [
-                DebugResolver,
-                app => PineBuiltinResolverCounting(app, invocationCounter),
-                app => UserDefinedResolver(app, declarations),
-                ]);
+            new DefaultApplicationResolver(
+                CombineResolvers(
+                    [
+                    DebugResolver,
+                    app => PineBuiltinResolverCounting(app, invocationCounter),
+                    app => UserDefinedResolver(app, declarations),
+                    ]),
+                new Prepared(GetOrConvertDeclarations(declarations)),
+                enableDefaultBuiltins: false).Resolve;
 
         var rootContext =
             new ApplicationContext(
@@ -1117,11 +1126,14 @@ public partial class ElmSyntaxInterpreter
         var kstack = new Stack<Kont>();
         invocationLogger ??= s_ambientInvocationLogger.Value ?? new InvocationCounter();
         evaluationConfig ??= EvaluationConfig.Default;
+        evaluationConfig.CancellationToken.ThrowIfCancellationRequested();
+        var applicationCache = CreateApplicationCacheExecution(resolveApplication, evaluationConfig);
 
         var nullaryValues =
-            memoizeNullaryValues ||
+            evaluationConfig.ApplicationCache is null &&
+            (memoizeNullaryValues ||
             resolveApplication.Target is DefaultApplicationResolver &&
-            resolveApplication.GetInvocationList().Length is 1
+            resolveApplication.GetInvocationList().Length is 1)
             ?
             new NullaryValueCache(evaluationConfig.CancellationToken)
             :
@@ -1148,12 +1160,13 @@ public partial class ElmSyntaxInterpreter
                     resolveApplication: resolveApplication,
                     kstack: kstack,
                     invocationLogger: invocationLogger,
-                    nullaryValues: nullaryValues);
+                    nullaryValues: nullaryValues,
+                    applicationCache: applicationCache);
 
             if (applyCallResult.MoveTo(ref currentExpr, ref currentEnv, ref currentValue) is { } applyErr)
                 return applyErr;
 
-            if (currentExpr is null)
+            if (currentExpr is null && kstack.Count is 0)
                 return currentValue!;
         }
         else if (initialExpression is null)
@@ -1316,7 +1329,8 @@ public partial class ElmSyntaxInterpreter
                                     resolveApplication: resolveApplication,
                                     kstack: kstack,
                                     invocationLogger: invocationLogger,
-                                    nullaryValues: nullaryValues);
+                                    nullaryValues: nullaryValues,
+                                    applicationCache: applicationCache);
 
                             if (applyResult.MoveTo(ref currentExpr, ref currentEnv, ref currentValue) is { } error)
                                 return error;
@@ -1633,6 +1647,10 @@ public partial class ElmSyntaxInterpreter
                         nullaryValues!.Complete(top.AsMemoizeResult.Entry, value);
                         break;
 
+                    case Kont.Kind.CacheApplicationResult:
+                        applicationCache!.Complete(top.AsCacheApplicationResult.Entries, value);
+                        break;
+
                     case Kont.Kind.Negate:
                         {
                             if (!ContainsOpaque(value) && value.AsInteger() is { } intValue)
@@ -1760,7 +1778,8 @@ public partial class ElmSyntaxInterpreter
                                         newArguments: buildArgs.Accumulated,
                                         callerEnv: buildArgs.Env,
                                         kstack: kstack,
-                                        invocationLogger: invocationLogger);
+                                        invocationLogger: invocationLogger,
+                                        applicationCache: applicationCache);
 
                                 if (localResult.MoveTo(ref currentExpr, ref currentEnv, ref currentValue) is { } localErr)
                                     return localErr;
@@ -1776,7 +1795,8 @@ public partial class ElmSyntaxInterpreter
                                     resolveApplication: resolveApplication,
                                     kstack: kstack,
                                     invocationLogger: invocationLogger,
-                                    nullaryValues: nullaryValues);
+                                    nullaryValues: nullaryValues,
+                                    applicationCache: applicationCache);
 
                             if (applyResult.MoveTo(ref currentExpr, ref currentEnv, ref currentValue) is { } applyErr)
                                 return applyErr;
@@ -1823,7 +1843,8 @@ public partial class ElmSyntaxInterpreter
                                     newArguments: applyEvaluatedFunction.Arguments,
                                     callerEnv: applyEvaluatedFunction.Env,
                                     kstack: kstack,
-                                    invocationLogger: invocationLogger);
+                                    invocationLogger: invocationLogger,
+                                    applicationCache: applicationCache);
 
                             if (applyResult.MoveTo(ref currentExpr, ref currentEnv, ref currentValue) is { } applyErr)
                                 return applyErr;
@@ -1843,7 +1864,8 @@ public partial class ElmSyntaxInterpreter
                                     newArguments: afterCall.ExtraArgs,
                                     callerEnv: afterCall.Env,
                                     kstack: kstack,
-                                    invocationLogger: invocationLogger);
+                                    invocationLogger: invocationLogger,
+                                    applicationCache: applicationCache);
 
                             if (afterCallApplyResult.MoveTo(ref currentExpr, ref currentEnv, ref currentValue) is { } afterCallApplyErr)
                                 return afterCallApplyErr;
@@ -2311,7 +2333,8 @@ public partial class ElmSyntaxInterpreter
         Func<Application, ApplicationResolution> resolveApplication,
         Stack<Kont> kstack,
         IInvocationLogger invocationLogger,
-        NullaryValueCache? nullaryValues)
+        NullaryValueCache? nullaryValues,
+        ApplicationCacheExecution? applicationCache)
     {
         var application =
             new Application(
@@ -2325,7 +2348,14 @@ public partial class ElmSyntaxInterpreter
 
         invocationLogger.OnDirectFunctionApplication(application);
 
-        return ApplyResolvedCall(application, resolveApplication, kstack, invocationLogger, nullaryValues);
+        return
+            ApplyResolvedCall(
+                application,
+                resolveApplication,
+                kstack,
+                invocationLogger,
+                nullaryValues,
+                applicationCache);
     }
 
     private static ApplyCallOutcome ApplyResolvedCall(
@@ -2333,10 +2363,21 @@ public partial class ElmSyntaxInterpreter
         Func<Application, ApplicationResolution> resolveApplication,
         Stack<Kont> kstack,
         IInvocationLogger invocationLogger,
-        NullaryValueCache? nullaryValues)
+        NullaryValueCache? nullaryValues,
+        ApplicationCacheExecution? applicationCache)
     {
         if (application.FunctionName.Namespaces is ["Debug"])
             nullaryValues?.RejectPending();
+
+        ApplicationCacheExecution.Entry? cacheEntry = null;
+
+        if (applicationCache is not null)
+        {
+            cacheEntry = applicationCache.FindNamed(application, out var cached);
+
+            if (cached is not null)
+                return ApplyCallOutcome.ResolvedValue(cached);
+        }
 
         ApplicationResolution resolution;
 
@@ -2357,6 +2398,9 @@ public partial class ElmSyntaxInterpreter
         switch (resolution)
         {
             case ApplicationResolution.Resolved resolved:
+                if (cacheEntry is not null)
+                    applicationCache!.Complete([cacheEntry], resolved.Value);
+
                 return ApplyCallOutcome.ResolvedValue(resolved.Value);
 
             case ApplicationResolution.ContinueWithFunction continueWithFunction:
@@ -2432,6 +2476,27 @@ public partial class ElmSyntaxInterpreter
                         extraArgs = null;
                     }
 
+                    if (applicationCache is not null && providedCount > expectedArity)
+                    {
+                        var functionValue =
+                            new ElmClosureInProcess(
+                                new ElmClosureInProcess.SourceRef.Declared(application.FunctionName, functionImpl),
+                                expectedArity,
+                                [],
+                                LocalBindingEnvironment.Empty,
+                                bodyTopLevel);
+
+                        cacheEntry = applicationCache.Find(bodyTopLevel, functionValue, saturatingArgs, out var hit);
+
+                        if (hit is not null)
+                        {
+                            if (extraArgs is not null)
+                                kstack.Push(new Kont.AfterCall(extraArgs, application.Context));
+
+                            return ApplyCallOutcome.ResolvedValue(hit);
+                        }
+                    }
+
                     LocalBindingEnvironment innerBindings;
 
                     try
@@ -2468,6 +2533,8 @@ public partial class ElmSyntaxInterpreter
                                 ExtraArgs: extraArgs,
                                 Env: application.Context));
                     }
+
+                    PushApplicationCacheResult(kstack, cacheEntry);
 
                     // Every call — including self-recursion — pushes a fresh CallFrame onto
                     // the kont stack so runtime errors retain an Elm-level call stack.
@@ -2514,7 +2581,8 @@ public partial class ElmSyntaxInterpreter
         IReadOnlyList<PineValueInProcess> newArguments,
         ApplicationContext callerEnv,
         Stack<Kont> kstack,
-        IInvocationLogger invocationLogger)
+        IInvocationLogger invocationLogger,
+        ApplicationCacheExecution? applicationCache)
     {
         if (newArguments.Count is 0)
             return ApplyCallOutcome.ResolvedValue(functionValue);
@@ -2738,6 +2806,21 @@ public partial class ElmSyntaxInterpreter
                     "Unknown ElmClosureInProcess.SourceRef shape: " + closure.Source.GetType().FullName);
         }
 
+        ApplicationCacheExecution.Entry? cacheEntry = null;
+
+        if (applicationCache is not null)
+        {
+            cacheEntry = applicationCache.Find(callFrameName, closure, saturatingArgs, out var hit);
+
+            if (hit is not null)
+            {
+                if (extraArgs is not null)
+                    kstack.Push(new Kont.AfterCall(extraArgs, callerEnv));
+
+                return ApplyCallOutcome.ResolvedValue(hit);
+            }
+        }
+
         LocalBindingEnvironment bodyBindings;
 
         try
@@ -2765,6 +2848,8 @@ public partial class ElmSyntaxInterpreter
                     ExtraArgs: extraArgs,
                     Env: callerEnv));
         }
+
+        PushApplicationCacheResult(kstack, cacheEntry);
 
         kstack.Push(
             new Kont.CallFrame(
@@ -4317,7 +4402,15 @@ public partial class ElmSyntaxInterpreter
                 app => UserDefinedResolver(app, resolverIndex)
                 ]);
 
-        return allowMemoization ? new DefaultApplicationResolver(combined).Resolve : combined;
+        return
+            allowMemoization
+            ?
+            new DefaultApplicationResolver(
+                combined,
+                new Prepared(declarations.ToImmutableDictionary()),
+                enableDefaultBuiltins: customFunctionResolvers is not null).Resolve
+            :
+            combined;
     }
 
     /// <summary>
