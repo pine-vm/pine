@@ -303,6 +303,12 @@ public partial class ElmSyntaxInterpreter
         public ApplicationCaching? ApplicationCache { get; init; }
 
         /// <summary>
+        /// Lazily reuses completed parameterless declarations for the immutable prepared program.
+        /// Custom resolvers and an explicit <see cref="ApplicationCache"/> retain their own behavior.
+        /// </summary>
+        public bool CacheNullaryValues { get; init; } = true;
+
+        /// <summary>
         /// Bounded defaults used by interpreter entry points without an explicit configuration.
         /// </summary>
         public static EvaluationConfig Default { get; } =
@@ -852,6 +858,15 @@ public partial class ElmSyntaxInterpreter
     /// the resolver dispatches it like any other top-level call.
     /// </summary>
     private static IReadOnlyDictionary<string, DeclQualifiedName> BuildInfixOperatorMap(
+        IReadOnlyDictionary<DeclQualifiedName, PreparedDeclaration> declarations) =>
+        s_infixOperatorMaps.GetValue(declarations, static source => CreateInfixOperatorMap(source));
+
+    private static readonly System.Runtime.CompilerServices.ConditionalWeakTable<
+        IReadOnlyDictionary<DeclQualifiedName, PreparedDeclaration>,
+        IReadOnlyDictionary<string, DeclQualifiedName>>
+        s_infixOperatorMaps = new();
+
+    private static IReadOnlyDictionary<string, DeclQualifiedName> CreateInfixOperatorMap(
         IReadOnlyDictionary<DeclQualifiedName, PreparedDeclaration> declarations)
     {
         var map = new Dictionary<string, DeclQualifiedName>();
@@ -945,8 +960,7 @@ public partial class ElmSyntaxInterpreter
                 resolveApplication: combined,
                 infixOperators: BuildInfixOperatorMap(declarations),
                 invocationLogger: invocationCounter,
-                evaluationConfig: evaluationConfig,
-                memoizeNullaryValues: true);
+                evaluationConfig: evaluationConfig);
 
         return (result, invocationCounter.ToReadOnly());
     }
@@ -1040,8 +1054,7 @@ public partial class ElmSyntaxInterpreter
                 resolveApplication: combined,
                 infixOperators: BuildInfixOperatorMap(declarations),
                 invocationLogger: invocationCounter,
-                evaluationConfig: evaluationConfig,
-                memoizeNullaryValues: true);
+                evaluationConfig: evaluationConfig);
 
         return (result, invocationCounter.ToReadOnly());
     }
@@ -1120,8 +1133,7 @@ public partial class ElmSyntaxInterpreter
         Func<Application, ApplicationResolution> resolveApplication,
         IReadOnlyDictionary<string, DeclQualifiedName>? infixOperators,
         IInvocationLogger? invocationLogger = null,
-        EvaluationConfig? evaluationConfig = null,
-        bool memoizeNullaryValues = false)
+        EvaluationConfig? evaluationConfig = null)
     {
         var kstack = new Stack<Kont>();
         invocationLogger ??= s_ambientInvocationLogger.Value ?? new InvocationCounter();
@@ -1129,15 +1141,7 @@ public partial class ElmSyntaxInterpreter
         evaluationConfig.CancellationToken.ThrowIfCancellationRequested();
         var applicationCache = CreateApplicationCacheExecution(resolveApplication, evaluationConfig);
 
-        var nullaryValues =
-            evaluationConfig.ApplicationCache is null &&
-            (memoizeNullaryValues ||
-            resolveApplication.Target is DefaultApplicationResolver &&
-            resolveApplication.GetInvocationList().Length is 1)
-            ?
-            new NullaryValueCache(evaluationConfig.CancellationToken)
-            :
-            null;
+        var nullaryValues = CreateNullaryValueCacheExecution(resolveApplication, infixOperators, evaluationConfig);
 
         long instructionCount = 0;
 
@@ -2366,9 +2370,6 @@ public partial class ElmSyntaxInterpreter
         NullaryValueCache? nullaryValues,
         ApplicationCacheExecution? applicationCache)
     {
-        if (application.FunctionName.Namespaces is ["Debug"])
-            nullaryValues?.RejectPending();
-
         ApplicationCacheExecution.Entry? cacheEntry = null;
 
         if (applicationCache is not null)
@@ -2410,15 +2411,19 @@ public partial class ElmSyntaxInterpreter
                     var providedCount = application.Arguments.Count;
 
                     var memoize =
-                        expectedArity is 0 && providedCount is 0 &&
+                        expectedArity is 0 &&
                         continueWithFunction.ResolvedName is not null && nullaryValues is not null;
 
                     var memoEntry = memoize ? nullaryValues!.Find(continueWithFunction) : null;
 
-                    if (memoEntry?.Value is { } cachedValue)
+                    if (memoEntry?.Completed is { } cachedValue)
                     {
-                        nullaryValues!.Replay(memoEntry);
-                        return ApplyCallOutcome.ResolvedValue(cachedValue);
+                        nullaryValues!.Replay(cachedValue);
+
+                        if (providedCount > 0)
+                            kstack.Push(new Kont.AfterCall(application.Arguments, application.Context));
+
+                        return ApplyCallOutcome.ResolvedValue(cachedValue.Value);
                     }
 
                     // The top-level scope to evaluate the body under. Prefer the resolved
@@ -2517,11 +2522,6 @@ public partial class ElmSyntaxInterpreter
 
                     ReplaceTailCallFrame(kstack);
 
-                    // Pending entries are not reusable: recursive nullary declarations still run
-                    // normally under the evaluation's cancellation and quota checks.
-                    if (memoize && memoEntry is null && nullaryValues!.Begin(continueWithFunction) is { } pendingValue)
-                        kstack.Push(new Kont.MemoizeResult(pendingValue));
-
                     if (extraArgs is not null)
                     {
                         // Push the over-application continuation BEFORE the CallFrame so that
@@ -2533,6 +2533,11 @@ public partial class ElmSyntaxInterpreter
                                 ExtraArgs: extraArgs,
                                 Env: application.Context));
                     }
+
+                    // Cache the declaration's value before applying any extra arguments to it.
+                    // Pending entries remain evaluation-local so recursion still reaches the quotas.
+                    if (memoize && memoEntry is null)
+                        kstack.Push(new Kont.MemoizeResult(nullaryValues!.Begin(continueWithFunction)));
 
                     PushApplicationCacheResult(kstack, cacheEntry);
 
@@ -4363,9 +4368,7 @@ public partial class ElmSyntaxInterpreter
     public static Func<Application, ApplicationResolution> BuildResolvers(
         IReadOnlyDictionary<DeclQualifiedName, PreparedDeclaration> declarations)
     {
-        var declarationSnapshot =
-            declarations as ImmutableDictionary<DeclQualifiedName, PreparedDeclaration>
-            ?? declarations.ToImmutableDictionary();
+        var declarationSnapshot = GetDeclarationSnapshot(declarations);
 
         return
             BuildDefaultResolvers(
@@ -4389,6 +4392,9 @@ public partial class ElmSyntaxInterpreter
         IReadOnlyDictionary<DeclQualifiedName, Func<IReadOnlyList<PineValueInProcess>, PineValueInProcess?>>? customFunctionResolvers,
         bool allowMemoization)
     {
+        if (allowMemoization)
+            declarations = GetDeclarationSnapshot(declarations);
+
         var resolverIndex = GetDeclarationResolverIndex(declarations);
 
         var combined =
@@ -4407,11 +4413,22 @@ public partial class ElmSyntaxInterpreter
             ?
             new DefaultApplicationResolver(
                 combined,
-                new Prepared(declarations.ToImmutableDictionary()),
+                new Prepared(declarations),
                 enableDefaultBuiltins: customFunctionResolvers is not null).Resolve
             :
             combined;
     }
+
+    private static readonly System.Runtime.CompilerServices.ConditionalWeakTable<
+        IReadOnlyDictionary<DeclQualifiedName, PreparedDeclaration>,
+        ImmutableDictionary<DeclQualifiedName, PreparedDeclaration>>
+        s_declarationSnapshots = new();
+
+    private static ImmutableDictionary<DeclQualifiedName, PreparedDeclaration> GetDeclarationSnapshot(
+        IReadOnlyDictionary<DeclQualifiedName, PreparedDeclaration> declarations) =>
+        declarations as ImmutableDictionary<DeclQualifiedName, PreparedDeclaration>
+        ??
+        s_declarationSnapshots.GetValue(declarations, static source => source.ToImmutableDictionary());
 
     /// <summary>
     /// Combines multiple fallible resolvers into a single total resolver: each candidate is tried in order;

@@ -5,6 +5,61 @@ compiling their bodies to Pine. The same runtime model can inspect whether
 functions, dependencies, captures and higher-order arguments have reusable
 identities.
 
+## Default lazy declaration values
+
+With the default configuration, the interpreter memoizes successful
+**parameterless module declarations** on first invocation. Preparation does not
+evaluate unused declarations. Subsequent references reuse the completed
+`PineValueInProcess`, including lists, records, tagged values and closures, without
+materializing it to a Pine encoding. Values are shared across evaluations/roots
+using the same immutable prepared declaration snapshot. Parameterized functions
+still execute for each application.
+
+A declaration such as `convert = \n -> ...` caches the function value, not the
+result of applying it to `n`: extra arguments are applied after looking up or
+completing the declaration's value. Local let bindings retain their lexical
+evaluation/binding behavior and are not shared across separate enclosing calls.
+
+This in-memory cache is on by default for ordinary and counter-enabled entry
+points. Set `EvaluationConfig.CacheNullaryValues = false` to bypass it:
+
+```csharp
+var uncached = ElmSyntaxInterpreter.EvaluationConfig.Default with
+{
+    CacheNullaryValues = false
+};
+```
+
+The cache is weakly owned by the immutable program snapshot. Releasing the program
+and its resolver allows the associated values to be collected; it is not a global
+content-addressed or persisted cache. There are no per-value size or entry-count
+limits: completed invoked declarations remain reusable for that snapshot's
+lifetime. Source/dependency edits must produce a new snapshot, not mutate an
+existing declaration dictionary. Internal resolver/operator indexes follow the
+same immutability contract.
+
+Only completed values are published into concurrent storage. Concurrent cold
+misses may evaluate independently; pending entries are private to each evaluation,
+so recursive declarations still reach cancellation/quota errors instead of
+waiting on themselves or other evaluations. Runtime failures and unfinished
+cancelled/quota-exhausted computations are not cached.
+
+Source observers are replayed in their original order, including observations of
+compound/function-bearing intermediate values. Cached replays share observation
+segments rather than copying each event into every enclosing cached value.
+Observer dictionaries and caller-supplied operator maps must be treated as
+immutable and are reference-keyed cache scopes; different observer sets,
+operator maps and builtin modes cannot reuse each other's values/callbacks.
+Observer captures can retain intermediate values while their scope lives.
+Replay still honors cancellation and propagates observer exceptions.
+
+Custom/arbitrary/multicast resolvers are not assumed pure and retain uncached
+behavior. Successful values using the default `Debug` facilities can be retained
+(`Debug.log` is a pass-through in this interpreter); `Debug.todo` still fails and
+its failure is not cached. An explicit application-cache policy disables
+the implicit declaration cache, including when observers prevent application
+caching, to avoid bypassing that policy.
+
 ## Storage and policy belong to the caller
 
 Set `ElmSyntaxInterpreter.EvaluationConfig.ApplicationCache` to an
@@ -61,9 +116,10 @@ results under a key missing some arguments. Primitive facilities without an Elm
 declaration are represented in dependency graphs, but are not separate
 interpreter application-cache entry points.
 
-With an explicit configuration, the interpreter's older implicit nullary-result
+With an explicit configuration, the interpreter's implicit nullary-result
 memoization is disabled: it cannot bypass the caller's function policy. A null
-configuration preserves the existing execution and nullary-memoization behavior.
+`ApplicationCache` configuration uses the default lazy declaration cache described
+above, unless `CacheNullaryValues` is false.
 Syntax preparation and source lookup caches are separate from application results.
 
 ## Closed runtime identity

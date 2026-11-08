@@ -9,11 +9,13 @@ using System.Collections.Generic;
 using System.Collections.Immutable;
 using System.Linq;
 using System.Numerics;
+using System.Runtime.CompilerServices;
 using System.Threading;
 using System.Threading.Tasks;
 using Xunit;
 
 using Engine = Pine.Core.Elm.Syntax.Interpreter.ElmSyntaxInterpreter;
+using AST = Pine.Core.Elm.Syntax.Abstract;
 
 namespace Pine.Core.Tests.Elm.Syntax.Interpreter;
 
@@ -88,20 +90,34 @@ public class NullaryValueCacheTests
     }
 
     [Fact]
-    public void Nullary_cache_is_owned_by_each_evaluation_not_the_prepared_program_or_resolver()
+    public void Completed_values_are_shared_across_evaluations_of_the_same_program()
     {
         var program = Program(Sum());
         var resolver = Engine.BuildResolvers(program.Declarations);
         AddCount(Run(program, resolver: resolver).Logger).Should().Be(1);
-        AddCount(Run(program, resolver: resolver).Logger).Should().Be(1);
+        AddCount(Run(program, resolver: resolver).Logger).Should().Be(0);
     }
 
     [Fact]
-    public void Concurrent_evaluations_do_not_share_nullary_values_or_observer_state()
+    public void Concurrent_evaluations_share_only_completed_values()
     {
         var program = Program(Sum());
         var resolver = Engine.BuildResolvers(program.Declarations);
-        Parallel.For(0, 8, _ => AddCount(Run(program, resolver: resolver).Logger).Should().Be(1));
+
+        Parallel.For(
+            0,
+            8,
+            _ =>
+            {
+                var (result, logger) = Run(program, resolver: resolver);
+
+                result.Extract(error => throw new Exception(error.ToString())).GetElementAt(0).AsInteger().Should().Be(
+                    new BigInteger(30));
+
+                AddCount(logger).Should().BeInRange(0, 1);
+            });
+
+        AddCount(Run(program, resolver: resolver).Logger).Should().Be(0);
     }
 
     [Fact]
@@ -143,7 +159,7 @@ public class NullaryValueCacheTests
     }
 
     [Fact]
-    public void Non_scalar_results_and_observations_are_not_reused()
+    public void Compound_results_are_reused_and_observations_are_replayed()
     {
         var body = new Engine.PreparedExpression.ListExpr([Sum()]);
         var program = Program(body);
@@ -159,12 +175,18 @@ public class NullaryValueCacheTests
                 }
             };
 
-        AddCount(Run(program, config).Logger).Should().Be(2);
+        var (result, logger) = Run(program, config);
+        AddCount(logger).Should().Be(1);
         observations.Should().Be(2);
+        var value = result.Extract(error => throw new Exception(error.ToString()));
+        value.GetElementAt(0).Should().BeSameAs(value.GetElementAt(1));
+
+        AddCount(Run(program, config).Logger).Should().Be(0);
+        observations.Should().Be(4);
     }
 
     [Fact]
-    public void Scalar_result_with_non_scalar_intermediate_observation_is_not_reused()
+    public void Compound_intermediate_observations_are_replayed()
     {
         var body = Sum();
         var arguments = ((Engine.PreparedExpression.Application)body).Arguments[0];
@@ -180,7 +202,7 @@ public class NullaryValueCacheTests
                 }
             };
 
-        AddCount(Run(Program(body), config).Logger).Should().Be(2);
+        AddCount(Run(Program(body), config).Logger).Should().Be(1);
         observations.Should().Be(2);
     }
 
@@ -311,23 +333,33 @@ public class NullaryValueCacheTests
     }
 
     [Fact]
-    public void Debug_paths_are_not_memoized_even_when_their_result_is_scalar()
+    public void Successful_declarations_using_default_Debug_facilities_are_memoized()
     {
         var body = new Engine.PreparedExpression.Application(Identifier("Debug.log"), [Literal(0), Sum()]);
-        AddCount(Run(Program(body)).Logger).Should().Be(2);
+        var program = Program(body);
+        AddCount(Run(program).Logger).Should().Be(1);
+        AddCount(Run(program).Logger).Should().Be(0);
     }
 
     [Fact]
-    public void Nullary_closures_are_not_shared_between_accesses()
+    public void Debug_todo_failures_are_not_cached()
+    {
+        var program = Program(new Engine.PreparedExpression.Application(Identifier("Debug.todo"), [Literal(0)]));
+        Run(program).Result.IsErrOrNull()!.Message.Should().Contain("Debug.todo");
+        Run(program).Result.IsErrOrNull()!.Message.Should().Contain("Debug.todo");
+    }
+
+    [Fact]
+    public void Nullary_closures_are_shared_between_accesses()
     {
         var body = new Engine.PreparedExpression.LambdaExpression([], Literal(5));
         var result = Run(Program(body)).Result.Extract(error => throw new Exception(error.ToString()));
         result.GetElementAt(0).Should().BeOfType<Engine.ElmClosureInProcess>();
-        result.GetElementAt(0).Should().NotBeSameAs(result.GetElementAt(1));
+        result.GetElementAt(0).Should().BeSameAs(result.GetElementAt(1));
     }
 
     [Fact]
-    public void Large_scalar_results_are_not_retained()
+    public void Large_values_are_retained_without_materializing_or_size_limits()
     {
         var chunk =
             new Engine.PreparedExpression.ValueLiteral(PineValueInProcess.Create(PineValue.Blob(new byte[40_000])));
@@ -339,11 +371,11 @@ public class NullaryValueCacheTests
 
         var (result, logger) = Run(Program(body));
         result.Extract(error => throw new Exception(error.ToString())).GetElementAt(0).GetLength().Should().Be(80_000);
-        logger.DirectApplicationCounts[Name("Pine_builtin.concat")].Should().Be(2);
+        logger.DirectApplicationCounts[Name("Pine_builtin.concat")].Should().Be(1);
     }
 
     [Fact]
-    public void Entry_admission_is_bounded_without_changing_results()
+    public void All_invoked_nullary_declarations_are_admitted()
     {
         const int Count = 4100;
         var declarations = Enumerable.Range(0, Count).Select(index => ("Test.value" + index, Sum())).ToList();
@@ -356,11 +388,11 @@ public class NullaryValueCacheTests
         var (result, logger) = Run(Program([.. declarations]));
         var value = result.Extract(error => throw new Exception(error.ToString()));
         value.GetLength().Should().Be(Count * 2);
-        AddCount(logger).Should().BeGreaterThan(Count).And.BeLessThan(Count * 2);
+        AddCount(logger).Should().Be(Count);
     }
 
     [Fact]
-    public void Aggregate_scalar_retention_is_bounded_without_changing_results()
+    public void Aggregate_retention_does_not_evict_completed_declarations()
     {
         const int Count = 300;
 
@@ -382,14 +414,13 @@ public class NullaryValueCacheTests
         var (result, logger) = Run(Program([.. declarations]));
         result.Extract(error => throw new Exception(error.ToString())).GetLength().Should().Be(Count * 2);
 
-        logger.DirectApplicationCounts[Name("Pine_builtin.concat")].Should().BeGreaterThan(Count).And.BeLessThan(
-            Count * 2);
+        logger.DirectApplicationCounts[Name("Pine_builtin.concat")].Should().Be(Count);
     }
 
     [Theory]
-    [InlineData(10, true)]
-    [InlineData(300, false)]
-    public void Observation_capture_has_bounded_admission_without_dropping_callbacks(int depth, bool cached)
+    [InlineData(10)]
+    [InlineData(300)]
+    public void Observation_capture_does_not_drop_callbacks_or_disable_value_reuse(int depth)
     {
         var body = Literal(30);
 
@@ -418,15 +449,274 @@ public class NullaryValueCacheTests
         var reference = Run(program, config, application => resolver(application));
         observations.Should().Be(2 * (depth + 1));
 
-        if (cached)
-        {
-            optimized.Logger.Counters.InstructionLoopCount.Should().BeLessThan(
-                reference.Logger.Counters.InstructionLoopCount);
-        }
-        else
-        {
-            optimized.Logger.Counters.InstructionLoopCount.Should().BeGreaterThanOrEqualTo(
-                reference.Logger.Counters.InstructionLoopCount);
-        }
+        optimized.Logger.Counters.InstructionLoopCount.Should().BeLessThan(
+            reference.Logger.Counters.InstructionLoopCount);
+    }
+
+    [Fact]
+    public void Unused_declarations_are_not_evaluated_and_default_prepared_entry_points_share_results()
+    {
+        var program =
+            Program(
+                ("Test.unused", Identifier("Missing.function")),
+                ("Test.value", Sum()),
+                ("Test.root", Identifier("Test.value")),
+                ("Test.other", Identifier("Test.value")));
+
+        var logger = new FunctionStepCountingInvocationLogger();
+        using var scope = Engine.BeginInstrumentationScope(logger);
+
+        var first =
+            Engine.Interpret(Name("Test.root"), [], program).Extract(error => throw new Exception(error.ToString()));
+
+        var second =
+            Engine.Interpret(Name("Test.other"), [], program).Extract(error => throw new Exception(error.ToString()));
+
+        second.Should().BeSameAs(first);
+        AddCount(logger).Should().Be(1);
+        logger.DirectApplicationCounts.Should().NotContainKey(Name("Test.unused"));
+    }
+
+    [Fact]
+    public void Cache_can_be_disabled_without_reading_or_populating_default_values()
+    {
+        var program = Program(new Engine.PreparedExpression.ListExpr([Sum()]));
+        var config = Engine.EvaluationConfig.Default with { CacheNullaryValues = false };
+        AddCount(Run(program, config).Logger).Should().Be(2);
+        AddCount(Run(program).Logger).Should().Be(1);
+        AddCount(Run(program).Logger).Should().Be(0);
+        AddCount(Run(program, config).Logger).Should().Be(2);
+    }
+
+    [Fact]
+    public void Observer_sets_have_independent_caches_and_replay_only_their_own_callbacks()
+    {
+        var body = Sum();
+        var program = Program(body);
+        var firstObservations = 0;
+        var secondObservations = 0;
+
+        Engine.EvaluationConfig Config(Action<PineValueInProcess> observe) =>
+            Engine.EvaluationConfig.Default with
+            {
+                ExpressionObservers =
+                new Dictionary<Engine.PreparedExpression, Action<PineValueInProcess>>
+                {
+                    [body] = observe
+                }
+            };
+
+        var first = Config(_ => firstObservations++);
+        var second = Config(_ => secondObservations++);
+
+        AddCount(Run(program).Logger).Should().Be(1);
+        AddCount(Run(program, first).Logger).Should().Be(1);
+        AddCount(Run(program, second).Logger).Should().Be(1);
+        AddCount(Run(program, first).Logger).Should().Be(0);
+        firstObservations.Should().Be(4);
+        secondObservations.Should().Be(2);
+    }
+
+    [Fact]
+    public void Different_program_snapshots_do_not_reuse_values_with_changed_dependencies()
+    {
+        var body = Identifier("Test.dependency");
+        var first = Program(("Test.value", body), ("Test.dependency", Literal(1)), ("Test.root", body));
+
+        var second =
+            first with
+            {
+                Declarations =
+                first.Declarations.ToImmutableDictionary().SetItem(
+                    Name("Test.dependency"),
+                    Program(("Test.dependency", Literal(2))).Declarations[Name("Test.dependency")])
+            };
+
+        Run(first).Result.Extract(error => throw new Exception(error.ToString())).AsInteger().Should().Be(
+            new BigInteger(1));
+
+        Run(second).Result.Extract(error => throw new Exception(error.ToString())).AsInteger().Should().Be(
+            new BigInteger(2));
+    }
+
+    [Fact]
+    public void Nullary_function_values_are_cached_before_overapplication_not_by_the_extra_argument()
+    {
+        var closure =
+            new Engine.PreparedExpression.LetExpression(
+                [
+                    new Engine.PreparedLetDeclaration.LetFunction(
+                        new(null, new("captured", [], Sum())))
+                ],
+                new Engine.PreparedExpression.LambdaExpression(
+                    [new AST.Pattern.VarPattern("argument")],
+                    new Engine.PreparedExpression.Application(
+                        Identifier("Pine_builtin.int_add"),
+                        [new Engine.PreparedExpression.ListExpr([Identifier("captured"), Identifier("argument")])])));
+
+        var program = Program(("Test.value", closure));
+        var logger = new FunctionStepCountingInvocationLogger();
+        using var scope = Engine.BeginInstrumentationScope(logger);
+
+        var first =
+            Engine.Interpret(Name("Test.value"), [PineValueInProcess.CreateInteger(2)], program)
+            .Extract(error => throw new Exception(error.ToString()));
+
+        var second =
+            Engine.Interpret(Name("Test.value"), [PineValueInProcess.CreateInteger(3)], program)
+            .Extract(error => throw new Exception(error.ToString()));
+
+        first.AsInteger().Should().Be(new BigInteger(32));
+        second.AsInteger().Should().Be(new BigInteger(33));
+        AddCount(logger).Should().Be(3);
+    }
+
+    [Fact]
+    public void Failed_observations_do_not_publish_a_completed_value()
+    {
+        var body = Sum();
+        var program = Program(body);
+        var fail = true;
+
+        var config =
+            Engine.EvaluationConfig.Default with
+            {
+                ExpressionObservers =
+                new Dictionary<Engine.PreparedExpression, Action<PineValueInProcess>>
+                {
+                    [body] =
+                    _ =>
+                    {
+                        if (fail)
+                            throw new InvalidOperationException("first observation failed");
+                    }
+                }
+            };
+
+        Action run = () => Run(program, config);
+        run.Should().Throw<InvalidOperationException>().WithMessage("first observation failed");
+        fail = false;
+        AddCount(Run(program, config).Logger).Should().Be(1);
+        AddCount(Run(program, config).Logger).Should().Be(0);
+    }
+
+    [Fact]
+    public void Quota_failures_do_not_cache_unfinished_values()
+    {
+        var program = Program(new Engine.PreparedExpression.ListExpr([Sum(), Sum()]));
+        var failed = Run(program, new(InstructionCountLimit: 5, ContinuationDepthLimit: 100));
+        failed.Result.IsErrOrNull()!.QuotaExceeded.Should().NotBeNull();
+        AddCount(Run(program).Logger).Should().Be(2);
+        AddCount(Run(program).Logger).Should().Be(0);
+    }
+
+    [Fact]
+    public void Cancellation_on_the_last_replayed_observation_prevents_a_root_cache_hit_from_returning_success()
+    {
+        var body = Sum();
+        var program = Program(("Test.root", body));
+        using var cancellation = new CancellationTokenSource();
+        var cancel = false;
+
+        var observers =
+            new Dictionary<Engine.PreparedExpression, Action<PineValueInProcess>>
+            {
+                [body] =
+                _ =>
+                {
+                    if (cancel)
+                        cancellation.Cancel();
+                }
+            };
+
+        var config = Engine.EvaluationConfig.Default with { ExpressionObservers = observers };
+        AddCount(Run(program, config).Logger).Should().Be(1);
+        cancel = true;
+        Action run = () => Run(program, config with { CancellationToken = cancellation.Token });
+        run.Should().Throw<OperationCanceledException>();
+    }
+
+    [Fact]
+    public void Cancelled_observations_do_not_publish_unfinished_values()
+    {
+        var body = Sum();
+        var program = Program(body);
+        using var cancellation = new CancellationTokenSource();
+        var cancel = true;
+
+        var observers =
+            new Dictionary<Engine.PreparedExpression, Action<PineValueInProcess>>
+            {
+                [body] =
+                _ =>
+                {
+                    if (cancel)
+                        cancellation.Cancel();
+                }
+            };
+
+        var config = Engine.EvaluationConfig.Default with { ExpressionObservers = observers };
+        Action run = () => Run(program, config with { CancellationToken = cancellation.Token });
+        run.Should().Throw<OperationCanceledException>();
+        cancel = false;
+        AddCount(Run(program, config).Logger).Should().Be(1);
+        AddCount(Run(program, config).Logger).Should().Be(0);
+    }
+
+    [Fact]
+    public void Caller_supplied_operator_maps_do_not_share_results_with_different_operator_semantics()
+    {
+        var program =
+            Program(
+                ("Test.root",
+                new Engine.PreparedExpression.OperatorApplication(
+                    "custom",
+                    Pine.Core.Elm.Syntax.Concrete.InfixDirection.Left,
+                    Literal(10),
+                    Literal(20))),
+                ("Test.first",
+                new Engine.PreparedExpression.LambdaExpression(
+                    [new AST.Pattern.VarPattern("x"), new AST.Pattern.VarPattern("y")],
+                    Literal(30))),
+                ("Test.second",
+                new Engine.PreparedExpression.LambdaExpression(
+                    [new AST.Pattern.VarPattern("x"), new AST.Pattern.VarPattern("y")],
+                    Literal(7))));
+
+        var resolver = Engine.BuildResolvers(program.Declarations);
+        var first = new Dictionary<string, DeclQualifiedName> { ["custom"] = Name("Test.first") };
+        var second = new Dictionary<string, DeclQualifiedName> { ["custom"] = Name("Test.second") };
+
+        var firstValue =
+            Engine.Interpret(Name("Test.root"), [], resolver, first)
+            .Extract(error => throw new Exception(error.ToString()));
+
+        var secondValue =
+            Engine.Interpret(Name("Test.root"), [], resolver, second)
+            .Extract(error => throw new Exception(error.ToString()));
+
+        firstValue.AsInteger().Should().Be(new BigInteger(30));
+        secondValue.AsInteger().Should().Be(new BigInteger(7));
+    }
+
+    [Fact]
+    public void Program_and_observer_cache_lifetimes_are_weak()
+    {
+        var (program, observers) = PopulateWeakCache();
+        GC.Collect(2, GCCollectionMode.Forced, blocking: true, compacting: true);
+        GC.WaitForPendingFinalizers();
+        GC.Collect(2, GCCollectionMode.Forced, blocking: true, compacting: true);
+        program.IsAlive.Should().BeFalse();
+        observers.IsAlive.Should().BeFalse();
+    }
+
+    [MethodImpl(MethodImplOptions.NoInlining)]
+    private static (WeakReference Program, WeakReference Observers) PopulateWeakCache()
+    {
+        var body = new Engine.PreparedExpression.ListExpr([Sum()]);
+        var program = Program(body);
+        var observers = new Dictionary<Engine.PreparedExpression, Action<PineValueInProcess>> { [body] = _ => { } };
+        _ = Run(program, Engine.EvaluationConfig.Default with { ExpressionObservers = observers });
+        return (new(program.Declarations), new(observers));
     }
 }

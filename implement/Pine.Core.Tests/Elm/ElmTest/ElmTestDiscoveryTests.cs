@@ -538,6 +538,48 @@ public class ElmTestDiscoveryTests
     }
 
     [Fact]
+    public void Syntax_test_discovery_shares_a_nullary_fixture_across_candidate_and_suite_uses()
+    {
+        using var project =
+            new ElmFuzzTests.Project(
+                """
+                marker n = n + 1
+                build n = marker n
+                fixture = List.map build [ 1, 2, 3 ]
+                suite =
+                    Test.describe "shared fixture"
+                        (List.map
+                            (\n ->
+                                let expected = List.sum fixture
+                                in Test.test (String.fromInt n) (\_ -> Expect.equal expected 9))
+                            [ 1, 2, 3 ])
+                """);
+
+        var path = Path.Combine(project.Directory, "tests", "Tests.elm");
+        File.WriteAllText(path, File.ReadAllText(path).Replace("exposing (suite)", "exposing (fixture, suite)"));
+        var logger = new FunctionStepCountingInvocationLogger();
+        using var scope = ElmSyntaxInterpreter.BeginInstrumentationScope(logger);
+        var discovery = ElmTestDiscovery.DiscoverTests(project.Directory);
+
+        discovery.Tests.Should().HaveCount(3);
+
+        logger.DirectApplicationCounts.Where(pair => pair.Key.DeclName == "marker").Sum(pair => pair.Value)
+            .Should().Be(3);
+
+        foreach (var test in discovery.Tests)
+        {
+            AssertSource(
+                project,
+                discovery,
+                test.Id,
+                """Test.test (String.fromInt n) (\_ -> Expect.equal expected 9)""");
+        }
+
+        var runners = discovery.PrepareExecution(discovery.Tests.Select(test => test.Id));
+        runners.Should().HaveCount(3);
+    }
+
+    [Fact]
     public void Syntax_test_discovery_does_not_execute_assertions_or_fuzz_callbacks()
     {
         using var project =

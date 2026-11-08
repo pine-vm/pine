@@ -23,6 +23,7 @@ public partial class ElmSyntaxInterpreter
 {
     /// <summary>
     /// Program code of an app prepared to run functions in the interpreter.
+    /// Completed parameterless declaration values are reused lazily for its immutable declaration snapshot.
     /// </summary>
     /// <remarks>
     /// <see cref="Declarations"/> intentionally exposes the prepared declaration model. A secondary
@@ -205,8 +206,7 @@ public partial class ElmSyntaxInterpreter
                 resolveApplication: combined,
                 infixOperators: BuildInfixOperatorMap(prepared.Declarations),
                 invocationLogger: invocationCounter,
-                evaluationConfig: evaluationConfig,
-                memoizeNullaryValues: true);
+                evaluationConfig: evaluationConfig);
 
         return (result, invocationCounter.ToReadOnly());
     }

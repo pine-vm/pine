@@ -1,6 +1,7 @@
 using Pine.Core.CodeAnalysis;
 using Pine.Core.Internal;
 using System;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Runtime.CompilerServices;
 using System.Threading;
@@ -23,57 +24,123 @@ public partial class ElmSyntaxInterpreter
         public ApplicationResolution Resolve(Application application) => resolve(application);
     }
 
-    private sealed class NullaryValueCache(CancellationToken cancellationToken)
+    private readonly record struct NullaryDeclarationKey(
+        DeclQualifiedName Name,
+        PreparedFunctionImplementation Implementation)
     {
-        private const int MaxObservationsPerValue = 256;
+        public bool Equals(NullaryDeclarationKey other) =>
+            Name == other.Name && ReferenceEquals(Implementation, other.Implementation);
 
-        private const int MaxEntries = 4096;
+        public override int GetHashCode() =>
+            HashCode.Combine(Name, RuntimeHelpers.GetHashCode(Implementation));
+    }
 
-        private const int MaxScalarBytes = 64 * 1024;
+    private sealed record CompletedNullaryValue(
+        PineValueInProcess Value,
+        NullaryObservation[] Observations);
 
-        private const int MaxRetainedScalarBytes = 16 * 1024 * 1024;
+    private readonly record struct NullaryObservation(
+        Action<PineValueInProcess>? Observer,
+        PineValueInProcess? Value,
+        CompletedNullaryValue? Replayed);
 
-        private readonly Dictionary<DeclarationKey, Entry> _entries = [];
+    private sealed class NullaryValueStores
+    {
+        public NullaryOperatorStores WithBuiltins { get; } = new();
+
+        public NullaryOperatorStores WithoutBuiltins { get; } = new();
+    }
+
+    private sealed class NullaryOperatorStores
+    {
+        public NullaryObserverStores WithoutOperators { get; } = new();
+
+        public ConditionalWeakTable<IReadOnlyDictionary<string, DeclQualifiedName>, NullaryObserverStores> WithOperators { get; } =
+            new();
+    }
+
+    private sealed class NullaryObserverStores
+    {
+        public ConcurrentDictionary<NullaryDeclarationKey, CompletedNullaryValue> WithoutObservers { get; } = new();
+
+        public ConditionalWeakTable<IReadOnlyDictionary<PreparedExpression, Action<PineValueInProcess>>,
+            ConcurrentDictionary<NullaryDeclarationKey, CompletedNullaryValue>> WithObservers
+        { get; } = new();
+    }
+
+    private static readonly ConditionalWeakTable<IReadOnlyDictionary<DeclQualifiedName, PreparedDeclaration>, NullaryValueStores>
+        s_nullaryValueStores = new();
+
+    private static NullaryValueCache? CreateNullaryValueCacheExecution(
+        Func<Application, ApplicationResolution> resolver,
+        IReadOnlyDictionary<string, DeclQualifiedName>? operators,
+        EvaluationConfig config)
+    {
+        if (!config.CacheNullaryValues || config.ApplicationCache is not null ||
+            resolver.Target is not DefaultApplicationResolver owner ||
+            resolver.GetInvocationList().Length is not 1)
+        {
+            return null;
+        }
+
+        var stores =
+            s_nullaryValueStores.GetValue(GetDeclarationSnapshot(owner.Program.Declarations), static _ => new());
+
+        var operatorStores = owner.EnableDefaultBuiltins ? stores.WithBuiltins : stores.WithoutBuiltins;
+
+        var observerStores =
+            operators is null
+            ?
+            operatorStores.WithoutOperators
+            :
+            operatorStores.WithOperators.GetValue(operators, static _ => new());
+
+        var values =
+            config.ExpressionObservers is null
+            ?
+            observerStores.WithoutObservers
+            :
+            observerStores.WithObservers.GetValue(config.ExpressionObservers, static _ => new());
+
+        return new(values, config.CancellationToken);
+    }
+
+    private sealed class NullaryValueCache(
+        ConcurrentDictionary<NullaryDeclarationKey, CompletedNullaryValue> completed,
+        CancellationToken cancellationToken)
+    {
+        private readonly Dictionary<NullaryDeclarationKey, Entry> _entries = [];
 
         private readonly List<Entry> _pending = [];
 
-        private int _retainedScalarBytes;
-
-        private readonly record struct DeclarationKey(
-            DeclQualifiedName Name,
-            PreparedFunctionImplementation Implementation)
-        {
-            public bool Equals(DeclarationKey other) =>
-                Name == other.Name && ReferenceEquals(Implementation, other.Implementation);
-
-            public override int GetHashCode() =>
-                HashCode.Combine(Name, RuntimeHelpers.GetHashCode(Implementation));
-        }
-
         public sealed class Entry
         {
-            public PineValueInProcess? Value { get; set; }
+            public required NullaryDeclarationKey Key { get; init; }
 
-            public bool Eligible { get; set; } = true;
+            public CompletedNullaryValue? Completed { get; set; }
 
-            public int RetainedScalarBytes { get; set; }
-
-            public List<(Action<PineValueInProcess> Observer, PineValueInProcess Value)> Observations { get; } = [];
+            public List<NullaryObservation> Observations { get; } = [];
         }
 
         public Entry? Find(ApplicationResolution.ContinueWithFunction resolution)
         {
-            var key = new DeclarationKey(resolution.ResolvedName!, resolution.Function);
-            return _entries.GetValueOrDefault(key);
-        }
+            var key = new NullaryDeclarationKey(resolution.ResolvedName!, resolution.Function);
 
-        public Entry? Begin(ApplicationResolution.ContinueWithFunction resolution)
-        {
-            if (_entries.Count >= MaxEntries)
+            if (_entries.TryGetValue(key, out var entry))
+                return entry;
+
+            if (!completed.TryGetValue(key, out var value))
                 return null;
 
-            var entry = new Entry();
-            _entries.Add(new(resolution.ResolvedName!, resolution.Function), entry);
+            entry = new() { Key = key, Completed = value };
+            _entries.Add(key, entry);
+            return entry;
+        }
+
+        public Entry Begin(ApplicationResolution.ContinueWithFunction resolution)
+        {
+            var entry = new Entry() { Key = new(resolution.ResolvedName!, resolution.Function) };
+            _entries.Add(entry.Key, entry);
             _pending.Add(entry);
             return entry;
         }
@@ -85,13 +152,12 @@ public partial class ElmSyntaxInterpreter
 
             _pending.RemoveAt(_pending.Count - 1);
 
-            // Scalar blobs cannot contain closures, test nodes or mutable lexical environments.
-            // Do not materialize compound values merely to decide whether to cache them.
-            if (entry.Eligible && !IsOpaque(value) && value.IsBlob() && TryRetain(entry, value))
-                entry.Value = value;
-
-            else
-                Reject(entry);
+            cancellationToken.ThrowIfCancellationRequested();
+            entry.Completed = new(value, [.. entry.Observations]);
+            entry.Observations.Clear();
+            // Publish only completed immutable snapshots. Concurrent misses may compute independently;
+            // sharing pending entries would deadlock mutually recursive declarations across evaluations.
+            completed.TryAdd(entry.Key, entry.Completed);
         }
 
         public void Observe(Action<PineValueInProcess> observer, PineValueInProcess value)
@@ -100,57 +166,56 @@ public partial class ElmSyntaxInterpreter
             {
                 var entry = _pending[index];
 
-                if (!entry.Eligible)
-                    continue;
-
-                if (IsOpaque(value) || !value.IsBlob() ||
-                    entry.Observations.Count >= MaxObservationsPerValue ||
-                    !TryRetain(entry, value))
-                {
-                    Reject(entry);
-                    continue;
-                }
-
-                entry.Observations.Add((observer, value));
+                entry.Observations.Add(new(observer, value, null));
             }
 
             observer(value);
         }
 
-        public void Replay(Entry entry)
+        public void Replay(CompletedNullaryValue value)
         {
-            for (var index = 0; index < entry.Observations.Count; index++)
+            cancellationToken.ThrowIfCancellationRequested();
+
+            if (value.Observations.Length is 0)
+                return;
+
+            // Retain a shared replay segment instead of copying every observation into each caller.
+            for (var index = 0; index < _pending.Count; ++index)
+            {
+                _pending[index].Observations.Add(new(null, null, value));
+            }
+
+            var stack = new Stack<(NullaryObservation[] Observations, int Index)>();
+            var observations = value.Observations;
+            var next = 0;
+
+            while (true)
             {
                 cancellationToken.ThrowIfCancellationRequested();
-                var observation = entry.Observations[index];
-                Observe(observation.Observer, observation.Value);
+
+                if (next == observations.Length)
+                {
+                    if (!stack.TryPop(out var parent))
+                        break;
+
+                    (observations, next) = parent;
+                    continue;
+                }
+
+                var observation = observations[next++];
+
+                if (observation.Replayed is { } replayed)
+                {
+                    stack.Push((observations, next));
+                    observations = replayed.Observations;
+                    next = 0;
+                }
+                else
+                {
+                    observation.Observer!(observation.Value!);
+                }
             }
         }
 
-        public void RejectPending()
-        {
-            for (var index = 0; index < _pending.Count; index++)
-                Reject(_pending[index]);
-        }
-
-        private bool TryRetain(Entry entry, PineValueInProcess value)
-        {
-            var bytes = value.GetLength();
-
-            if (bytes > MaxScalarBytes || bytes > MaxRetainedScalarBytes - _retainedScalarBytes)
-                return false;
-
-            entry.RetainedScalarBytes += bytes;
-            _retainedScalarBytes += bytes;
-            return true;
-        }
-
-        private void Reject(Entry entry)
-        {
-            entry.Eligible = false;
-            entry.Observations.Clear();
-            _retainedScalarBytes -= entry.RetainedScalarBytes;
-            entry.RetainedScalarBytes = 0;
-        }
     }
 }
