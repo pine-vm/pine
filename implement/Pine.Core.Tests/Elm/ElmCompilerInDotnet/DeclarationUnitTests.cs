@@ -557,8 +557,122 @@ public class DeclarationUnitTests
         first.TransformationCount.Should().Be(count);
         var again = Canonical(cache, [code.ToString()], Name("Main", "value" + (count - 1)));
         again.TransformationCount.Should().Be(0);
+
+        foreach (var result in new[] { first, again })
+        {
+            var chains =
+                result.DependencyChains.Should().BeOfType<Canonicalization.DeclarationDependencyChains>().Subject;
+
+            chains.Predecessors.Should().HaveCount(count);
+            chains.Predecessors.Values.Count(parent => parent is not null).Should().Be(count - 1);
+        }
+
         again.UnitExports.Values.Select(export => export.Unit).Distinct().Count().Should().Be(count);
         UnitConstruction.Flatten([again.UnitExports[Name("Main", "value" + (count - 1))]]).Should().HaveCount(count);
+    }
+
+    [Theory]
+    [InlineData(64)]
+    [InlineData(512)]
+    public void Deep_dependency_graphs_retain_one_predecessor_per_declaration_not_complete_paths(int count)
+    {
+        var code = new StringBuilder("module Main exposing (..)\nvalue0 = 0\n");
+
+        for (var index = 1; index < count; index++)
+            code.Append($"value{index} = ( value{index - 1}, {index} )\n");
+
+        var root = Name("Main", "value" + (count - 1));
+        var cache = new Canonicalization.DeclarationCache();
+        var cold = Canonical(cache, [code.ToString()], root);
+        var warm = Canonical(cache, [code.ToString()], root);
+        cold.TransformationCount.Should().Be(count);
+        warm.TransformationCount.Should().Be(0);
+
+        foreach (var result in new[] { cold, warm })
+        {
+            result.Dependencies.Values.Sum(edges => edges.Count).Should().Be(count - 1);
+
+            var chains =
+                result.DependencyChains.Should().BeOfType<Canonicalization.DeclarationDependencyChains>().Subject;
+
+            chains.Predecessors.Should().HaveCount(count);
+            chains.Predecessors[root].Should().BeNull();
+
+            for (var index = 0; index < count - 1; index++)
+                chains.Predecessors[Name("Main", "value" + index)].Should().Be(Name("Main", "value" + (index + 1)));
+
+            var expected =
+                Enumerable.Range(0, count).Reverse().Select(index => Name("Main", "value" + index)).ToArray();
+
+            var path = chains[Name("Main", "value0")];
+            path.Should().Equal(expected);
+
+            path.Should().NotBeSameAs(
+                chains[Name("Main", "value0")],
+                "expanded paths are not retained by the invocation");
+
+            chains.Predecessors.Should().HaveCount(count, "diagnostic reconstruction must not change retained storage");
+        }
+    }
+
+    [Fact]
+    public void Lazy_dependency_paths_preserve_first_demand_through_shared_and_recursive_edges()
+    {
+        const string Source =
+            """
+            module Main exposing (..)
+            root = ( left, right )
+            left = shared
+            right = shared
+            shared = root
+            unused = 0
+            """;
+
+        var root = Name("Main", "root");
+        var left = Name("Main", "left");
+        var right = Name("Main", "right");
+        var shared = Name("Main", "shared");
+        var result = Canonical(new(), [Source], root);
+        var chains = result.DependencyChains.Should().BeOfType<Canonicalization.DeclarationDependencyChains>().Subject;
+        chains.Predecessors.Should().HaveCount(4);
+        chains.Predecessors[root].Should().BeNull();
+        chains.Predecessors[left].Should().Be(root);
+        chains.Predecessors[right].Should().Be(root);
+        chains.Predecessors[shared].Should().Be(left);
+        chains[shared].Should().Equal(root, left, shared);
+        chains[root].Should().Equal(root);
+
+        var paths = chains.ToDictionary(entry => entry.Key, entry => entry.Value);
+        paths.Keys.Should().BeEquivalentTo(chains.Keys);
+        chains.Values.Should().BeEquivalentTo(paths.Values);
+        chains.TryGetValue(shared, out var found).Should().BeTrue();
+        found.Should().Equal(root, left, shared);
+        var missing = Name("Main", "unused");
+        chains.ContainsKey(missing).Should().BeFalse();
+        chains.TryGetValue(missing, out var absent).Should().BeFalse();
+        absent.Should().BeNull();
+        Action missingPath = () => _ = chains[missing];
+        missingPath.Should().Throw<KeyNotFoundException>();
+    }
+
+    [Fact]
+    public void All_roots_keep_root_paths_regardless_of_duplicate_roots_or_backreferences()
+    {
+        const string Source =
+            "module Main exposing (..)\nalpha = shared\nomega = shared\nshared = alpha\n";
+
+        var alpha = Name("Main", "alpha");
+        var omega = Name("Main", "omega");
+        var shared = Name("Main", "shared");
+        var result = Canonical(new(), [Source], omega, alpha, omega);
+        var chains = result.DependencyChains.Should().BeOfType<Canonicalization.DeclarationDependencyChains>().Subject;
+        chains.Predecessors.Should().HaveCount(3);
+        chains.Predecessors.Values.Count(parent => parent is null).Should().Be(2);
+        chains[alpha].Should().Equal(alpha);
+        chains[omega].Should().Equal(omega);
+        chains[shared].Should().Equal(alpha, shared);
+        Canonical(new(), [Source], alpha, omega).DependencyChains[shared].Should().Equal(chains[shared]);
+        Canonical(new(), [Source]).DependencyChains.Should().BeEmpty();
     }
 
     [Fact]

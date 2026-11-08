@@ -2,8 +2,11 @@ using Pine.Core.CodeAnalysis;
 using Pine.Core.Elm.Syntax.Concrete;
 using Pine.Core.Functional;
 using System;
+using System.Collections;
 using System.Collections.Generic;
 using System.Collections.Immutable;
+using System.Collections.ObjectModel;
+using System.Diagnostics.CodeAnalysis;
 using System.Linq;
 
 using File = Pine.Core.Elm.Syntax.Concrete.File;
@@ -12,6 +15,10 @@ using Range = Pine.Core.Elm.Syntax.Concrete.Range;
 namespace Pine.Core.Elm.ElmCompilerInDotnet;
 
 /// <summary>Canonicalized declarations and the references that demanded them.</summary>
+/// <param name="Declarations">Required declarations with their caller-side syntax and diagnostics.</param>
+/// <param name="DependencyChains">
+/// First-demand paths from roots, reconstructed on access. Reading keys or counts does not expand paths.
+/// </param>
 public sealed record DeclarationCanonicalizationResult(
     IReadOnlyDictionary<DeclQualifiedName, CanonicalizationResult<Node<Declaration>>> Declarations,
     IReadOnlyDictionary<DeclQualifiedName, IReadOnlyList<DeclQualifiedName>> DependencyChains)
@@ -52,6 +59,56 @@ public sealed record DeclarationReference(
 
 public partial class Canonicalization
 {
+    internal sealed class DeclarationDependencyChains(
+        Dictionary<DeclQualifiedName, DeclQualifiedName?> predecessors)
+        : IReadOnlyDictionary<DeclQualifiedName, IReadOnlyList<DeclQualifiedName>>
+    {
+        internal IReadOnlyDictionary<DeclQualifiedName, DeclQualifiedName?> Predecessors { get; } =
+            new ReadOnlyDictionary<DeclQualifiedName, DeclQualifiedName?>(predecessors);
+
+        public int Count => Predecessors.Count;
+
+        public IEnumerable<DeclQualifiedName> Keys => Predecessors.Keys;
+
+        public IEnumerable<IReadOnlyList<DeclQualifiedName>> Values => Keys.Select(Reconstruct);
+
+        public IReadOnlyList<DeclQualifiedName> this[DeclQualifiedName key] => Reconstruct(key);
+
+        public bool ContainsKey(DeclQualifiedName key) => Predecessors.ContainsKey(key);
+
+        public bool TryGetValue(
+            DeclQualifiedName key,
+            [MaybeNullWhen(false)] out IReadOnlyList<DeclQualifiedName> value)
+        {
+            if (!ContainsKey(key))
+            {
+                value = null;
+                return false;
+            }
+
+            value = Reconstruct(key);
+            return true;
+        }
+
+        public IEnumerator<KeyValuePair<DeclQualifiedName, IReadOnlyList<DeclQualifiedName>>> GetEnumerator()
+        {
+            foreach (var key in Keys)
+                yield return KeyValuePair.Create(key, Reconstruct(key));
+        }
+
+        IEnumerator IEnumerable.GetEnumerator() => GetEnumerator();
+
+        private IReadOnlyList<DeclQualifiedName> Reconstruct(DeclQualifiedName key)
+        {
+            var chain = new Stack<DeclQualifiedName>();
+
+            for (DeclQualifiedName? current = key; current is not null; current = Predecessors[current])
+                chain.Push(current);
+
+            return chain.ToArray();
+        }
+    }
+
     /// <summary>
     /// Resolves complete top-level declarations on demand. Reading a scope does not demand its bodies.
     /// </summary>
@@ -378,7 +435,7 @@ public partial class Canonicalization
         }
 
         var pending = new Queue<DeclQualifiedName>();
-        var chains = new Dictionary<DeclQualifiedName, IReadOnlyList<DeclQualifiedName>>();
+        var predecessors = new Dictionary<DeclQualifiedName, DeclQualifiedName?>();
         var results = new Dictionary<DeclQualifiedName, CanonicalizationResult<Node<Declaration>>>();
         var references = new Dictionary<DeclQualifiedName, IReadOnlyList<DeclQualifiedName>>();
         var sourceReferences = new Dictionary<DeclQualifiedName, IReadOnlyList<DeclarationReference>>();
@@ -397,7 +454,7 @@ public partial class Canonicalization
             if (duplicateScopes.Contains(string.Join(".", root.Namespaces)))
                 return $"Root declaration '{root.FullName}' belongs to a duplicate module namespace.";
 
-            Demand(root, [root]);
+            Demand(root, predecessor: null);
         }
 
         while (pending.TryDequeue(out var name))
@@ -443,12 +500,12 @@ public partial class Canonicalization
                 ];
 
             foreach (var dependency in references[name])
-                Demand(dependency, [.. chains[name], dependency]);
+                Demand(dependency, name);
 
         }
 
         return
-            new DeclarationCanonicalizationResult(results, chains)
+            new DeclarationCanonicalizationResult(results, new DeclarationDependencyChains(predecessors))
             {
                 Dependencies = references,
                 References = sourceReferences,
@@ -461,9 +518,9 @@ public partial class Canonicalization
                         entry => KeyValuePair.Create(entry.Key.FullName, entry.Value.Type)))
             };
 
-        void Demand(DeclQualifiedName name, IReadOnlyList<DeclQualifiedName> chain)
+        void Demand(DeclQualifiedName name, DeclQualifiedName? predecessor)
         {
-            if (chains.TryAdd(name, chain))
+            if (predecessors.TryAdd(name, predecessor))
                 pending.Enqueue(name);
         }
 
