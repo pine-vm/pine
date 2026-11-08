@@ -104,6 +104,9 @@ public sealed record ElmPackageSubstitution(
 /// </summary>
 public sealed record ElmDependencyResolutionConfiguration
 {
+    /// <summary>Optional prefixes on individual package-reference edges; never part of semantic transformation inputs.</summary>
+    public ImmutableArray<ElmModuleNameMapping> ModuleNameMappings { get; init; } = [];
+
     /// <summary>The Elm language/compiler version against which all manifests are checked.</summary>
     public ElmPackageVersion CompilerVersion { get; init; } = ElmPackageVersion.Parse("0.19.1");
 
@@ -128,6 +131,9 @@ public sealed record ElmDependencyResolutionConfiguration
     public ImmutableDictionary<string, ElmPackageVersion> LockedVersions { get; init; } =
         [];
 }
+
+/// <summary>A module prefix in the importing package's scope. Null importer denotes the selected application.</summary>
+public sealed record ElmModuleNameMapping(string? ImportingPackage, string DependencyPackage, string Prefix);
 
 /// <summary>Known candidates and their origin. Incomplete listings cannot prove that no compatible release exists.</summary>
 public sealed record ElmPackageVersionListing(
@@ -253,7 +259,11 @@ public sealed record ElmDependencyResolutionConfigurationSummary(
     bool Offline,
     bool PreferOldest,
     ImmutableArray<ElmSubstitutionSummary> Substitutions,
-    ImmutableDictionary<string, ElmPackageVersion> LockedVersions);
+    ImmutableDictionary<string, ElmPackageVersion> LockedVersions)
+{
+    /// <summary>Scope-local module mappings used by source preparation.</summary>
+    public ImmutableArray<ElmModuleNameMapping> ModuleNameMappings { get; init; } = [];
+}
 
 /// <summary>A failed preparation with a user-facing explanation and the complete retained resolution report.</summary>
 /// <remarks>Renders actionable errors while preserving the report and underlying exception.</remarks>

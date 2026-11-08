@@ -91,7 +91,7 @@ public class RecordAccessLoweringTests
 
         var declaration =
             pipeline.FunctionsForEmission[
-            new Model.FunctionId.Source(Name("select"))];
+            pipeline.SourceFunctionIds[Name("select")]];
 
         var updates =
             IR.ExpressionTraversal

@@ -43,6 +43,14 @@ public record CompilationPipelineStageResults(
     /// <summary>Compiler-qualified source namespaces mapped to their original file paths.</summary>
     public IReadOnlyDictionary<string, string> SourceFilePaths { get; init; } =
         ImmutableDictionary<string, string>.Empty;
+
+    /// <summary>Caller-owned source bindings for content-addressed functions. Not a transformation input.</summary>
+    public IReadOnlyDictionary<DeclQualifiedName, CompilerModel.FunctionId> SourceFunctionIds { get; init; } =
+        ImmutableDictionary<DeclQualifiedName, CompilerModel.FunctionId>.Empty;
+
+    /// <summary>Dependency-closed source-free exports selected by this caller.</summary>
+    public IReadOnlyDictionary<DeclQualifiedName, DeclarationUnits.UnitExport> UnitExports { get; init; } =
+        ImmutableDictionary<DeclQualifiedName, DeclarationUnits.UnitExport>.Empty;
 }
 
 /// <summary>
@@ -68,6 +76,9 @@ public partial class ElmCompiler
             ImmutableDictionary<DeclQualifiedName, IReadOnlyList<DeclarationReference>>.Empty;
 
         public IReadOnlyDictionary<string, string> FilePaths { get; init; } = ImmutableDictionary<string, string>.Empty;
+
+        public IReadOnlyDictionary<DeclQualifiedName, DeclarationUnits.UnitExport> UnitExports { get; init; } =
+            ImmutableDictionary<DeclQualifiedName, DeclarationUnits.UnitExport>.Empty;
     }
 
     /// <summary>
@@ -100,7 +111,8 @@ public partial class ElmCompiler
         IDictionary<string, Result<ConcreteSyntax.ParseError, ConcreteSyntax.File>>? sourceParseCache = null,
         Canonicalization.DeclarationCache? canonicalizationCache = null,
         IReadOnlyDictionary<string, ConcreteSyntax.File>? parsedSources = null,
-        IReadOnlyDictionary<string, ElmModuleTypeInterface>? moduleTypeInterfaces = null)
+        IReadOnlyDictionary<string, ElmModuleTypeInterface>? moduleTypeInterfaces = null,
+        SourceCompilationCaches? compilationCaches = null)
     {
         syntaxOptimization ??= new ElmSyntaxOptimizationConfig.SyntaxOptimizationEnabled();
 
@@ -110,6 +122,9 @@ public partial class ElmCompiler
             ElmModuleTypeInterface.Standard
             :
             [];
+
+        canonicalizationCache ??= new();
+        compilationCaches ??= canonicalizationCache.Semantic.Lowering;
 
         var canonicalizationResult =
             ParseAndCanonicalizeForLowering(
@@ -127,7 +142,11 @@ public partial class ElmCompiler
         var canonicalized =
             canonicalizationResult.Extract(error => throw new InvalidOperationException(error.ToString()));
 
-        var flat = canonicalized.CanonicalDeclarations;
+        var flat =
+            DeclarationUnits.UnitConstruction.Flatten(
+                canonicalized.UnitExports.Values,
+                canonicalizationCache.Semantic.Projections);
+
         var prepared = flat;
 
         if (syntaxOptimization is ElmSyntaxOptimizationConfig.SyntaxOptimizationEnabled enabled)
@@ -135,7 +154,8 @@ public partial class ElmCompiler
             var lowering =
                 BuiltinOperatorLowering.Apply(
                     prepared,
-                    new BuiltinOperatorLowering.Configuration(LowerBuiltinOperators: true, LowerElmCoreBasics: true));
+                    new BuiltinOperatorLowering.Configuration(LowerBuiltinOperators: true, LowerElmCoreBasics: true),
+                    compilationCaches.OperatorLowering);
 
             if (lowering.IsErrOrNull() is { } lowerError)
                 return lowerError;
@@ -151,15 +171,27 @@ public partial class ElmCompiler
             }
         }
 
-        var program = CompilerModel.LambdaLifting.Lift(CompilerModel.FromCanonicalSyntax.Convert(prepared));
+        var program =
+            CompilerModel.LambdaLifting.Lift(
+                CompilerModel.FromCanonicalSyntax.Convert(prepared, compilationCaches.SemanticFunctions));
+
         CompilerModel.ProgramValidation.Validate(program);
 
         return
-            new CompilationPipelineStageResults(canonicalized.ConcreteModules, flat, program)
+            new CompilationPipelineStageResults(
+                canonicalized.ConcreteModules,
+                canonicalized.CanonicalDeclarations,
+                program)
             {
                 RootDeclarationNames = canonicalized.RootDeclarations,
                 SourceReferences = canonicalized.References,
-                SourceFilePaths = canonicalized.FilePaths
+                SourceFilePaths = canonicalized.FilePaths,
+                UnitExports = canonicalized.UnitExports,
+                SourceFunctionIds =
+                canonicalized.UnitExports.ToDictionary(
+                    entry => entry.Key,
+                    entry => (CompilerModel.FunctionId)new CompilerModel.FunctionId.Source(
+                        DeclarationUnits.UnitConstruction.MemberName(entry.Value, entry.Key.DeclName)))
             };
     }
 
@@ -387,7 +419,8 @@ public partial class ElmCompiler
                     entry => entry.Key,
                     entry => AbstractSyntax.ConvertFromConcrete.FromDeclaration(entry.Value.Value.Value)),
                 References = canonicalizedDeclarations.References,
-                FilePaths = moduleNameToFilePath
+                FilePaths = moduleNameToFilePath,
+                UnitExports = canonicalizedDeclarations.UnitExports
             };
     }
 
@@ -553,9 +586,11 @@ public partial class ElmCompiler
         IDictionary<string, Result<ConcreteSyntax.ParseError, ConcreteSyntax.File>>? sourceParseCache = null,
         Canonicalization.DeclarationCache? canonicalizationCache = null,
         IReadOnlyDictionary<string, ConcreteSyntax.File>? parsedSources = null,
-        IReadOnlyDictionary<string, ElmModuleTypeInterface>? moduleTypeInterfaces = null)
+        IReadOnlyDictionary<string, ElmModuleTypeInterface>? moduleTypeInterfaces = null,
+        SourceCompilationCaches? compilationCaches = null)
     {
         syntaxOptimization ??= SyntaxOptimizationConfigDefault;
+        canonicalizationCache ??= new();
 
         var loweringResult =
             LowerToCompilerModel(
@@ -566,7 +601,8 @@ public partial class ElmCompiler
                 sourceParseCache,
                 canonicalizationCache,
                 parsedSources,
-                moduleTypeInterfaces);
+                moduleTypeInterfaces,
+                compilationCaches);
 
         if (loweringResult.IsErrOrNull() is { } loweringErr)
             return loweringErr;
@@ -579,7 +615,8 @@ public partial class ElmCompiler
                 pipelineStageResults.CompilerProgram ??
                 throw new InvalidOperationException("Missing compiler-owned lowering result."),
                 pipelineStageResults,
-                disableGenericApplicationChainConsolidation);
+                disableGenericApplicationChainConsolidation,
+                canonicalizationCache.Semantic);
     }
 
     /// <summary>Compiles sources prepared with project-scoped resolution and import visibility validation.</summary>

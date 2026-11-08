@@ -27,16 +27,20 @@ public sealed class ElmInterpreterEnvironment
 
     private readonly int _nextSubmission;
 
+    private readonly Canonicalization.DeclarationCache _canonicalCache;
+
     private ElmInterpreterEnvironment(
         ElmSyntaxInterpreter.Prepared program,
         ImmutableDictionary<string, SyntaxTypes.File> modules,
         ImplicitImportConfig imports,
-        int nextSubmission)
+        int nextSubmission,
+        Canonicalization.DeclarationCache? canonicalCache = null)
     {
         Program = program;
         _modules = modules;
         _imports = imports;
         _nextSubmission = nextSubmission;
+        _canonicalCache = canonicalCache ?? new();
     }
 
     /// <summary>All executable declarations, including shadowed declarations still reachable from older bindings.</summary>
@@ -349,7 +353,8 @@ public sealed class ElmInterpreterEnvironment
                                 increment.program,
                                 _modules.Add(name, module),
                                 nextImports,
-                                _nextSubmission + 1),
+                                _nextSubmission + 1,
+                                _canonicalCache),
                             DeclQualifiedName.Create([name], Canonicalization.GetDeclarationName(declaration)));
                 });
     }
@@ -369,7 +374,7 @@ public sealed class ElmInterpreterEnvironment
                 [.. _modules.Values, module],
                 [name],
                 _imports,
-                cache: null,
+                cache: _canonicalCache,
                 canonicalizedDependencies: Program.Declarations.Keys.ToHashSet());
 
         if (canonicalized.IsErrOrNull() is { } failure)

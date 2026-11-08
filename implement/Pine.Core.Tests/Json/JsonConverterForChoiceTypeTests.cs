@@ -1,6 +1,8 @@
 using AwesomeAssertions;
 using Pine.Core.Functional;
 using Pine.Core.Json;
+using System;
+using System.Linq;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using Xunit;
@@ -9,6 +11,42 @@ namespace Pine.Core.Tests.Json;
 
 public class JsonConverterForChoiceTypeTests
 {
+    [JsonConverter(typeof(JsonConverterForChoiceType))]
+    public abstract record InheritedChoice
+    {
+        public record BaseVariant(int Value) : InheritedChoice;
+
+        public sealed record RegisteredDerived(int Value) : BaseVariant(Value);
+    }
+
+    public sealed record UnregisteredDerived(int Value) : InheritedChoice.BaseVariant(Value);
+
+    public sealed record UnregisteredChoice : InheritedChoice;
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void Runtime_variant_lookup_preserves_first_assignable_variant_order(bool registered)
+    {
+        InheritedChoice value =
+            registered ? new InheritedChoice.RegisteredDerived(7) : new UnregisteredDerived(7);
+
+        var variants =
+            JsonConverterForChoiceType.CachedParseTypeToConvert(typeof(InheritedChoice))
+            .Extract(error => throw new Exception(error)).Variants;
+
+        var expected = variants.First(entry => entry.Value.ClrType.IsInstanceOfType(value)).Value;
+        JsonSerializer.Serialize(value).Should().Be("{\"" + expected.Name + "\":[7]}");
+    }
+
+    [Fact]
+    public void Unknown_runtime_variant_still_reports_an_explicit_serialization_error()
+    {
+        Action serialize = () => JsonSerializer.Serialize<InheritedChoice>(new UnregisteredChoice());
+        serialize.Should().Throw<JsonException>().WithMessage("*not registered as variant*");
+        JsonSerializer.Serialize<InheritedChoice?>(null).Should().Be("null");
+    }
+
     [JsonConverter(typeof(JsonConverterForChoiceType))]
     private abstract record SimpleClass
     {

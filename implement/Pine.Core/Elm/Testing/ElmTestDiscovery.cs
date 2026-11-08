@@ -234,15 +234,39 @@ public static class ElmTestDiscovery
         PreparedSourceDeclaration PrepareSource(DeclQualifiedName name, Concrete.Declaration declaration)
         {
             cancellationToken.ThrowIfCancellationRequested();
-            var input = PreparedDeclarationInput.FromConcrete(name, declaration);
 
-            if (caches?.PreparedDeclarations.TryGetValue(input, out var cached) is true)
-                return cached;
+            var input =
+                new PreparedDeclarationInput(
+                    canonical.Transformations.TryGetValue(name, out var transformation)
+                    ?
+                    transformation.Syntax
+                    :
+                    Abstract.ConvertFromConcrete.FromDeclaration(declaration));
 
-            var source = PreparedSourceDeclaration.Prepare(input.Syntax);
-            cancellationToken.ThrowIfCancellationRequested();
-            caches?.PreparedDeclarations.Set(input, source);
-            return source;
+            if (caches?.PreparedDeclarations.TryGetValue(input, out var source) is not true)
+            {
+                source = PreparedSourceDeclaration.Prepare(input.Syntax);
+                cancellationToken.ThrowIfCancellationRequested();
+                caches?.PreparedDeclarations.Set(input, source);
+            }
+
+            var bindings =
+                transformation is null
+                ?
+                new Dictionary<int, IReadOnlyList<string>>()
+                :
+                transformation.References.Zip(canonical.References[name])
+                .GroupBy(pair => pair.First.Slot)
+                .ToDictionary(group => group.Key, group => group.First().Second.ReferencedName.Namespaces);
+
+            return
+                source!.Rebind(
+                    reference =>
+                    ElmCompilerInDotnet.DeclarationUnits.Canonicalize.ReferenceSlot(reference.Namespaces) is { } slot
+                    ?
+                    DeclQualifiedName.Create(bindings[slot], reference.DeclName)
+                    :
+                    reference);
         }
 
         foreach (var type in modules["Basics"].Declarations.Select(node => node.Value)

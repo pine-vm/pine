@@ -253,6 +253,15 @@ public class JsonConverterForChoiceType<T> : JsonConverter<T>
         JsonConverterForChoiceType.CachedParseTypeToConvert(typeof(T))
         .Extract(error => throw new Exception(error));
 
+    private static readonly JsonConverterForChoiceType.ParsedChoiceType.Variant[] s_orderedVariants =
+        [.. s_parsedType.Variants.Select(entry => entry.Value)];
+
+    // Registered derived types must retain the legacy first-assignable selection, not necessarily their exact variant.
+    private static readonly ImmutableDictionary<Type, JsonConverterForChoiceType.ParsedChoiceType.Variant> s_runtimeVariants =
+        s_orderedVariants.ToImmutableDictionary(
+            variant => variant.ClrType,
+            variant => s_orderedVariants.First(candidate => candidate.ClrType.IsAssignableFrom(variant.ClrType)));
+
     /// <inheritdoc/>
     public override T Read(
         ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)
@@ -340,16 +349,15 @@ public class JsonConverterForChoiceType<T> : JsonConverter<T>
 
         writer.WriteStartObject();
 
-        JsonConverterForChoiceType.ParsedChoiceType.Variant? variant = null;
-
-        for (var i = 0; i < s_parsedType.Variants.Count; ++i)
+        if (!s_runtimeVariants.TryGetValue(value.GetType(), out var variant))
         {
-            var v = s_parsedType.Variants.ElementAt(i);
-
-            if (v.Value.ClrType.IsInstanceOfType(value))
+            foreach (var candidate in s_orderedVariants)
             {
-                variant = v.Value;
-                break;
+                if (candidate.ClrType.IsInstanceOfType(value))
+                {
+                    variant = candidate;
+                    break;
+                }
             }
         }
 

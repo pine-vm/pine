@@ -824,6 +824,30 @@ public static class ElmDependencyResolver
         if (configuration.Substitutions.IsDefault)
             throw new ArgumentException("Substitutions must be an initialized array (use [] for no substitutions).");
 
+        if (configuration.ModuleNameMappings.IsDefault)
+            throw new ArgumentException("ModuleNameMappings must be an initialized array.");
+
+        var mappedEdges = new HashSet<(string?, string)>();
+
+        foreach (var mapping in configuration.ModuleNameMappings)
+        {
+            ValidatePackageName(mapping.DependencyPackage);
+
+            if (mapping.ImportingPackage is { } importer)
+                ValidatePackageName(importer);
+
+            if (!mappedEdges.Add((mapping.ImportingPackage, mapping.DependencyPackage)) ||
+                string.IsNullOrEmpty(mapping.Prefix) ||
+                mapping.Prefix.Split('.').Any(
+                    segment =>
+                    segment.Length is 0 || segment[0] is < 'A' or > 'Z' ||
+                    segment.Any(character => !char.IsAsciiLetterOrDigit(character) && character != '_')))
+            {
+                throw new ArgumentException(
+                    "Each module mapping needs a unique package-reference edge and an Elm module prefix.");
+            }
+        }
+
         foreach (var group in configuration.Substitutions.GroupBy(item => item.PackageName))
         {
             ValidatePackageName(group.Key);
@@ -974,7 +998,15 @@ public static class ElmDependencyResolver
                     SourceFingerprint(item.Sources),
                     item.ImplementationDependencies))
             ],
-            configuration.LockedVersions);
+            configuration.LockedVersions)
+        {
+            ModuleNameMappings =
+            [
+            .. configuration.ModuleNameMappings
+            .OrderBy(mapping => mapping.ImportingPackage, StringComparer.Ordinal)
+            .ThenBy(mapping => mapping.DependencyPackage, StringComparer.Ordinal)
+            ]
+        };
 
     private sealed record SearchResult(
         ImmutableDictionary<string, ElmResolvedPackage> Packages,

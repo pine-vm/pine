@@ -274,7 +274,7 @@ public class ElmTestDiscoveryCacheTests
     }
 
     [Fact]
-    public void Prepared_hash_covers_owner_normalized_syntax_and_changed_clones()
+    public void Prepared_hash_covers_anonymous_syntax_but_not_source_owners()
     {
         var input =
             PreparedDeclarationInput.FromConcrete(DeclQualifiedName.Create(["Main"], "root"), Parse("root = 1"));
@@ -287,7 +287,7 @@ public class ElmTestDiscoveryCacheTests
         PreparedDeclarationInput.FromConcrete(input.Name, Parse("root = 2"))
             .ComputeHash().ToArray().Should().NotEqual(input.ComputeHash().ToArray());
 
-        (input with { Name = DeclQualifiedName.Create(["Other"], "root") })
-            .ComputeHash().ToArray().Should().NotEqual(input.ComputeHash().ToArray());
+        PreparedDeclarationInput.FromConcrete(DeclQualifiedName.Create(["Other"], "root"), Parse("root = 1"))
+            .ComputeHash().ToArray().Should().Equal(input.ComputeHash().ToArray());
     }
 }

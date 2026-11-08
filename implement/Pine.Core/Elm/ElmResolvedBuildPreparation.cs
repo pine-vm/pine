@@ -294,7 +294,7 @@ public static class ElmResolvedBuildPreparation
             };
 
         var prepared =
-            declarationDemand
+            declarationDemand || !report.Configuration.ModuleNameMappings.IsEmpty
             ?
             PrepareDeclarationSources(build, appSources, string.Join("/", manifestPath), sourceParseCache)
             :
@@ -622,6 +622,35 @@ public static class ElmResolvedBuildPreparation
 
         var importNames = new Dictionary<(string path, string name), string>();
         var diagnostics = ImmutableArray.CreateBuilder<ElmResolvedBuild.ImportDiagnostic>();
+        var mappings = build.Resolution.Configuration.ModuleNameMappings;
+        var mappedModules = new Dictionary<string, Dictionary<string, PreparedModule[]>>(StringComparer.Ordinal);
+
+        string ImportedName(string? owner, string? dependency, string name)
+        {
+            if (owner == dependency)
+                return name;
+
+            var mapping =
+                mappings.SingleOrDefault(
+                    item =>
+                    item.ImportingPackage == owner && item.DependencyPackage == dependency);
+
+            return mapping is null ? name : mapping.Prefix + "." + name;
+        }
+
+        foreach (var mapping in mappings)
+        {
+            var declared =
+                build.Resolution.Requirements.Any(
+                    requirement =>
+                    requirement.DeclaringPackage?.Name == mapping.ImportingPackage &&
+                    requirement.PackageName == mapping.DependencyPackage &&
+                    (mapping.ImportingPackage is not null ||
+                    requirement.Scope is ElmDependencyScope.Direct or ElmDependencyScope.TestDirect));
+
+            if (!declared)
+                Fail(mapping.DependencyPackage, "A module mapping requires an in-scope direct package reference.");
+        }
 
         var exportedApi =
             byPath.ToDictionary(item => item.Key, item => GetExposedApi(item.Value.Parsed), StringComparer.Ordinal);
@@ -648,15 +677,39 @@ public static class ElmResolvedBuildPreparation
                 var name = string.Join(".", import.Value.ModuleName.Value);
                 var candidates = modules.GetValueOrDefault(name) ?? [];
 
+                if (mappings.Any(mapping => mapping.ImportingPackage == module.Owner))
+                {
+                    var scopeKey = module.Owner ?? "";
+
+                    if (!mappedModules.TryGetValue(scopeKey, out var mapped))
+                    {
+                        mapped =
+                            byPath.Values
+                            .GroupBy(candidate => ImportedName(module.Owner, candidate.Owner, candidate.Name))
+                            .ToDictionary(group => group.Key, group => group.ToArray(), StringComparer.Ordinal);
+
+                        mappedModules.Add(scopeKey, mapped);
+                    }
+
+                    candidates = mapped.GetValueOrDefault(name) ?? [];
+                }
+
                 var visible =
                     candidates.Where(
                         candidate =>
                         candidate.Owner == module.Owner ||
                         candidate.Owner is not null && visiblePackages.Contains(candidate.Owner) &&
-                        build.Resolution.Packages[candidate.Owner].ExposedModules.Contains(name)).ToArray();
+                        build.Resolution.Packages[candidate.Owner].ExposedModules.Contains(candidate.Name)).ToArray();
+
+                var interfaceEntry =
+                    typeInterfaces.SingleOrDefault(
+                        item =>
+                        ImportedName(module.Owner, item.Value.PackageName, item.Key) == name);
+
+                var moduleInterface = interfaceEntry.Value;
 
                 var visibleInterface =
-                    typeInterfaces.TryGetValue(name, out var moduleInterface) &&
+                    moduleInterface is not null &&
                     (module.Owner == moduleInterface.PackageName ||
                     visiblePackages.Contains(moduleInterface.PackageName));
 
@@ -665,7 +718,7 @@ public static class ElmResolvedBuildPreparation
 
                 if (visible.Length is 0 && interfaceOnlyCandidate)
                 {
-                    importNames[(module.Path, name)] = interfaceNames[name];
+                    importNames[(module.Path, name)] = interfaceNames[interfaceEntry.Key];
 
                     ValidateExposing(
                         import,
@@ -1039,11 +1092,13 @@ public static class ElmResolvedBuildPreparation
                             {
                                 if (!qualifierAliases.TryGetValue(name, out aliasName))
                                 {
-                                    var index = 1;
+                                    var prefix = "PineDependency" + ElmDependencyResolver.Fingerprint(name);
+                                    var index = 0;
 
                                     do
                                     {
-                                        aliasName = "PineDependency" + index++;
+                                        aliasName = prefix + (index is 0 ? "" : index.ToString());
+                                        index++;
                                     }
                                     while (!usedAliases.Add(aliasName));
 

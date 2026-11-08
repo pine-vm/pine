@@ -1,3 +1,4 @@
+using Pine.Core.CodeAnalysis;
 using Pine.Core.Elm.Syntax.Concrete;
 using Pine.Core.Functional;
 using System;
@@ -45,8 +46,8 @@ public partial class Canonicalization
         ImmutableHashSet<string>? ModuleLevelTypes = null,
         ImmutableHashSet<string>? ModuleLevelValues = null,
         Func<ModuleName, string, bool, string>? DescribeUnavailableReference = null,
-        Func<CodeAnalysis.DeclQualifiedName, bool, SymbolResolution>? LookupSymbol = null,
-        Func<CodeAnalysis.DeclQualifiedName, bool, SymbolAvailability>? LookupAvailability = null,
+        Func<DeclQualifiedName, bool, SymbolResolution>? LookupSymbol = null,
+        Func<DeclQualifiedName, bool, SymbolAvailability>? LookupAvailability = null,
         InputObservations? Inputs = null)
     {
         // Source-query preparation keeps binary nodes, qualifying their operator targets instead of lowering.
@@ -93,7 +94,7 @@ public partial class Canonicalization
             if (Inputs is { } inputs)
             {
                 var expected =
-                    found ? CodeAnalysis.DeclQualifiedName.Create(function.ModuleName, function.FunctionName) : null;
+                    found ? DeclQualifiedName.Create(function.ModuleName, function.FunctionName) : null;
 
                 inputs.Record(new OperatorInput(name, expected));
             }
@@ -391,6 +392,28 @@ public partial class Canonicalization
             return $"Duplicate module names: {string.Join(", ", duplicateNames)}";
         }
 
+        var demanded =
+            CanonicalizeDeclarations(
+                modules,
+                [
+                    .. modules.SelectMany(
+                        module =>
+                        module.Declarations.Select(
+                            declaration => DeclQualifiedName.Create(
+                                Module.GetModuleName(module.ModuleDefinition.Value).Value,
+                                GetDeclarationName(declaration.Value))))
+                ],
+                implicitImportConfig,
+                cache: null,
+                canonicalizedDependencies: null,
+                useSourceModuleTypeInterfaces: false,
+                allowUnboundQualifiedReferences: true);
+
+        if (demanded.IsErrOrNull() is { } demandError)
+            return demandError;
+
+        var declarations = demanded.Extract(error => throw new InvalidOperationException(error));
+
         // Build module exports map for resolving exposing (..)
         var moduleExportsMap = AddTypeInterfaceExports(BuildModuleExportsMap(modules), ElmModuleTypeInterface.Standard);
 
@@ -415,7 +438,9 @@ public partial class Canonicalization
             // Canonicalize declarations and collect errors
             var canonicalizedDeclarationsWithErrors =
                 module.Declarations
-                .Select(decl => CanonicalizeDeclaration(decl, context))
+                .Select(
+                    decl => declarations.Declarations[DeclQualifiedName.Create(
+                    currentModuleName, GetDeclarationName(decl.Value))])
                 .ToList();
 
             // Aggregate all errors from declarations
@@ -2367,7 +2392,7 @@ public partial class Canonicalization
                             [
                             new CanonicalizationError.UnresolvedReference(range, moduleNameStr + "." + name)
                             {
-                                Target = CodeAnalysis.DeclQualifiedName.Create(target, name),
+                                Target = DeclQualifiedName.Create(target, name),
                                 IsTypeReference = typeReference,
                                 ResolutionDetail =
                                 imported

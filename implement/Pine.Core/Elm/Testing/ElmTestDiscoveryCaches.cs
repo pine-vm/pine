@@ -39,7 +39,7 @@ public sealed record ElmTestDiscoveryCaches(
                     prepared,
                     new FileStoreCache<PreparedDeclarationInput, PreparedSourceDeclaration>(
                         backingStore,
-                        (directory ?? ImmutableList<string>.Empty).Add("prepared-declarations-v1"),
+                        (directory ?? ImmutableList<string>.Empty).Add("prepared-declarations-v2"),
                         input => input.ComputeHash(),
                         PreparedSourceDeclaration.Codec)))
             {

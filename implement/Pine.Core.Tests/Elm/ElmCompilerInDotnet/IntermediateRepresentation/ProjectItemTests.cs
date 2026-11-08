@@ -210,8 +210,7 @@ public class ProjectItemTests
         declarations.Should().HaveCount(pipeline.CompilerProgram.Functions.Count);
 
         var select =
-            declarations[new Model.FunctionId.Source(
-            DeclQualifiedName.Create(["Test"], "select"))];
+            declarations[pipeline.SourceFunctionIds[DeclQualifiedName.Create(["Test"], "select")]];
 
         var json = JsonSerializer.Serialize(select, options);
         json.Should().NotContain("\"RecordAccess\"");

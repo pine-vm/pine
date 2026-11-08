@@ -36,7 +36,15 @@ public static class FromCanonicalSyntax
         IReadOnlyDictionary<DeclQualifiedName, Declaration> declarations,
         ICache<SourceTransformationInput, LoweredSourceFunction>? cache = null,
         IReadOnlySet<DeclQualifiedName>? selectedFunctions = null,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default) =>
+        LowerCore(declarations, cache, selectedFunctions, cancellationToken, null);
+
+    private static SourceLoweringResult LowerCore(
+        IReadOnlyDictionary<DeclQualifiedName, Declaration> declarations,
+        ICache<SourceTransformationInput, LoweredSourceFunction>? cache,
+        IReadOnlySet<DeclQualifiedName>? selectedFunctions,
+        CancellationToken cancellationToken,
+        IReadOnlyDictionary<DeclQualifiedName, FunctionTypeInfo>? suppliedFunctionTypes)
     {
         var aliasTypes =
             declarations.Where(entry => entry.Value is Declaration.AliasDeclaration)
@@ -102,10 +110,19 @@ public static class FromCanonicalSyntax
         }
 
         var sourceFunctions = declarations.Where(entry => entry.Value is Declaration.FunctionDeclaration).ToArray();
+        SourceLoweringProjection.Context? projectionContext = null;
 
         foreach (var (name, declaration) in sourceFunctions)
         {
             cancellationToken.ThrowIfCancellationRequested();
+
+            if (suppliedFunctionTypes is not null)
+            {
+                if (suppliedFunctionTypes.TryGetValue(name, out var supplied))
+                    functionTypes[name] = supplied;
+
+                continue;
+            }
 
             var function = ((Declaration.FunctionDeclaration)declaration).Function;
 
@@ -115,6 +132,31 @@ public static class FromCanonicalSyntax
                     new(
                         TypeInference.GetFunctionReturnType(function),
                         TypeInference.GetFunctionParameterTypes(function));
+
+                continue;
+            }
+
+            if (cache is not null &&
+                !(function.Declaration.Arguments.Count is 0 &&
+                function.Declaration.Expression is AST.Expression.UnitExpr))
+            {
+                var projection =
+                    new SourceLoweringProjection(
+                        name,
+                        projectionContext ??= new(declarations, cancellationToken));
+
+                var normalized =
+                    SourceCompilationCaches.InferFunctionType(
+                        projection.Input("canonical-function-inference-v6", includeFunctionTypes: false),
+                        projection.Declarations);
+
+                functionTypes[name] =
+                    new(
+                        SourceLoweringProjection.MapType(normalized.ReturnType, projection.Rebind),
+                        [
+                        .. normalized.ParameterTypes.Select(
+                            type => SourceLoweringProjection.MapType(type, projection.Rebind))
+                        ]);
 
                 continue;
             }
@@ -144,13 +186,6 @@ public static class FromCanonicalSyntax
         var immutableConstructorTypes = constructorTypes.ToImmutable();
         var functionNames = sourceFunctions.Select(entry => entry.Key).ToHashSet();
 
-        var environmentHash =
-            cache is null
-            ?
-            null
-            :
-            SourceCompilationCaches.EnvironmentHash(declarations, immutableFunctionTypes);
-
         var functions = ImmutableDictionary.CreateBuilder<FunctionId, Function>();
         var bindingNames = ImmutableDictionary.CreateBuilder<BindingId, string>();
 
@@ -165,18 +200,39 @@ public static class FromCanonicalSyntax
             if (selectedFunctions is not null && !selectedFunctions.Contains(name))
                 continue;
 
-            var input =
-                environmentHash is null
-                ?
-                null
-                :
-                new SourceTransformationInput(name, declaration, environmentHash, "canonical-semantic-function-v1");
-
             LoweredSourceFunction lowered;
 
-            if (input is not null && cache!.TryGetValue(input, out var cached))
+            if (cache is not null)
             {
-                lowered = cached;
+                var projection =
+                    new SourceLoweringProjection(
+                        name,
+                        projectionContext ??= new(declarations, cancellationToken),
+                        immutableFunctionTypes);
+
+                var input = projection.Input("canonical-semantic-function-v6", includeFunctionTypes: true);
+
+                if (!cache.TryGetValue(input, out var normalized))
+                {
+                    var resolved =
+                        LowerCore(
+                            projection.Declarations.SetItem(projection.Name, input.Syntax),
+                            null,
+                            new HashSet<DeclQualifiedName> { projection.Name },
+                            cancellationToken,
+                            projection.FunctionTypes);
+
+                    normalized =
+                        new(
+                            resolved.Program.Functions[new FunctionId.Source(projection.Name)],
+                            resolved.Program.BindingNames,
+                            resolved.GenericAccessEvidence);
+
+                    cancellationToken.ThrowIfCancellationRequested();
+                    cache.Set(input, normalized);
+                }
+
+                lowered = new SourceLoweringRebinding(projection.Rebind).Apply(normalized);
             }
             else
             {
@@ -193,8 +249,6 @@ public static class FromCanonicalSyntax
                 lowered = new(function, rewriter.BindingNames.ToImmutable(), rewriter.Evidence.ToImmutable());
                 cancellationToken.ThrowIfCancellationRequested();
 
-                if (input is not null)
-                    cache!.Set(input, lowered);
             }
 
             functions.Add(new FunctionId.Source(name), lowered.Function);

@@ -291,6 +291,24 @@ public class ElmInterpreterPreparationTests
     }
 
     [Fact]
+    public void Import_alias_matching_the_current_module_keeps_its_target_across_submissions()
+    {
+        var environment =
+            ElmInterpreterEnvironment.Create(
+                [
+                    "module Decode exposing (fromBytes, local)\nimport Bytes.Decode as Decode\n" +
+                    "fromBytes bytes = Decode.decode bytes\nlocal bytes = decode bytes\ndecode bytes = 99",
+                    "module Bytes.Decode exposing (decode)\ndecode bytes = bytes"
+                ])
+            .Extract(error => throw new Exception(error));
+
+        Evaluate(environment, "[ Decode.fromBytes 42, Decode.local 42 ]").Should().Be("[ 42, 99 ]");
+        var dependent = Declare(environment, "old = Decode.fromBytes 7");
+        Evaluate(dependent, "[ old, Decode.fromBytes 8 ]").Should().Be("[ 7, 8 ]");
+        Evaluate(environment, "Decode.fromBytes 9").Should().Be("9");
+    }
+
+    [Fact]
     public async Task Resolved_build_preparation_reuses_package_qualified_syntax()
     {
         var tree =

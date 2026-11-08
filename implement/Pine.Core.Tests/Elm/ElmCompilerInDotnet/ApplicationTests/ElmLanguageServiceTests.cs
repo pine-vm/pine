@@ -1005,7 +1005,7 @@ public class ElmLanguageServiceTests
 
         InvocationCountReportFormatting.FormatCounts(aggregateInvocationCounts).ShouldBeWithDiff(
             """
-            CompiledExpressionCount: 164
+            CompiledExpressionCount: 165
             InvocationCountTotal: 703
             InvocationCountAverage: 4
             InvocationCountPercentile10: 1
@@ -1556,12 +1556,12 @@ public class ElmLanguageServiceTests
 
         InvocationCountReportFormatting.FormatCounts(aggregateInvocationCounts).ShouldBeWithDiff(
             """
-            CompiledExpressionCount: 215
+            CompiledExpressionCount: 216
             InvocationCountTotal: 1_976
             InvocationCountAverage: 9
             InvocationCountPercentile10: 1
             InvocationCountMedian: 4
-            InvocationCountPercentile90: 17
+            InvocationCountPercentile90: 18
             """);
     }
 
@@ -1700,12 +1700,12 @@ public class ElmLanguageServiceTests
 
         InvocationCountReportFormatting.FormatCounts(aggregateInvocationCounts).ShouldBeWithDiff(
             """
-            CompiledExpressionCount: 215
+            CompiledExpressionCount: 216
             InvocationCountTotal: 1_982
             InvocationCountAverage: 9
             InvocationCountPercentile10: 1
             InvocationCountMedian: 4
-            InvocationCountPercentile90: 17
+            InvocationCountPercentile90: 18
             """);
     }
 
@@ -1907,12 +1907,12 @@ public class ElmLanguageServiceTests
 
         InvocationCountReportFormatting.FormatCounts(aggregateInvocationCounts).ShouldBeWithDiff(
             """
-            CompiledExpressionCount: 245
+            CompiledExpressionCount: 248
             InvocationCountTotal: 3_975
             InvocationCountAverage: 16
             InvocationCountPercentile10: 1
             InvocationCountMedian: 5
-            InvocationCountPercentile90: 46
+            InvocationCountPercentile90: 45
             """);
     }
 

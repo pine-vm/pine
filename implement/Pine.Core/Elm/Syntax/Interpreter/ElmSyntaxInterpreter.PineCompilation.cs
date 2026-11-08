@@ -195,7 +195,7 @@ public partial class ElmSyntaxInterpreter
                 Model.FromCanonicalSyntax.Convert(
                     declarations,
                     compilationCaches?.SemanticFunctions,
-                    sourceReachable,
+                    sourceReachable.Except(m_bodies.Keys).ToHashSet(),
                     cancellationToken);
 
             var functions = program.Functions.ToBuilder();
@@ -204,8 +204,8 @@ public partial class ElmSyntaxInterpreter
             {
                 var id = new Model.FunctionId.Source(name);
 
-                if (functions.TryGetValue(id, out var function))
-                    functions[id] = function with { Body = body };
+                if (sourceReachable.Contains(name))
+                    functions.Add(id, new Model.Function(new([]), body));
             }
 
             foreach (var (name, captures) in m_captures)

@@ -76,7 +76,7 @@ public class DeclarationDemandTests
         }
 
         result.pipelineStageResults.CompilerProgram.Functions.Should().ContainKey(
-            new Core.Elm.ElmCompilerInDotnet.CompilerModel.FunctionId.Source(Name("Supporting", "hidden")));
+            result.pipelineStageResults.SourceFunctionIds[Name("Supporting", "hidden")]);
 
         environment.Modules.SelectMany(module => module.moduleContent.FunctionDeclarations.Keys).Should().NotContain(
             "hidden");
@@ -178,7 +178,7 @@ public class DeclarationDemandTests
             ElmCompiler.LowerToCompilerModel(sources, [Name("Main", "root")])
             .Extract(error => throw new Exception(error));
 
-        var names = result.CompilerProgram.SourceDeclarations.Keys;
+        var names = result.UnitExports.Keys;
         names.Should().Contain(Name("Supporting", "Status"));
         names.Should().Contain(Name("Supporting", "Payload"));
         names.Should().NotContain(Name("Supporting", "Unused"));
@@ -482,7 +482,7 @@ public class DeclarationDemandTests
             ElmCompiler.LowerToCompilerModel(sources, [Name("Main", "root")])
             .Extract(error => throw new Exception(error));
 
-        result.CompilerProgram.SourceDeclarations.Keys.Should().Contain(Name("Supporting", "Payload"))
+        result.UnitExports.Keys.Should().Contain(Name("Supporting", "Payload"))
             .And.NotContain(Name("Main", "Tree"));
     }
 
@@ -526,7 +526,7 @@ public class DeclarationDemandTests
                 cache: cache)
             .Extract(error => throw new Exception(error));
 
-        second.Declarations[Name("Main", "root")].Should().BeSameAs(first.Declarations[Name("Main", "root")]);
+        second.Transformations[Name("Main", "root")].Should().BeSameAs(first.Transformations[Name("Main", "root")]);
 
         var fixedSource =
             ElmSyntaxParser.ParseModuleText(

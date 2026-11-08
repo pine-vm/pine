@@ -107,6 +107,56 @@ public static class BuiltinOperatorLowering
             return declarations;
         }
 
+        if (cache is not null)
+        {
+            var results = ImmutableDictionary.CreateBuilder<DeclQualifiedName, Declaration>();
+
+            var configurationKey =
+                $"builtin-operator-lowering-v6/{configuration.LowerBuiltinOperators}/{configuration.LowerElmCoreBasics}";
+
+            SourceLoweringProjection.Context? projectionContext = null;
+
+            foreach (var (name, declaration) in declarations)
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+
+                if (declaration is not Declaration.FunctionDeclaration ||
+                    declaration is Declaration.FunctionDeclaration
+                    {
+                        Function.Signature: null,
+                        Function.Declaration.Arguments.Count: 0,
+                        Function.Declaration.Expression: AbstractSyntax.Expression.UnitExpr
+                    })
+                {
+                    results[name] = declaration;
+                    continue;
+                }
+
+                var projection =
+                    new SourceLoweringProjection(
+                        name,
+                        projectionContext ??= new(declarations, cancellationToken));
+
+                var input = projection.Input(configurationKey, includeFunctionTypes: false);
+
+                if (!cache.TryGetValue(input, out var normalized))
+                {
+                    normalized =
+                        Apply(projection.Declarations.SetItem(projection.Name, input.Syntax), configuration, cancellationToken: cancellationToken)
+                        .Extract(error => throw new System.InvalidOperationException(error))[projection.Name];
+
+                    normalized = SourceCompilationCaches.NormalizeSyntax(normalized);
+
+                    cancellationToken.ThrowIfCancellationRequested();
+                    cache.Set(input, normalized);
+                }
+
+                results[name] = projection.Rebind(normalized);
+            }
+
+            return results.ToImmutable();
+        }
+
         var inferenceEnvironment =
             new TypeInference.FunctionInferenceEnvironment(BuildFunctionSignatures(declarations));
 
@@ -122,11 +172,6 @@ public static class BuiltinOperatorLowering
         var resultBuilder =
             ImmutableDictionary.CreateBuilder<DeclQualifiedName, Declaration>();
 
-        var environmentHash = cache is null ? null : SourceCompilationCaches.EnvironmentHash(declarations);
-
-        var configurationKey =
-            $"builtin-operator-lowering-v1/{configuration.LowerBuiltinOperators}/{configuration.LowerElmCoreBasics}";
-
         foreach (var (key, decl) in declarations)
         {
             cancellationToken.ThrowIfCancellationRequested();
@@ -134,19 +179,6 @@ public static class BuiltinOperatorLowering
             if (decl is not Declaration.FunctionDeclaration)
             {
                 resultBuilder[key] = decl;
-                continue;
-            }
-
-            var input =
-                environmentHash is null
-                ?
-                null
-                :
-                new SourceTransformationInput(key, decl, environmentHash, configurationKey);
-
-            if (input is not null && cache!.TryGetValue(input, out var cached))
-            {
-                resultBuilder[key] = cached;
                 continue;
             }
 
@@ -167,8 +199,6 @@ public static class BuiltinOperatorLowering
 
             cancellationToken.ThrowIfCancellationRequested();
 
-            if (input is not null)
-                cache!.Set(input, rewritten);
         }
 
         return resultBuilder.ToImmutable();
@@ -196,6 +226,13 @@ public static class BuiltinOperatorLowering
                 moduleName,
                 inferenceEnvironment);
 
+        var usageParameterTypes =
+            TypeInference.ExtractTypeConstraintsFromFunctionApplications(
+                implementation.Expression,
+                functionTypes,
+                moduleName,
+                inferred.parameterTypes);
+
         var explicitParameterTypes =
             ExpandAliasTypes(
                 BuildExplicitParameterTypes(functionDeclaration.Function),
@@ -211,7 +248,7 @@ public static class BuiltinOperatorLowering
                 ?
                 explicitParameterTypes.ToImmutableDictionary(kvp => kvp.Key, kvp => kvp.Value)
                 :
-                inferred.parameterTypes,
+                ExpandAliasTypes(usageParameterTypes, aliasTypes),
                 LocalBindingTypes: [],
                 FunctionTypes: functionTypes,
                 AliasTypes: aliasTypes,
@@ -791,6 +828,9 @@ public static class BuiltinOperatorLowering
             case TypeInference.InferredType.FloatType:
             case TypeInference.InferredType.NumberType:
             case TypeInference.InferredType.TypeVariable:
+            case TypeInference.InferredType.UnknownType:
+            case TypeInference.InferredType.FunctionType:
+            case TypeInference.InferredType.OpenRecordType:
                 return false;
 
             case TypeInference.InferredType.TupleType tupleType:
@@ -838,10 +878,13 @@ public static class BuiltinOperatorLowering
                         return TypeSupportsPrimitiveEquality(choiceType.TypeArguments[0], context, visiting);
                     }
 
-                    // Dict and Set can contain different Pine values that compare equal in Elm,
-                    // so they are never safe for primitive equality.
-                    if ((choiceType.ModuleName is ["Dict"] && choiceType.TypeName is "Dict") ||
-                        (choiceType.ModuleName is ["Set"] && choiceType.TypeName is "Set"))
+                    if (!context.ChoiceTypeDefinitions.TryGetValue(qualifiedName, out var definition))
+                        return false;
+
+                    // Runtime equality interprets these tags as collections, independently of source modules.
+                    if (definition.Constructors.Any(
+                        constructor =>
+                        SourceLoweringProjection.IsRuntimeCollectionConstructor(constructor.TagName)))
                     {
                         return false;
                     }
@@ -854,9 +897,6 @@ public static class BuiltinOperatorLowering
 
                     try
                     {
-                        if (!context.ChoiceTypeDefinitions.TryGetValue(qualifiedName, out var definition))
-                            return false;
-
                         var declaredChoiceType =
                             new TypeInference.InferredType.ChoiceType(
                                 choiceType.ModuleName,
@@ -886,7 +926,9 @@ public static class BuiltinOperatorLowering
                 }
 
             default:
-                return false;
+                throw new System.NotImplementedException(
+                    nameof(TypeSupportsPrimitiveEquality) + " does not handle inferred type variant: " +
+                    type.GetType().Name);
         }
     }
 

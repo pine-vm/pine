@@ -78,7 +78,7 @@ public class StructuredIdentityTests
                 ]));
 
         var functions = pipeline.CompilerProgram!.Functions;
-        functions.Keys.Should().Contain(new FunctionId.Source(Name("Main", "root__lifted__lambda1")));
+        functions.Keys.Should().Contain(pipeline.SourceFunctionIds[Name("Main", "root__lifted__lambda1")]);
         functions.Keys.OfType<FunctionId.Lifted>().Should().ContainSingle();
 
         foreach (var function in functions.Values)
@@ -122,10 +122,10 @@ public class StructuredIdentityTests
         var lifted = pipeline.CompilerProgram!.Functions.Keys.OfType<FunctionId.Lifted>().ToArray();
         lifted.Should().HaveCount(2);
 
-        lifted.Select(id => id.SourceDeclaration).Should().BeEquivalentTo(
+        lifted.Select(id => id.Owner).Should().BeEquivalentTo(
             [
-            Name("First", "make"),
-            Name("Second", "make")
+            pipeline.SourceFunctionIds[Name("First", "make")],
+            pipeline.SourceFunctionIds[Name("Second", "make")]
             ]);
     }
 
@@ -331,8 +331,15 @@ public class StructuredIdentityTests
     [Fact]
     public void Structured_identity_binding_spellings_are_diagnostic_provenance_not_semantic_inputs()
     {
-        var first = Lower("module Main exposing (root)\nroot captured = \\argument -> captured + argument");
-        var second = Lower("module Main exposing (root)\nroot outside = \\inside -> outside + inside");
+        Program LowerBindings(string source) =>
+            FromCanonicalSyntax.Convert(
+                ElmCompiler.LowerToCompilerModel(
+                    TestCase.DefaultAppWithoutPackages([source]).AsFileTree(),
+                    [Name("Main", "root")])
+                .Extract(error => throw new InvalidOperationException(error)).CanonicalDeclarations);
+
+        var first = LowerBindings("module Main exposing (root)\nroot captured = \\argument -> captured + argument");
+        var second = LowerBindings("module Main exposing (root)\nroot outside = \\inside -> outside + inside");
 
         foreach (var (id, function) in first.Functions)
             second.Functions[id].Should().Be(function);
@@ -354,7 +361,7 @@ public class StructuredIdentityTests
                 """);
 
         value.Should().Be(IntegerEncoding.EncodeSignedInteger(42));
-        var function = pipeline.CompilerProgram.Functions[new FunctionId.Source(Name("Main", "select"))];
+        var function = pipeline.CompilerProgram.Functions[pipeline.SourceFunctionIds[Name("Main", "select")]];
         var pattern = function.Parameters[1].Should().BeOfType<Model.Pattern.VarPattern>().Subject;
         pattern.Binding.Should().BeOfType<BindingId.Temporary>();
         typeof(Model.Pattern.VarPattern).GetProperty("Name").Should().BeNull();
@@ -389,7 +396,9 @@ public class StructuredIdentityTests
         names.Functions.Values.Intersect(names.Bindings.Values, StringComparer.Ordinal).Should().BeEmpty();
         var rendered = Rendering.Render(program, names);
         Rendering.Render(program).Should().Be(rendered);
-        rendered.Should().Contain("function_Main_root").And.Contain("lifted").And.Contain("binding_captured");
+
+        rendered.Should().Contain("function_PineArtifact_").And.Contain("_root").And.Contain("lifted").And.Contain(
+            "binding_captured");
 
         var renamed =
             program with { BindingNames = program.BindingNames.ToImmutableDictionary(entry => entry.Key, _ => "const") };

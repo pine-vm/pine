@@ -299,7 +299,7 @@ public class AstToIrLoweringTests
         foreach (var name in new[] { "add", "sub", "mul", "appendString", "appendList", "fromRecord" })
         {
             var declaration =
-                declarations[new FunctionId.Source(DeclQualifiedName.Create(["Test"], name))];
+                declarations[pipeline.SourceFunctionIds[DeclQualifiedName.Create(["Test"], name)]];
 
             References(declaration.Expression).Should().NotContain(
                 reference => reference == "Basics.add" || reference == "Basics.sub" ||
@@ -389,10 +389,10 @@ public class AstToIrLoweringTests
             environment.Modules.Single(module => module.moduleName is "Test").moduleContent.FunctionDeclarations;
 
         var add =
-            pipeline.FunctionsForEmission[new FunctionId.Source(DeclQualifiedName.Create(["Test"], "add"))];
+            pipeline.FunctionsForEmission[pipeline.SourceFunctionIds[DeclQualifiedName.Create(["Test"], "add")]];
 
         var append =
-            pipeline.FunctionsForEmission[new FunctionId.Source(DeclQualifiedName.Create(["Test"], "append"))];
+            pipeline.FunctionsForEmission[pipeline.SourceFunctionIds[DeclQualifiedName.Create(["Test"], "append")]];
 
         References(add.Expression).Should().Contain("Basics.add");
         References(add.Expression).Should().NotContain("Pine_builtin.int_add");

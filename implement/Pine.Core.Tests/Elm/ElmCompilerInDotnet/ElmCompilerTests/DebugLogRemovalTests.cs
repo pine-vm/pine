@@ -134,8 +134,7 @@ public class DebugLogRemovalTests
 
         var loggedDeclaration =
             loweringResult.CompilerProgram.Functions[
-            new Core.Elm.ElmCompilerInDotnet.CompilerModel.FunctionId.Source(
-                Core.CodeAnalysis.DeclQualifiedName.Create(["Test"], "logged"))];
+            loweringResult.SourceFunctionIds[Core.CodeAnalysis.DeclQualifiedName.Create(["Test"], "logged")]];
 
         var application =
             loggedDeclaration.Body

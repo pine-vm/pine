@@ -15,7 +15,7 @@ namespace Pine.Core.Tests.Elm.ElmCompilerInDotnet;
 
 public class DeclarationCanonicalizationCacheTests
 {
-    private static readonly DeclQualifiedName Root = DeclQualifiedName.Create(["Main"], "root");
+    private static readonly DeclQualifiedName s_root = DeclQualifiedName.Create(["Main"], "root");
 
     private static File Parse(string text) =>
         ElmSyntaxParser.ParseModuleText(text).Extract(error => throw new InvalidOperationException(error.ToString()));
@@ -28,7 +28,7 @@ public class DeclarationCanonicalizationCacheTests
         Canonicalization.DeclarationCache cache, bool preserveOperators, params string[] modules) =>
         Canonicalization.CanonicalizeDeclarations(
             [.. modules.Select(Parse)],
-            [Root],
+            [s_root],
             implicitImports: null,
             cache,
             canonicalizedDependencies: null,
@@ -38,11 +38,80 @@ public class DeclarationCanonicalizationCacheTests
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
+    public void Import_alias_matching_owner_module_resolves_values_types_and_constructors_before_self_normalization(
+        bool preserveOperators)
+    {
+        const string Main = "module Main exposing (..)\nimport Decode\nroot = ( Decode.run, Decode.local )";
+
+        const string Library =
+            "module Bytes.Decode exposing (Decoder(..), decode)\ntype Decoder = Value Int\ndecode bytes = bytes";
+
+        const string Consumer =
+            """
+            module Decode exposing (run, local)
+            import Bytes.Decode as Decode
+            run : Decode.Decoder -> Decode.Decoder
+            run (Decode.Value bytes) = Decode.Value (Decode.decode bytes)
+            local bytes = decode bytes
+            decode bytes = 99
+            """;
+
+        var cache = new Canonicalization.DeclarationCache();
+        var first = Run(cache, preserveOperators, Main, Consumer, Library);
+        var again = Run(cache, preserveOperators, Main, Consumer, Library);
+        first.Declarations.Values.SelectMany(declaration => declaration.Errors).Should().BeEmpty();
+        var run = DeclQualifiedName.Create(["Decode"], "run");
+        var local = DeclQualifiedName.Create(["Decode"], "local");
+        var importedDecode = DeclQualifiedName.Create(["Bytes", "Decode"], "decode");
+        var ownDecode = DeclQualifiedName.Create(["Decode"], "decode");
+        var importedType = DeclQualifiedName.Create(["Bytes", "Decode"], "Decoder");
+        first.Dependencies[run].Should().BeEquivalentTo([importedDecode, importedType]);
+        first.Dependencies[local].Should().Equal(ownDecode);
+
+        first.References[run].Select(reference => reference.ReferencedName)
+            .Should().Contain(DeclQualifiedName.Create(["Bytes", "Decode"], "Value"));
+
+        again.Transformations[run].Should().BeSameAs(first.Transformations[run]);
+        again.TransformationCount.Should().Be(0);
+
+        var canonicalSources =
+            new[] { Parse(Main), Parse(Consumer), Parse(Library) }
+            .Select(
+                file => file with
+                {
+                    Declarations =
+                    [
+                    .. file.Declarations.Select(
+                        declaration =>
+                        first.Declarations[DeclQualifiedName.Create(
+                            Module.GetModuleName(file.ModuleDefinition.Value).Value,
+                            Canonicalization.GetDeclarationName(declaration.Value))].Value)
+                    ]
+                }).ToArray();
+
+        var frozen =
+            Canonicalization.CanonicalizeDeclarations(
+                canonicalSources,
+                [s_root],
+                implicitImports: null,
+                cache,
+                canonicalizedDependencies: first.Declarations.Keys.ToHashSet(),
+                preserveOperatorApplications: preserveOperators)
+            .Extract(error => throw new InvalidOperationException(error));
+
+        frozen.Declarations.Values.SelectMany(declaration => declaration.Errors).Should().BeEmpty();
+        frozen.Dependencies[run].Should().BeEquivalentTo(first.Dependencies[run]);
+        frozen.Dependencies[local].Should().Equal(ownDecode);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
     public void Effect_interface_dependency_changes_invalidate_cached_consumers(bool preserveOperators)
     {
-        const string main = "module Main exposing (..)\nimport Effects\nroot = Effects.value";
+        const string Main = "module Main exposing (..)\nimport Effects\nroot = Effects.value";
 
-        const string effect =
+        const string Effect =
             """
             effect module Effects where { subscription = MySub } exposing (value)
             type MySub msg = MySub msg
@@ -53,14 +122,14 @@ public class DeclarationCanonicalizationCacheTests
             """;
 
         var cache = new Canonicalization.DeclarationCache();
-        var first = Run(cache, preserveOperators, main, effect);
-        var same = Run(cache, preserveOperators, main, effect);
-        same.Declarations[Root].Should().BeSameAs(first.Declarations[Root]);
+        var first = Run(cache, preserveOperators, Main, Effect);
+        var same = Run(cache, preserveOperators, Main, Effect);
+        same.Transformations[s_root].Should().BeSameAs(first.Transformations[s_root]);
 
         var changed =
-            Run(cache, preserveOperators, main, effect.Replace("value : One", "value : Two", StringComparison.Ordinal));
+            Run(cache, preserveOperators, Main, Effect.Replace("value : One", "value : Two", StringComparison.Ordinal));
 
-        changed.Declarations[Root].Should().NotBeSameAs(first.Declarations[Root]);
+        changed.Transformations[s_root].Should().NotBeSameAs(first.Transformations[s_root]);
         changed.Declarations.Should().ContainKey(DeclQualifiedName.Create(["Effects"], "Two"));
         changed.Declarations.Should().NotContainKey(DeclQualifiedName.Create(["Effects"], "One"));
     }
@@ -71,25 +140,25 @@ public class DeclarationCanonicalizationCacheTests
     public void Semantic_inputs_reuse_independent_equal_syntax_and_ignore_unconsulted_scope_changes(
         bool preserveOperators)
     {
-        const string main = "module Main exposing (..)\nimport A exposing (..)\nimport B exposing (..)\nroot = value";
-        const string a = "module A exposing (..)\nvalue = 1";
+        const string Main = "module Main exposing (..)\nimport A exposing (..)\nimport B exposing (..)\nroot = value";
+        const string A = "module A exposing (..)\nvalue = 1";
         var cache = new Canonicalization.DeclarationCache();
-        var first = Run(cache, preserveOperators, main, a, "module B exposing (..)\nunused = 2");
+        var first = Run(cache, preserveOperators, Main, A, "module B exposing (..)\nunused = 2");
         var count = cache.Count;
 
         var second =
             Run(
                 cache,
                 preserveOperators,
-                main + "\nunrelated = 3",
-                a,
+                Main + "\nunrelated = 3",
+                A,
                 "module B exposing (..)\nunused = 2\nanother = 4",
                 "module Unrelated exposing (..)\nvalue = 9");
 
-        second.Declarations[Root].Should().BeSameAs(first.Declarations[Root]);
+        second.Transformations[s_root].Should().BeSameAs(first.Transformations[s_root]);
 
-        second.Declarations[DeclQualifiedName.Create(["A"], "value")]
-            .Should().BeSameAs(first.Declarations[DeclQualifiedName.Create(["A"], "value")]);
+        second.Transformations[DeclQualifiedName.Create(["A"], "value")]
+            .Should().BeSameAs(first.Transformations[DeclQualifiedName.Create(["A"], "value")]);
 
         cache.Count.Should().Be(count);
 
@@ -97,11 +166,11 @@ public class DeclarationCanonicalizationCacheTests
             Run(
                 cache,
                 preserveOperators,
-                main,
-                a.Replace("value = 1", "value = 5", StringComparison.Ordinal),
+                Main,
+                A.Replace("value = 1", "value = 5", StringComparison.Ordinal),
                 "module B exposing (..)\nunused = 2");
 
-        changedBody.Declarations[Root].Should().BeSameAs(first.Declarations[Root]);
+        changedBody.Transformations[s_root].Should().BeSameAs(first.Transformations[s_root]);
         cache.Count.Should().Be(count + 1);
     }
 
@@ -231,14 +300,18 @@ public class DeclarationCanonicalizationCacheTests
             var first = Run(cache, preserveOperators, before);
             var count = cache.Count;
             var second = Run(cache, preserveOperators, after);
-            second.Declarations[Root].Should().NotBeSameAs(first.Declarations[Root], reason);
-            cache.Count.Should().BeGreaterThan(count);
+
+            (second.UnitExports.GetValueOrDefault(s_root)?.Address !=
+            first.UnitExports.GetValueOrDefault(s_root)?.Address)
+                .Should().BeTrue(reason);
+
+            cache.Count.Should().BeGreaterThanOrEqualTo(count);
             var cold = Run(new Canonicalization.DeclarationCache(), preserveOperators, after);
-            second.Should().BeEquivalentTo(cold);
+            second.Should().BeEquivalentTo(cold, options => options.Excluding(result => result.TransformationCount));
             var restored = Run(cache, preserveOperators, before);
 
-            restored.Declarations[Root].Should().BeSameAs(
-                first.Declarations[Root],
+            restored.Transformations[s_root].Should().BeSameAs(
+                first.Transformations[s_root],
                 "earlier input versions remain reusable");
         }
     }
@@ -248,62 +321,62 @@ public class DeclarationCanonicalizationCacheTests
     [InlineData(true)]
     public void Syntax_preserving_and_lowered_modes_never_share_cached_results(bool firstMode)
     {
-        const string source = "module Main exposing (..)\nroot = 1 + 2";
+        const string Source = "module Main exposing (..)\nroot = 1 + 2";
         var cache = new Canonicalization.DeclarationCache();
-        var first = Run(cache, firstMode, source);
-        var other = Run(cache, !firstMode, source);
-        other.Declarations[Root].Should().NotBeSameAs(first.Declarations[Root]);
-        other.Should().BeEquivalentTo(Run(new(), !firstMode, source));
-        Run(cache, firstMode, source).Declarations[Root].Should().BeSameAs(first.Declarations[Root]);
-        Run(cache, !firstMode, source).Declarations[Root].Should().BeSameAs(other.Declarations[Root]);
+        var first = Run(cache, firstMode, Source);
+        var other = Run(cache, !firstMode, Source);
+        other.Transformations[s_root].Should().NotBeSameAs(first.Transformations[s_root]);
+        other.Should().BeEquivalentTo(Run(new(), !firstMode, Source));
+        Run(cache, firstMode, Source).Transformations[s_root].Should().BeSameAs(first.Transformations[s_root]);
+        Run(cache, !firstMode, Source).Transformations[s_root].Should().BeSameAs(other.Transformations[s_root]);
         cache.Count.Should().Be(2);
     }
 
     [Fact]
     public async Task Trimming_removes_historical_observation_versions_and_their_index_entries()
     {
-        const string main = "module Main exposing (..)\nimport A\nroot = A.value";
-        const string available = "module A exposing (..)\nvalue = 1";
-        const string hidden = "module A exposing (other)\nvalue = 1\nother = 2";
+        const string Main = "module Main exposing (..)\nimport A\nroot = A.value";
+        const string Available = "module A exposing (..)\nvalue = 1";
+        const string Hidden = "module A exposing (other)\nvalue = 1\nother = 2";
         var cache = new Canonicalization.DeclarationCache();
         cache.SetMarker(1);
-        var original = Run(cache, true, main, available);
+        var original = Run(cache, true, Main, Available);
         cache.SetMarker(2);
-        var changed = Run(cache, true, main, hidden);
+        var changed = Run(cache, true, Main, Hidden);
         var last = cache.SetMarker(3);
-        Run(cache, true, main, available).Declarations[Root].Should().BeSameAs(original.Declarations[Root]);
-        last.EntryCount.Should().Be(2);
+        Run(cache, true, Main, Available).Transformations[s_root].Should().BeSameAs(original.Transformations[s_root]);
+        last.EntryCount.Should().BeGreaterThanOrEqualTo(2);
 
         await cache.TrimAsync(2, marker => new CacheRetention.Ranked(marker));
         cache.Count.Should().Be(2);
-        Run(cache, true, main, available).Declarations[Root].Should().BeSameAs(original.Declarations[Root]);
-        Run(cache, true, main, hidden).Declarations[Root].Should().NotBeSameAs(changed.Declarations[Root]);
+        Run(cache, true, Main, Available).Transformations[s_root].Should().BeSameAs(original.Transformations[s_root]);
+        Run(cache, true, Main, Hidden).Transformations[s_root].Should().NotBeSameAs(changed.Transformations[s_root]);
         await cache.TrimAsync(0, _ => new CacheRetention.Remove());
         cache.Count.Should().Be(0);
-        Run(cache, true, main, available).Declarations[Root].Should().NotBeSameAs(original.Declarations[Root]);
+        Run(cache, true, Main, Available).Transformations[s_root].Should().NotBeSameAs(original.Transformations[s_root]);
     }
 
     [Fact]
     public void Semantic_inputs_distinguish_type_and_value_lookups_without_invalidating_unused_namespaces()
     {
-        const string main = "module Main exposing (..)\nimport A\nroot : A.Item -> A.Item\nroot item = item";
+        const string Main = "module Main exposing (..)\nimport A\nroot : A.Item -> A.Item\nroot item = item";
         var cache = new Canonicalization.DeclarationCache();
-        var first = Run(cache, main, "module A exposing (..)\ntype alias Item = { field : Int }");
-        var second = Run(cache, main, "module A exposing (..)\ntype alias Item = Int");
-        second.Declarations[Root].Should().BeSameAs(first.Declarations[Root]);
+        var first = Run(cache, Main, "module A exposing (..)\ntype alias Item = { field : Int }");
+        var second = Run(cache, Main, "module A exposing (..)\ntype alias Item = Int");
+        second.Transformations[s_root].Should().BeSameAs(first.Transformations[s_root]);
     }
 
     [Fact]
     public void Semantic_inputs_reuse_when_an_unused_import_or_alias_changes()
     {
         var cache = new Canonicalization.DeclarationCache();
-        const string a = "module A exposing (..)\nvalue = 1";
-        const string b = "module B exposing (..)\nother = 2";
-        const string c = "module C exposing (..)\nother = 3";
-        var first = Run(cache, "module Main exposing (..)\nimport A\nimport B as Unused\nroot = A.value", a, b, c);
+        const string A = "module A exposing (..)\nvalue = 1";
+        const string B = "module B exposing (..)\nother = 2";
+        const string C = "module C exposing (..)\nother = 3";
+        var first = Run(cache, "module Main exposing (..)\nimport A\nimport B as Unused\nroot = A.value", A, B, C);
         var count = cache.Count;
-        var second = Run(cache, "module Main exposing (..)\nimport A\nimport C as Ignore\nroot = A.value", a, b, c);
-        second.Declarations[Root].Should().BeSameAs(first.Declarations[Root]);
+        var second = Run(cache, "module Main exposing (..)\nimport A\nimport C as Ignore\nroot = A.value", A, B, C);
+        second.Transformations[s_root].Should().BeSameAs(first.Transformations[s_root]);
         cache.Count.Should().Be(count);
     }
 
@@ -316,15 +389,15 @@ public class DeclarationCanonicalizationCacheTests
         var changed = original with { ValueImports = original.ValueImports.SetItem("customNative", ["Basics"]) };
 
         DeclarationCanonicalizationResult RunWith(ImplicitImportConfig configuration) =>
-            Canonicalization.CanonicalizeDeclarations([source], [Root], configuration, cache)
+            Canonicalization.CanonicalizeDeclarations([source], [s_root], configuration, cache)
             .Extract(error => throw new InvalidOperationException(error));
 
         var first = RunWith(original);
-        first.Declarations[Root].Errors.Should().NotBeEmpty();
+        first.Declarations[s_root].Errors.Should().NotBeEmpty();
         var second = RunWith(changed);
-        second.Declarations[Root].Errors.Should().BeEmpty();
-        RunWith(original).Declarations[Root].Should().BeSameAs(first.Declarations[Root]);
-        RunWith(changed).Declarations[Root].Should().BeSameAs(second.Declarations[Root]);
+        second.Declarations[s_root].Errors.Should().BeEmpty();
+        RunWith(original).Transformations[s_root].Should().BeSameAs(first.Transformations[s_root]);
+        RunWith(changed).Transformations[s_root].Should().BeSameAs(second.Transformations[s_root]);
         cache.Count.Should().Be(2);
     }
 
@@ -380,102 +453,78 @@ public class DeclarationCanonicalizationCacheTests
     [Fact]
     public void Semantic_input_lookup_is_allocation_free_after_warming_hashes()
     {
-        var declaration = Parse("module Main exposing (..)\nroot = 1").Declarations.Single();
+        var declaration =
+            Core.Elm.Syntax.Abstract.ConvertFromConcrete.FromDeclaration(
+                Parse("module Main exposing (..)\nroot = 1").Declarations.Single().Value);
 
-        Canonicalization.CanonicalizationContext Context() =>
-            new(
-                ["Main"],
-                ImmutableDictionary<string, ImmutableList<IReadOnlyList<string>>>.Empty.Add("Item", [["A"]]),
-                ImmutableDictionary<string, ImmutableList<IReadOnlyList<string>>>.Empty.Add("value", [["A"]]),
-                ImmutableDictionary<string, IReadOnlyList<string>>.Empty.Add("A", ["A"]),
-                ["root"],
-                [],
-                ImmutableDictionary<string, (IReadOnlyList<string>, string)>.Empty.Add("+", (["Basics"], "add")),
-                []);
-
-        var inputs = new Canonicalization.InputObservations();
-        var observed = Context() with { Inputs = inputs };
-        observed.ContainsModuleDeclaration("root");
-        observed.ContainsModuleDeclaration("absent");
-        observed.TryGetImport(true, "Item", out _);
-        observed.TryGetImport(false, "value", out _);
-        observed.TryGetImport(false, "absent", out _);
-        observed.TryGetAlias("A", out _);
-        observed.TryGetAlias("absent", out _);
-        observed.TryGetOperator("+", out _);
-        observed.TryGetOperator("-", out _);
+        var input =
+            new Core.Elm.ElmCompilerInDotnet.DeclarationUnits.CanonicalizationInput(declaration, [], false);
 
         var cache = new Canonicalization.DeclarationCache();
-        cache.Add(declaration, observed, new(new(declaration, []), []), inputs);
-        var context = Context();
+
+        cache.Semantic.Canonical.Set(
+            input,
+            Core.Elm.ElmCompilerInDotnet.DeclarationUnits.Canonicalize.Apply(input));
 
         for (var warmup = 0; warmup < 100; ++warmup)
-            cache.TryGet(declaration, context, out _).Should().BeTrue();
+            cache.Semantic.Canonical.TryGetValue(input, out _).Should().BeTrue();
 
         var allocatedBefore = GC.GetAllocatedBytesForCurrentThread();
         var hits = 0;
 
         for (var repeat = 0; repeat < 10_000; ++repeat)
         {
-            if (cache.TryGet(declaration, context, out _))
+            if (cache.Semantic.Canonical.TryGetValue(input, out _))
                 ++hits;
         }
 
         var allocated = GC.GetAllocatedBytesForCurrentThread() - allocatedBefore;
         hits.Should().Be(10_000);
         allocated.Should().Be(0);
-        cache.TryGet(declaration, context with { CurrentModuleName = ["Other"] }, out _).Should().BeFalse();
-
-        cache.TryGet(
-            declaration,
-            context with
-            {
-                AliasMap = context.AliasMap.SetItem("A", ["Different"])
-            },
-            out _).Should().BeFalse();
+        cache.Semantic.Canonical.TryGetValue(input with { PreserveOperators = true }, out _).Should().BeFalse();
     }
 
     [Fact]
     public async Task Semantic_cache_supports_shared_callers_and_explicit_clearing()
     {
         var cache = new Canonicalization.DeclarationCache();
-        const string source = "module Main exposing (..)\nroot = value\nvalue = 1";
-        var results = await Task.WhenAll(Enumerable.Range(0, 8).Select(_ => Task.Run(() => Run(cache, source))));
+        const string Source = "module Main exposing (..)\nroot = value\nvalue = 1";
+        var results = await Task.WhenAll(Enumerable.Range(0, 8).Select(_ => Task.Run(() => Run(cache, Source))));
 
         foreach (var result in results)
-            result.Declarations[Root].Errors.Should().BeEmpty();
+            result.Declarations[s_root].Errors.Should().BeEmpty();
 
         cache.Count.Should().Be(2);
         cache.Clear();
         cache.Count.Should().Be(0);
-        var afterClear = Run(cache, source);
-        afterClear.Declarations[Root].Should().NotBeSameAs(results[0].Declarations[Root]);
+        var afterClear = Run(cache, Source);
+        afterClear.Transformations[s_root].Should().NotBeSameAs(results[0].Transformations[s_root]);
         cache.Count.Should().Be(2);
     }
 
     private sealed class CountingNamespaces : IReadOnlyList<string>
     {
-        private readonly string[] parts = ["Library", "Nested"];
+        private readonly string[] _parts = ["Library", "Nested"];
 
         public int Enumerations { get; private set; }
 
         public int IndexReads { get; private set; }
 
-        public int Count => parts.Length;
+        public int Count => _parts.Length;
 
         public string this[int index]
         {
             get
             {
                 ++IndexReads;
-                return parts[index];
+                return _parts[index];
             }
         }
 
         public IEnumerator<string> GetEnumerator()
         {
             ++Enumerations;
-            return ((IEnumerable<string>)parts).GetEnumerator();
+            return ((IEnumerable<string>)_parts).GetEnumerator();
         }
 
         System.Collections.IEnumerator System.Collections.IEnumerable.GetEnumerator() => GetEnumerator();

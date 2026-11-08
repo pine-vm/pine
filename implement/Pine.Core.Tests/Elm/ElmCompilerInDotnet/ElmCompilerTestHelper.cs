@@ -302,7 +302,27 @@ public class ElmCompilerTestHelper
                 return Core.Elm.ElmCompilerInDotnet.CompilerModel.Compilation.CompileScc(input);
             }).Extract(error => throw new InvalidOperationException(error.ToString()));
 
-        return layouts;
+        var sourceNames = pipeline.SourceFunctionIds.ToLookup(entry => entry.Value, entry => entry.Key);
+
+        var projected =
+            pipeline.SourceFunctionIds.ToDictionary(
+                entry => (Core.Elm.ElmCompilerInDotnet.CompilerModel.FunctionId)
+                new Core.Elm.ElmCompilerInDotnet.CompilerModel.FunctionId.Source(entry.Key),
+                entry => (IReadOnlyList<Core.Elm.ElmCompilerInDotnet.CompilerModel.FunctionId>)
+                [
+                .. layouts[entry.Value].SelectMany(id => sourceNames[id])
+                .Select(
+                    name => (Core.Elm.ElmCompilerInDotnet.CompilerModel.FunctionId)
+                    new Core.Elm.ElmCompilerInDotnet.CompilerModel.FunctionId.Source(name))
+                ]);
+
+        foreach (var layout in layouts)
+        {
+            if (layout.Key is not Core.Elm.ElmCompilerInDotnet.CompilerModel.FunctionId.Source)
+                projected.Add(layout.Key, layout.Value);
+        }
+
+        return projected;
     }
 
     /// <summary>

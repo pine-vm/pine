@@ -42,9 +42,9 @@ public sealed class MemoryCache<TKey, TValue, TMarker>(
 
         public long Identity { get; } = identity;
 
-        public TMarker Marker = marker;
+        public TMarker _marker = marker;
 
-        public long Access = access;
+        public long _access = access;
     }
 
     private readonly record struct Snapshot(TKey Key, Entry Entry, TMarker Marker, long Access);
@@ -83,8 +83,8 @@ public sealed class MemoryCache<TKey, TValue, TMarker>(
 
             var usage = _usage.Value;
             usage?.Touch(entry.Identity);
-            entry.Marker = usage is null ? initialMarker : usage.Marker;
-            entry.Access = ++_access;
+            entry._marker = usage is null ? initialMarker : usage.Marker;
+            entry._access = ++_access;
             value = entry.Value;
             return true;
         }
@@ -145,7 +145,7 @@ public sealed class MemoryCache<TKey, TValue, TMarker>(
                                 [
                                     .. _entries.Select(
                                         entry =>
-                                        new Snapshot(entry.Key, entry.Value, entry.Value.Marker, entry.Value.Access))
+                                        new Snapshot(entry.Key, entry.Value, entry.Value._marker, entry.Value._access))
                                 ];
                         }
 
@@ -192,7 +192,7 @@ public sealed class MemoryCache<TKey, TValue, TMarker>(
                             lock (_gate)
                             {
                                 if (_entries.TryGetValue(entry.Key, out var current) &&
-                                    ReferenceEquals(current, entry.Entry) && current.Access == entry.Access)
+                                    ReferenceEquals(current, entry.Entry) && current._access == entry.Access)
                                 {
                                     removed = _entries.Remove(entry.Key);
                                 }

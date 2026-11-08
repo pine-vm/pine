@@ -245,7 +245,7 @@ public class ExpressionMembershipTests
     {
         var bytes = Guid.NewGuid().ToByteArray();
         var first = PineValue.Blob(bytes);
-        var equal = PineValue.Blob(bytes.AsSpan().ToArray());
+        var equal = PineValue.Blob([.. bytes]);
         equal.Should().NotBeSameAs(first);
         var counted = new CountedCache(new ConcurrentInvocationCache());
         var buffer = new BufferedInvocationCacheAccess(counted);

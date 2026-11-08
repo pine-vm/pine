@@ -1,8 +1,6 @@
 using Pine.Core.Caching;
 using Pine.Core.CodeAnalysis;
-using Pine.Core.Elm.Syntax.Concrete;
 using System;
-using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Collections.Immutable;
 using System.Threading;
@@ -15,159 +13,28 @@ namespace Pine.Core.Elm.ElmCompilerInDotnet;
 public partial class Canonicalization
 {
     /// <summary>
-    /// Caller-owned memoization of declarations over their consulted resolution inputs.
-    /// Historical input versions are retained until cleared or marker-budget trimming removes them.
-    /// Lowered and syntax-preserving canonicalization occupy separate identities.
+    /// Compatibility handle for caller-owned, provenance-free declaration and SCC memoization.
     /// </summary>
     public sealed class DeclarationCache : IMarkerCacheLifetime<long>
     {
-        private readonly ConcurrentDictionary<DeclarationKey, ImmutableList<Entry>> entries = new();
-
-        private readonly MemoryCache<Entry, Entry, long> lifetime;
-
-        private readonly object gate = new();
-
-        /// <summary>Creates independently owned, thread-safe storage and its resolution-query index.</summary>
-        public DeclarationCache()
-        {
-            lifetime = new(0, ReferenceEqualityComparer.Instance, (_, entry) => RemoveEntry(entry));
-        }
+        /// <summary>The new semantic storage. No source paths, ranges or package labels are retained here.</summary>
+        public DeclarationUnits.DeclarationUnitCache Semantic { get; } = new();
 
         /// <summary>Number of retained declaration/input combinations.</summary>
-        public int Count => lifetime.Count;
+        public int Count => Semantic.Count;
 
         /// <inheritdoc/>
-        public ICacheUsage SetMarker(long marker) => lifetime.SetMarker(marker);
+        public ICacheUsage SetMarker(long marker) => Semantic.SetMarker(marker);
 
         /// <inheritdoc/>
         public Task TrimAsync(
             int budget,
             Func<long, CacheRetention> retention,
             CancellationToken cancellationToken = default) =>
-            lifetime.TrimAsync(budget, retention, cancellationToken);
-
-        private void RemoveEntry(Entry entry)
-        {
-            lock (gate)
-            {
-                if (!entries.TryGetValue(entry.Key, out var versions))
-                    return;
-
-                versions = versions.Remove(entry, ReferenceEqualityComparer.Instance);
-
-                if (versions.IsEmpty)
-                    entries.TryRemove(entry.Key, out _);
-
-                else
-                    entries[entry.Key] = versions;
-            }
-        }
+            Semantic.TrimAsync(budget, retention, cancellationToken);
 
         /// <summary>Releases retained entries. In-flight compilations may subsequently add their results.</summary>
-        public void Clear()
-        {
-            lock (gate)
-            {
-                entries.Clear();
-                lifetime.Clear();
-            }
-        }
-
-        internal bool TryGet(
-            Node<Declaration> declaration,
-            CanonicalizationContext context,
-            out DeclarationCanonicalizationCacheEntry result)
-        {
-            if (entries.TryGetValue(
-                new(declaration, context.CurrentModuleName, context.PreserveOperatorApplications),
-                out var versions))
-            {
-                foreach (var version in versions)
-                {
-                    if (version.InputsMatch(context) && lifetime.TryGetValue(version, out _))
-                    {
-                        result = version.Result;
-                        return true;
-                    }
-                }
-            }
-
-            result = null!;
-            return false;
-        }
-
-        internal void Add(
-            Node<Declaration> declaration,
-            CanonicalizationContext context,
-            DeclarationCanonicalizationCacheEntry result,
-            InputObservations inputs)
-        {
-            var entry =
-                new Entry(
-                    new(declaration, context.CurrentModuleName, context.PreserveOperatorApplications),
-                    [.. inputs.Values],
-                    result);
-
-            lock (gate)
-            {
-                if (TryGet(declaration, context, out _))
-                    return;
-
-                lifetime.Set(entry, entry);
-
-                entries.AddOrUpdate(
-                    entry.Key,
-                    [entry],
-                    (_, versions) => versions.Insert(0, entry));
-            }
-        }
-
-        private sealed record Entry(
-            DeclarationKey Key,
-            ImmutableArray<InputObservation> Inputs,
-            DeclarationCanonicalizationCacheEntry Result)
-        {
-            public bool InputsMatch(CanonicalizationContext context)
-            {
-                foreach (var input in Inputs)
-                {
-                    if (!input.Matches(context))
-                        return false;
-                }
-
-                return true;
-            }
-        }
-
-        private readonly struct DeclarationKey : IEquatable<DeclarationKey>
-        {
-            private readonly Node<Declaration> declaration;
-
-            private readonly CompilerModel.ValueList<string> module;
-
-            private readonly int hashCode;
-
-            private readonly bool preserveOperatorApplications;
-
-            public DeclarationKey(
-                Node<Declaration> declaration,
-                CompilerModel.ValueList<string> module,
-                bool preserveOperatorApplications)
-            {
-                this.declaration = declaration;
-                this.module = module;
-                this.preserveOperatorApplications = preserveOperatorApplications;
-                hashCode = HashCode.Combine(declaration, module, preserveOperatorApplications);
-            }
-
-            public bool Equals(DeclarationKey other) =>
-                preserveOperatorApplications == other.preserveOperatorApplications &&
-                declaration.Equals(other.declaration) && module.Equals(other.module);
-
-            public override bool Equals(object? obj) => obj is DeclarationKey other && Equals(other);
-
-            public override int GetHashCode() => hashCode;
-        }
+        public void Clear() => Semantic.Clear();
     }
 
     internal enum InputKind

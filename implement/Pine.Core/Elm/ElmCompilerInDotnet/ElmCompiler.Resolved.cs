@@ -3,6 +3,7 @@ using Pine.Core.Encodings;
 using Pine.Core.Functional;
 using Pine.Core.PineLanguage;
 using System;
+using System.Collections.Generic;
 using System.Collections.Immutable;
 using System.Linq;
 
@@ -14,21 +15,59 @@ public partial class ElmCompiler
         EmitCompilerProgram(
         CompilerModel.Program program,
         CompilationPipelineStageResults pipeline,
-        bool disableGenericApplicationChainConsolidation)
+        bool disableGenericApplicationChainConsolidation,
+        DeclarationUnits.DeclarationUnitCache storage)
     {
-        var compilation = CompilerModel.Compilation.Compile(program, disableGenericApplicationChainConsolidation);
+        var compilation =
+            CompilerModel.Compilation.Compile(
+                program,
+                disableGenericApplicationChainConsolidation,
+                input =>
+                {
+                    if (storage.Emission.TryGetValue(input, out var cached))
+                        return cached;
+
+                    var result = CompilerModel.Compilation.CompileScc(input);
+                    storage.Emission.Set(input, result);
+                    return result;
+                });
 
         if (compilation.IsErrOrNull() is { } error)
         {
             if (error is CompilationError.InDeclaration declarationError)
             {
-                var target = DeclQualifiedName.FromString(declarationError.DeclarationName);
+                var artifact = DeclQualifiedName.FromString(declarationError.DeclarationName);
+
+                var pending =
+                    new Queue<DeclQualifiedName>(pipeline.RootDeclarationNames.Order());
+
+                var visited = new HashSet<DeclQualifiedName>();
+                DeclQualifiedName? target = null;
+
+                while (pending.TryDequeue(out var source))
+                {
+                    if (!visited.Add(source))
+                        continue;
+
+                    if (pipeline.SourceFunctionIds.TryGetValue(source, out var id) &&
+                        id.SourceDeclaration.Equals(artifact))
+                    {
+                        target = source;
+                        break;
+                    }
+
+                    foreach (var reference in pipeline.SourceReferences.GetValueOrDefault(source) ?? [])
+                        pending.Enqueue(reference.Declaration);
+                }
+
+                if (target is null)
+                    throw new InvalidOperationException("An emission diagnostic has no source binding on a demanded path.");
 
                 var directDependencies =
                     pipeline.SourceReferences.ToImmutableDictionary(
                         entry => entry.Key.FullName,
                         entry =>
-                        (System.Collections.Generic.IReadOnlySet<string>)entry.Value.Select(reference => reference.Declaration.FullName).ToHashSet(
+                        (IReadOnlySet<string>)entry.Value.Select(reference => reference.Declaration.FullName).ToHashSet(
                             StringComparer.Ordinal));
 
                 var chain =
@@ -70,7 +109,7 @@ public partial class ElmCompiler
                             name => PineValue.List(
                                 [
                                 StringEncoding.ValueFromString(name.DeclName),
-                                compiled[new CompilerModel.FunctionId.Source(name)].CompiledValue
+                                compiled[pipeline.SourceFunctionIds[name]].CompiledValue
                                 ]))
                         ])
                     ]))

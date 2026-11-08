@@ -26,6 +26,17 @@ public sealed record DeclarationCanonicalizationResult(
 
     /// <summary>Signatures without executable bodies, including annotated effect and unavailable-kernel APIs.</summary>
     public ImmutableDictionary<string, TypeInference.InferredType> TypeOnlyFunctionSignatures { get; init; } = [];
+
+    /// <summary>Shared dependency-closed artifacts. Source names and locations belong to this caller result only.</summary>
+    public IReadOnlyDictionary<DeclQualifiedName, DeclarationUnits.UnitExport> UnitExports { get; init; } =
+        ImmutableDictionary<DeclQualifiedName, DeclarationUnits.UnitExport>.Empty;
+
+    /// <summary>Declaration-local reusable transformations, useful to consumers that do not need a CST.</summary>
+    public IReadOnlyDictionary<DeclQualifiedName, DeclarationUnits.CanonicalDeclaration> Transformations { get; init; } =
+        ImmutableDictionary<DeclQualifiedName, DeclarationUnits.CanonicalDeclaration>.Empty;
+
+    /// <summary>Actual canonical body transformations performed by this invocation, excluding cache hits.</summary>
+    public int TransformationCount { get; init; }
 }
 
 /// <summary>A source reference to a demanded declaration, retaining the referenced symbol and exact location.</summary>
@@ -37,15 +48,6 @@ public sealed record DeclarationReference(
 {
     /// <summary>The reference resolves to type information, not an executable declaration.</summary>
     public bool IsTypeOnly { get; init; }
-}
-
-/// <summary>A reused declaration result includes the dependencies to demand without recanonicalizing its body.</summary>
-public sealed record DeclarationCanonicalizationCacheEntry(
-    CanonicalizationResult<Node<Declaration>> Result,
-    IReadOnlyList<DeclQualifiedName> Dependencies)
-{
-    /// <summary>Reference provenance must survive a cache hit just as the resolved syntax does.</summary>
-    public IReadOnlyList<DeclarationReference> References { get; init; } = [];
 }
 
 public partial class Canonicalization
@@ -77,7 +79,8 @@ public partial class Canonicalization
         IReadOnlySet<DeclQualifiedName>? canonicalizedDependencies,
         IReadOnlyDictionary<string, ElmModuleTypeInterface>? moduleTypeInterfaces = null,
         bool useSourceModuleTypeInterfaces = true,
-        bool preserveOperatorApplications = false)
+        bool preserveOperatorApplications = false,
+        bool allowUnboundQualifiedReferences = false)
     {
         if (roots.Count is 0)
         {
@@ -379,6 +382,9 @@ public partial class Canonicalization
         var results = new Dictionary<DeclQualifiedName, CanonicalizationResult<Node<Declaration>>>();
         var references = new Dictionary<DeclQualifiedName, IReadOnlyList<DeclQualifiedName>>();
         var sourceReferences = new Dictionary<DeclQualifiedName, IReadOnlyList<DeclarationReference>>();
+        var unitPreparations = new Dictionary<DeclQualifiedName, UnitPreparation>();
+        var semanticStorage = cache?.Semantic ?? new DeclarationUnits.DeclarationUnitCache();
+        var transformationCount = 0;
 
         foreach (var root in roots.Distinct().Order())
         {
@@ -399,123 +405,45 @@ public partial class Canonicalization
             var (file, declaration) = declarations[name][0];
             var context = contexts[file];
 
-            // Existing interpreter modules already carry frozen references. Rechecking those
-            // bodies in the newest submission's scope could reinterpret lowered private calls.
-            if (canonicalizedDependencies?.Contains(name) is true)
-            {
-                results[name] = new(declaration, []);
-                references[name] = [];
-                sourceReferences[name] = [];
-                continue;
-            }
+            var preparation =
+                PrepareUnitDeclaration(
+                    declaration,
+                    context,
+                    semanticStorage,
+                    InterfaceShape,
+                    frozen: canonicalizedDependencies?.Contains(name) is true,
+                    allowUnboundQualifiedReferences: allowUnboundQualifiedReferences);
 
-            if (cache is not null && cache.TryGet(declaration, context, out var cached))
-            {
-                results[name] = cached.Result;
-                references[name] = cached.Dependencies;
-                sourceReferences[name] = cached.References;
+            unitPreparations.Add(name, preparation);
 
-                foreach (var dependency in cached.Dependencies)
-                    Demand(dependency, [.. chains[name], dependency]);
+            if (preparation.Transformed)
+                transformationCount++;
 
-                continue;
-            }
+            results[name] = preparation.Presentation;
+            references[name] = [.. preparation.Slots.SelectMany(slot => slot.Dependencies).Distinct().Order()];
 
-            var dependencies = new HashSet<DeclQualifiedName>();
-            var resolvedReferences = new List<DeclarationReference>();
-            var inputs = cache is null ? null : new InputObservations();
+            sourceReferences[name] =
+                [
+                .. preparation.Canonical.References.Select(
+                    reference =>
+                    {
+                        var slot = preparation.Slots[reference.Slot];
 
-            context =
-                context with
-                {
-                    ResolveReference = ResolveReference,
-                    DescribeUnavailableReference = DescribeUnavailableReference,
-                    Inputs = inputs
-                };
+                        return
+                            new DeclarationReference(
+                                slot.Owner ?? slot.Reference,
+                                DeclQualifiedName.Create(slot.Reference.Namespaces, reference.Symbol),
+                                DeclarationUnits.SourceLookup.RangeAtPath(declaration, reference.Path, true) ??
+                                throw new InvalidOperationException("Resolved reference has no corresponding source path."),
+                                reference.IsType)
+                            {
+                                IsTypeOnly = reference.IsTypeOnly
+                            };
+                    })
+                ];
 
-            results[name] = CanonicalizeDeclaration(declaration, context);
-            references[name] = [.. dependencies.Order()];
-            sourceReferences[name] = [.. resolvedReferences];
-
-            cache?.Add(declaration, context,
-                new(results[name], references[name]) { References = sourceReferences[name] }, inputs!);
-
-            IReadOnlyList<CanonicalizationError> ResolveReference(
-                IReadOnlyList<string> moduleName, string referencedName, bool typeReference, Range range)
-            {
-                var reference = DeclQualifiedName.Create(moduleName, referencedName);
-
-                var resolution = LookupSymbol(reference, typeReference);
-
-                if (inputs is not null && !IsIntrinsicReference(reference, typeReference))
-                    inputs.Record(new SymbolInput(reference, typeReference, resolution));
-
-                switch (resolution)
-                {
-                    case SymbolResolution.Native:
-                        return [];
-
-                    case SymbolResolution.TypeOnly typeSignature:
-                        resolvedReferences.Add(new(reference, reference, range, typeReference) { IsTypeOnly = true });
-
-                        foreach (var dependency in typeSignature.Dependencies)
-                        {
-                            dependencies.Add(dependency);
-                            Demand(dependency, [.. chains[name], dependency]);
-                        }
-
-                        return [];
-
-                    case SymbolResolution.Missing:
-                        return [MissingReference(reference, typeReference, range)];
-
-                    case SymbolResolution.Ambiguous:
-                        return [new CanonicalizationError.NamingClash(range, reference.FullName)];
-
-                    case SymbolResolution.Declaration resolved:
-                        dependencies.Add(resolved.Owner);
-                        resolvedReferences.Add(new(resolved.Owner, reference, range, typeReference));
-                        Demand(resolved.Owner, [.. chains[name], resolved.Owner]);
-                        return [];
-
-                    default:
-                        throw new NotImplementedException(
-                            $"{nameof(ResolveReference)} does not handle resolution variant: {resolution.GetType().Name}");
-                }
-            }
-
-            CanonicalizationError.UnresolvedReference MissingReference(
-                DeclQualifiedName reference, bool typeReference, Range range) =>
-                new(range, reference.FullName)
-                {
-                    Target = reference,
-                    IsTypeReference = typeReference,
-                    ResolutionDetail =
-                    DescribeUnavailableReference(reference.Namespaces, reference.DeclName, typeReference)
-                };
-
-            string DescribeUnavailableReference(IReadOnlyList<string> moduleName, string symbol, bool typeReference)
-            {
-                var namespaceName = string.Join(".", moduleName);
-                var reference = DeclQualifiedName.Create(moduleName, symbol);
-                var kind = typeReference ? "type" : "value";
-
-                var availability = LookupAvailability(reference, typeReference);
-                inputs?.Record(new AvailabilityInput(reference, typeReference, availability));
-
-                if (availability is SymbolAvailability.Declared)
-                    return $"Module '{namespaceName}' declares {kind} '{symbol}', but does not expose it. Correct the reference or the declaring module's exposing list.";
-
-                if (availability is SymbolAvailability.OtherNamespace)
-                    return $"'{namespaceName}.{symbol}' exists in the {(typeReference ? "value" : "type")} namespace, not the {kind} namespace.";
-
-                if (availability is SymbolAvailability.MissingModule)
-                {
-                    return $"Module '{namespaceName}' is unavailable in the supplied sources. Check the import, declared dependencies, and configured package replacements.";
-                }
-
-                return $"The supplied module '{namespaceName}' has no {kind} declaration named '{symbol}'. Check the spelling and the API provided by the selected package or replacement.";
-            }
+            foreach (var dependency in references[name])
+                Demand(dependency, [.. chains[name], dependency]);
 
         }
 
@@ -524,6 +452,9 @@ public partial class Canonicalization
             {
                 Dependencies = references,
                 References = sourceReferences,
+                Transformations = unitPreparations.ToDictionary(entry => entry.Key, entry => entry.Value.Canonical),
+                TransformationCount = transformationCount,
+                UnitExports = BuildUnits(unitPreparations, references, semanticStorage),
                 TypeOnlyFunctionSignatures =
                 ElmModuleTypeInterface.FunctionSignatures(moduleTypeInterfaces).SetItems(
                     sourceSignatures.Concat(effectOperations).Select(
@@ -534,6 +465,25 @@ public partial class Canonicalization
         {
             if (chains.TryAdd(name, chain))
                 pending.Enqueue(name);
+        }
+
+        DeclarationUnits.InterfaceDefinition InterfaceShape(DeclQualifiedName name, bool type)
+        {
+            if (!type &&
+                (sourceSignatures.TryGetValue(name, out var signature) ||
+                effectOperations.TryGetValue(name, out signature)))
+            {
+                return DeclarationUnits.InterfaceShapes.Value(name.DeclName, signature.Type);
+            }
+
+            var module = moduleTypeInterfaces[string.Join(".", name.Namespaces)];
+
+            return
+                type
+                ?
+                DeclarationUnits.InterfaceShapes.OpaqueType(name.DeclName, module.Types[name.DeclName])
+                :
+                DeclarationUnits.InterfaceShapes.Value(name.DeclName, module.Values[name.DeclName]);
         }
 
         SymbolAvailability LookupAvailability(DeclQualifiedName reference, bool typeReference)
