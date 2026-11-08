@@ -55,8 +55,8 @@ public sealed class IncrementalCompilationProfilingTests(ITestOutputHelper outpu
         var projects =
             new[]
             {
-                (Name: "warmup-1", Tree: project, Changed: (string?)null),
-                (Name: "warmup-2", Tree: project, Changed: (string?)null),
+                (Name: "warmup-1", Tree: project, Changed: null),
+                (Name: "warmup-2", Tree: project, Changed: null),
                 (Name: "incremental-1", Tree: project.SetNodeAtPathSorted(s_editPath, FileTree.File(Encoding.UTF8.GetBytes(firstEdit))), Changed: (string?)"isDigit"),
                 (Name: "incremental-2", Tree: project.SetNodeAtPathSorted(s_editPath, FileTree.File(Encoding.UTF8.GetBytes(secondEdit))), Changed: (string?)"isUpperCharacter")
             };

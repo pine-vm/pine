@@ -123,7 +123,7 @@ internal sealed class SourceLoweringRebinding(Func<DeclQualifiedName, DeclQualif
                         constraint switch
                         {
                             Model.ParameterConstraint.KnownFunction known =>
-                            (Model.ParameterConstraint)new Model.ParameterConstraint.KnownFunction(
+                            new Model.ParameterConstraint.KnownFunction(
                                 known.Parameter,
                                 Function(known.Function)),
 

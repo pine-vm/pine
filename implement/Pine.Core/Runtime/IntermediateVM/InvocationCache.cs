@@ -28,7 +28,7 @@ public sealed class InvocationCache : Dictionary<EvalCacheEntryKey, PineValue>;
 /// </summary>
 public sealed class ConcurrentInvocationCache : IInvocationCacheAccess
 {
-    private readonly System.Threading.Lock _lock = new();
+    private readonly Lock _lock = new();
 
     private readonly Dictionary<EvalCacheEntryKey, PineValue> _entries = [];
 

@@ -4,7 +4,6 @@ using Pine.Core.Elm.Syntax.Abstract;
 using Pine.Core.Elm.Syntax.Interpreter;
 using Pine.Core.Internal;
 using System;
-using System.Collections;
 using System.Collections.Generic;
 using System.Collections.Immutable;
 using System.Linq;
@@ -47,7 +46,7 @@ public class PreparedParameterBindingLayoutTests
 
         child.Select(binding => binding.Key).Should().OnlyHaveUniqueItems();
 
-        ((IEnumerable)child).Cast<KeyValuePair<string, PineValueInProcess>>()
+        child.Cast<KeyValuePair<string, PineValueInProcess>>()
             .Select(binding => binding.Key).Should().Equal(child.Keys);
 
         child.ContainsKey("Shadowed").Should().BeFalse();

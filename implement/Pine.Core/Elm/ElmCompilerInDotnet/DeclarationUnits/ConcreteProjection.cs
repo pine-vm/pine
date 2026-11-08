@@ -206,7 +206,7 @@ public static class ConcreteProjection
                 node.Value switch
                 {
                     TypeAnnotation.Typed typed =>
-                    (TypeAnnotation)new TypeAnnotation.Typed(
+                    new TypeAnnotation.Typed(
                         new(Range(path, true), typed.TypeName.Value),
                         [
                             .. typed.TypeArguments
@@ -288,7 +288,7 @@ public static class ConcreteProjection
                 node.Value switch
                 {
                     Pattern.NamedPattern named =>
-                    (Pattern)new Pattern.NamedPattern(
+                    new Pattern.NamedPattern(
                         named.Name,
                         [
                             .. named.Arguments
@@ -388,7 +388,7 @@ public static class ConcreteProjection
                 node.Value switch
                 {
                     Expression.Application application =>
-                    (Expression)new Expression.Application(
+                    new Expression.Application(
                         Child(application.Function, 0),
                         [.. application.Arguments.Select((argument, index) => Child(argument, index + 1))]),
 

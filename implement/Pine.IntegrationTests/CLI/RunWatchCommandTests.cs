@@ -424,7 +424,7 @@ public sealed class RunWatchCommandTests : IDisposable
             FileTree.FromSetOfFilesWithStringPath(
                 new[]
                 {
-                    ((IReadOnlyList<string>)["Batch.elm"], (ReadOnlyMemory<byte>)File.ReadAllBytes(Module)),
+                    (["Batch.elm"], (ReadOnlyMemory<byte>)File.ReadAllBytes(Module)),
                     ((IReadOnlyList<string>)["input.txt"], (ReadOnlyMemory<byte>)Encoding.UTF8.GetBytes("value"))
                 }));
 

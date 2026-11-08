@@ -851,7 +851,7 @@ public sealed class RunCommandTests : IDisposable
             FileTree.FromSetOfFilesWithStringPath(
                 new[]
                 {
-                    ((IReadOnlyList<string>)["src", "Batch.elm"], (ReadOnlyMemory<byte>)File.ReadAllBytes(Module)),
+                    (["src", "Batch.elm"], (ReadOnlyMemory<byte>)File.ReadAllBytes(Module)),
                     ((IReadOnlyList<string>)["input.txt"], (ReadOnlyMemory<byte>)Encoding.UTF8.GetBytes("hello"))
                 });
 

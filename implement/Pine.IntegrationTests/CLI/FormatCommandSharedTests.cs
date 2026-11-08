@@ -183,7 +183,7 @@ public class FormatCommandSharedTests
                         console,
                         [
                             ("/project/Module.cs",
-                            (IReadOnlyList<FormatFileDiagnostic>)[new("Diagnostic")]),
+                            [new("Diagnostic")]),
                         ]);
 
                     FormatCommandShared.WriteSuccessMessage(console, fileCount: 1, verifyMode: false);
@@ -335,13 +335,11 @@ public class FormatCommandSharedTests
             console,
             [
                 ("/project/Beta.elm",
-                (IReadOnlyList<FormatFileDiagnostic>)
                 [
                     new("second [error]", Line: 20, Column: 3),
                     new("first error", Line: 5, Column: 1),
                 ]),
                 ("/project/Alfa.elm",
-                (IReadOnlyList<FormatFileDiagnostic>)
                 [
                     new("alfa error", Line: 1, Column: 1),
                 ]),

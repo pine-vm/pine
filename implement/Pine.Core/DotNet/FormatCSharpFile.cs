@@ -1328,7 +1328,7 @@ public static class FormatCSharpFile
                 var lastTypeToken = baseList.Types[^1].GetLastToken();
 
                 if (lastTypeToken.TrailingTrivia.All(IsWhitespace))
-                    baseList = (BaseListSyntax)baseList.ReplaceToken(lastTypeToken, lastTypeToken.WithTrailingTrivia());
+                    baseList = baseList.ReplaceToken(lastTypeToken, lastTypeToken.WithTrailingTrivia());
             }
 
             node = node.WithBaseList(baseList);
@@ -1351,7 +1351,7 @@ public static class FormatCSharpFile
             var lastToken = node.CloseBraceToken.GetPreviousToken();
 
             if (lastToken.TrailingTrivia.All(IsWhitespace))
-                node = (EnumDeclarationSyntax)node.ReplaceToken(lastToken, lastToken.WithTrailingTrivia());
+                node = node.ReplaceToken(lastToken, lastToken.WithTrailingTrivia());
         }
 
         var open = FormatOpenBrace(node.OpenBraceToken, ctx);
@@ -5074,7 +5074,7 @@ public static class FormatCSharpFile
                 (original, _) => ReindentRawStringToken(original, targetColumn));
 
         return
-            (T)withReindentedLiteralTokens.ReplaceNodes(
+            withReindentedLiteralTokens.ReplaceNodes(
                 withReindentedLiteralTokens
                 .DescendantNodesAndSelf(descendIntoChildren: ShouldDescendWhenReindentingRawStrings)
                 .OfType<InterpolatedStringExpressionSyntax>()

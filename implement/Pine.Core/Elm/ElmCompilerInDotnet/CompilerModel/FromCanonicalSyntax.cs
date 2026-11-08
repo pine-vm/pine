@@ -284,16 +284,16 @@ public static class FromCanonicalSyntax
         public ImmutableDictionary<BindingId, string>.Builder BindingNames { get; } =
             ImmutableDictionary.CreateBuilder<BindingId, string>();
 
-        private readonly Dictionary<FunctionId, int> nextBinding = [];
+        private readonly Dictionary<FunctionId, int> _nextBinding = [];
 
-        private readonly Dictionary<FunctionId, int> nextSite = [];
+        private readonly Dictionary<FunctionId, int> _nextSite = [];
 
-        private int m_nextTemporary;
+        private int _nextTemporary;
 
         private BindingId Allocate(string name, FunctionId owner)
         {
-            var slot = nextBinding.GetValueOrDefault(owner);
-            nextBinding[owner] = slot + 1;
+            var slot = _nextBinding.GetValueOrDefault(owner);
+            _nextBinding[owner] = slot + 1;
             var id = new BindingId.Local(owner, slot);
             BindingNames.Add(id, name);
             return id;
@@ -301,8 +301,8 @@ public static class FromCanonicalSyntax
 
         private FunctionId Site(FunctionId owner)
         {
-            var site = nextSite.GetValueOrDefault(owner);
-            nextSite[owner] = site + 1;
+            var site = _nextSite.GetValueOrDefault(owner);
+            _nextSite[owner] = site + 1;
             return new FunctionId.Lifted(owner, site);
         }
 
@@ -334,7 +334,7 @@ public static class FromCanonicalSyntax
 
         public Function RewriteFunction(FunctionStruct function, DeclQualifiedName name)
         {
-            m_nextTemporary = 0;
+            _nextTemporary = 0;
 
             return
                 RewriteFunction(
@@ -860,7 +860,7 @@ public static class FromCanonicalSyntax
             switch (pattern)
             {
                 case AST.Pattern.RecordPattern record:
-                    var temporary = new BindingId.Temporary(context.Owner, m_nextTemporary++);
+                    var temporary = new BindingId.Temporary(context.Owner, _nextTemporary++);
                     var receiver = new Expression.ReferenceExpression(new Reference.Local(temporary));
 
                     foreach (var field in record.Fields)

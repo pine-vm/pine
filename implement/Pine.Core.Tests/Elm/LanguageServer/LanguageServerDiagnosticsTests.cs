@@ -322,7 +322,6 @@ public class LanguageServerDiagnosticsTests
                 return
                     ValueTask.FromResult(
                         Result<DiagnosticsProviderError, IReadOnlyList<DocumentDiagnostics>>.ok(
-                            (IReadOnlyList<DocumentDiagnostics>)
                             [new DocumentDiagnostics(documentUri, [DiagnosticWithMessage("canceled")])]));
             });
 

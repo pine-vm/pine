@@ -432,11 +432,11 @@ public class CompileExpressionTests
         var evaluations =
             new[]
             {
-                (Source: PrefixLiteral(firstLiteral), SkipCount: (PineValue)IntegerEncoding.EncodeSignedInteger(1), Expected: 1),
-                (Source: PrefixLiteral(secondLiteral), SkipCount: (PineValue)IntegerEncoding.EncodeSignedInteger(1), Expected: singleCase ? 0 : 2),
-                (Source: firstLiteral, SkipCount: (PineValue)IntegerEncoding.EncodeSignedInteger(1), Expected: multiplier is null or > 0 ? 0 : 1),
+                (Source: PrefixLiteral(firstLiteral), SkipCount: IntegerEncoding.EncodeSignedInteger(1), Expected: 1),
+                (Source: PrefixLiteral(secondLiteral), SkipCount: IntegerEncoding.EncodeSignedInteger(1), Expected: singleCase ? 0 : 2),
+                (Source: firstLiteral, SkipCount: IntegerEncoding.EncodeSignedInteger(1), Expected: multiplier is null or > 0 ? 0 : 1),
                 (Source: PrefixLiteral(firstLiteral), SkipCount: PineValue.EmptyList, Expected: 0),
-                (Source: PrefixLiteral(firstLiteral), SkipCount: (PineValue)IntegerEncoding.EncodeSignedInteger(-1), Expected: multiplier is 0 ? 1 : 0),
+                (Source: PrefixLiteral(firstLiteral), SkipCount: IntegerEncoding.EncodeSignedInteger(-1), Expected: multiplier is 0 ? 1 : 0),
             };
 
         foreach (var evaluation in evaluations)

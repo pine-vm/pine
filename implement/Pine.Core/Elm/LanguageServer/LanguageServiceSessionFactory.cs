@@ -31,8 +31,8 @@ public class LanguageServiceSessionFactory : ILanguageServiceSessionFactory
         IFileStore? compilationCache = null,
         Action<string>? logDelegate = null)
         : this(
-            (Func<IInvocationCacheAccess, PineVMSharedCaches, IPineVM>)
-            ((_, _) => pineVMFactory()),
+
+            (_, _) => pineVMFactory(),
             compilationCache,
             logDelegate)
     {

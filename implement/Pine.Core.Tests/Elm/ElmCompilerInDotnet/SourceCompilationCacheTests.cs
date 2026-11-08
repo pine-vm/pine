@@ -228,11 +228,11 @@ public class SourceCompilationCacheTests
     [Fact]
     public void Compositional_fingerprints_reuse_equal_shapes_and_distinguish_all_type_facts()
     {
-        const string source = "type Choice a = Choice a\nroot n = n";
-        var declarations = Parse(source);
+        const string Source = "type Choice a = Choice a\nroot n = n";
+        var declarations = Parse(Source);
         var cache = new SourceCompilationCaches.EnvironmentFingerprintCache();
         var noTypes = cache.Compute(declarations, null);
-        cache.Compute(Parse(source).Reverse().ToImmutableDictionary(), null).Should().BeSameAs(noTypes);
+        cache.Compute(Parse(Source).Reverse().ToImmutableDictionary(), null).Should().BeSameAs(noTypes);
         var empty = cache.Compute(declarations, ImmutableDictionary<DeclQualifiedName, FunctionTypeInfo>.Empty);
         empty.Should().NotBe(noTypes, "absent and explicitly empty inference inputs have different identities");
 
@@ -244,7 +244,7 @@ public class SourceCompilationCacheTests
         var first = cache.Compute(declarations, types);
 
         cache.Compute(
-            Parse(source),
+            Parse(Source),
             types.SetItem(
                 Name("root"),
                 new(new TypeInference.InferredType.IntType(), [new TypeInference.InferredType.IntType()])))
@@ -295,7 +295,7 @@ public class SourceCompilationCacheTests
     [Fact]
     public void Exported_runner_bodies_bypass_stub_lowering_without_merging_captures_or_recursive_closures()
     {
-        const string source =
+        const string Source =
             """
             make expected =
                 let
@@ -320,7 +320,7 @@ public class SourceCompilationCacheTests
 
         var discovery =
             ElmTestDiscovery.DiscoverTests(
-                LanguageServerTestingTests.Tree(source),
+                LanguageServerTestingTests.Tree(Source),
                 executionSettings: new(123456, 10));
 
         var operators = new TrackingCache<Declaration>();
@@ -415,14 +415,14 @@ public class SourceCompilationCacheTests
     {
         var operators = new TrackingCache<Declaration>();
         var semantic = new TrackingCache<LoweredSourceFunction>();
-        const string source = "helper : Int -> Int\nhelper n = n + 1\nroot n = helper n";
-        var first = LowerOperators(Parse(source), operators);
+        const string Source = "helper : Int -> Int\nhelper n = n + 1\nroot n = helper n";
+        var first = LowerOperators(Parse(Source), operators);
         var selected = new HashSet<DeclQualifiedName> { Name("root") };
         _ = Model.FromCanonicalSyntax.Lower(first, semantic, selected);
         var input = semantic.Misses.Single();
         operators.Reset();
         semantic.Reset();
-        var extended = LowerOperators(Parse(source + "\nnewFunction n = n\ntype Other = Other Int"), operators);
+        var extended = LowerOperators(Parse(Source + "\nnewFunction n = n\ntype Other = Other Int"), operators);
         var actual = Model.FromCanonicalSyntax.Lower(extended, semantic, selected);
         AssertEquivalent(actual, Model.FromCanonicalSyntax.Lower(extended, selectedFunctions: selected));
         operators.Hits.Should().HaveCount(2);
@@ -480,7 +480,7 @@ public class SourceCompilationCacheTests
                         var name = Rename(entry.Key).DeclName;
 
                         return
-                            (Declaration)new Declaration.FunctionDeclaration(
+                            new Declaration.FunctionDeclaration(
                                 new(
                                     function.Function.Signature is { } signature
                                     ?
@@ -808,7 +808,7 @@ public class SourceCompilationCacheTests
     [InlineData("Wrapper")]
     public void Runtime_collection_tags_preserve_nonprimitive_equality_without_source_names(string collection)
     {
-        const string types =
+        const string Types =
             """
             type Colour = Red | Black
             type Tree k v = RBEmpty_elm_builtin | RBNode_elm_builtin Colour k v (Tree k v) (Tree k v)
@@ -817,11 +817,11 @@ public class SourceCompilationCacheTests
 
         var root = $"\nroot : List ({collection}) -> List ({collection}) -> Bool\nroot a b = a == b";
         var cache = new TrackingCache<Declaration>();
-        var original = LowerOperators(Parse(types + root), cache);
+        var original = LowerOperators(Parse(Types + root), cache);
         FunctionReference(original[Name("root")]).Should().Be(DeclQualifiedName.Create(["Basics"], "eq"));
 
         var ordinaryTypes =
-            types.Replace("RBEmpty_elm_builtin", "Empty", StringComparison.Ordinal)
+            Types.Replace("RBEmpty_elm_builtin", "Empty", StringComparison.Ordinal)
             .Replace("RBNode_elm_builtin", "Node", StringComparison.Ordinal)
             .Replace("Set_elm_builtin", "Wrap", StringComparison.Ordinal);
 

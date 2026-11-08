@@ -95,7 +95,7 @@ public partial class Canonicalization
                     InputKind.ModuleValue => false,
 
                     _ =>
-                    (bool?)null
+                    null
                 })
             .Contains(Query.Name);
     }
