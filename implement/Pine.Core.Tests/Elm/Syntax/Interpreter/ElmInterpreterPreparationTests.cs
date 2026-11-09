@@ -44,6 +44,16 @@ public class ElmInterpreterPreparationTests
     }
 
     [Fact]
+    public void String_join_accepts_deferred_list_slices()
+    {
+        Evaluate(s_library.Value, "String.join \".\" (List.drop 1 [ \"src\", \"Elm\", \"Kernel\", \"Utils.js\" ])")
+            .Should().Be("\"Elm.Kernel.Utils.js\"");
+
+        Evaluate(s_library.Value, "String.join \"-\" (List.take 2 (List.drop 1 [ \"a\", \"b\", \"c\", \"d\" ]))")
+            .Should().Be("\"b-c\"");
+    }
+
+    [Fact]
     public void Shadowed_declarations_remain_indirectly_reachable()
     {
         var first = Declare(s_library.Value, "x = 10");

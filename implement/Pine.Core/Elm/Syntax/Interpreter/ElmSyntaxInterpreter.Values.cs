@@ -336,21 +336,21 @@ public partial class ElmSyntaxInterpreter
     /// <summary>
     /// Returns the child items of an in-process value that evaluates to a list, without forcing
     /// evaluation of those items. Handles both the lazily constructed list/tagged forms and an
-    /// already-evaluated <see cref="PineValue.ListValue"/>. Returns <c>null</c> when the value is not
-    /// a list.
+    /// already-evaluated <see cref="PineValue.ListValue"/>, including deferred slices and concatenations.
+    /// Returns <c>null</c> when the value is not a list.
     /// </summary>
     private static IReadOnlyList<PineValueInProcess>? AsListItems(PineValueInProcess value)
     {
         if (value.UnevaluatedStructuralItemsOrNull() is { } unevaluated)
             return unevaluated;
 
-        if (value.EvaluatedOrNull is PineValue.ListValue listValue)
+        if (value.IsList())
         {
-            var wrapped = new PineValueInProcess[listValue.Items.Length];
+            var wrapped = new PineValueInProcess[value.GetLength()];
 
             for (var i = 0; i < wrapped.Length; i++)
             {
-                wrapped[i] = PineValueInProcess.Create(listValue.Items.Span[i]);
+                wrapped[i] = value.GetElementAt(i);
             }
 
             return wrapped;
