@@ -94,6 +94,18 @@ public class CoreStringFunctionTests
     // isEmpty "the world" == False
 
     [Fact]
+    public void Join_empty_list_produces_canonical_empty_string()
+    {
+        var result =
+            CoreLibraryTestHelper.ApplyGenericPine(
+                GetStringFunction("join"),
+                [ToPine(String("separator")), ToPine(ElmList())],
+                s_vm);
+
+        result.Should().Be(ToPine(String("")));
+    }
+
+    [Fact]
     public void IsEmpty_empty_string()
     {
         var result = ApplyUnary(GetStringFunction("isEmpty"), String(""));

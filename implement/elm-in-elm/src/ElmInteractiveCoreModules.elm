@@ -1874,17 +1874,33 @@ splitHelperOnBlob offset collected lastStart sepBytes stringBytes =
 
 join : String -> List String -> String
 join (String sepCharsBytes) chunks =
-    let
-        charsBytesList =
-            Pine_builtin.skip
-                [ 1
-                , List.concatMap
-                    (\\(String chars) -> [ sepCharsBytes, chars ])
-                    chunks
-                ]
-    in
-    String
-        (Pine_builtin.concat charsBytesList)
+    case chunks of
+        (String firstCharsBytes) :: rest ->
+            let
+                charsBytesList =
+                    Pine_builtin.concat
+                        [ [ firstCharsBytes ]
+                        , joinHelper [] sepCharsBytes rest
+                        ]
+            in
+            String
+                (Pine_builtin.concat charsBytesList)
+
+        _ ->
+            ""
+
+
+joinHelper : List Int -> Int -> List String -> List Int
+joinHelper acc sepBytes rest =
+    case rest of
+        [] ->
+            acc
+
+        (String chars) :: tail ->
+            joinHelper
+                (Pine_builtin.concat [ acc, [ sepBytes, chars ] ])
+                sepBytes
+                tail
 
 
 slice : Int -> Int -> String -> String
