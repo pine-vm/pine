@@ -1,5 +1,5 @@
-using Pine.Core.Caching;
 using Pine.Core.CodeAnalysis;
+using Pine.Core.Elm.ElmCompilerInDotnet.DeclarationUnits;
 using Pine.Core.Elm.Syntax.Abstract;
 using Pine.Core.PineLanguage;
 using System;
@@ -17,6 +17,11 @@ namespace Pine.Core.Elm.ElmCompilerInDotnet.CompilerModel;
 public sealed record SourceLoweringResult(Program Program,
     ImmutableDictionary<Expression, GenericRecordAccessEvidence> GenericAccessEvidence);
 
+/// <summary>One resolved function and its lexical spellings.</summary>
+internal sealed record LoweredSourceFunction(
+    Function Function,
+    ImmutableDictionary<BindingId, string> BindingNames);
+
 /// <summary>Resolves lexical identities while lowering source types and record operations. No name-bearing IR is produced.</summary>
 public static class FromCanonicalSyntax
 {
@@ -26,152 +31,199 @@ public static class FromCanonicalSyntax
     /// <summary>Converts canonical source declarations into resolved compiler expressions.</summary>
     public static Program Convert(
         IReadOnlyDictionary<DeclQualifiedName, Declaration> declarations,
-        ICache<SourceTransformationInput, LoweredSourceFunction>? cache = null,
         IReadOnlySet<DeclQualifiedName>? selectedFunctions = null,
         CancellationToken cancellationToken = default) =>
-        Lower(declarations, cache, selectedFunctions, cancellationToken).Program;
+        Lower(declarations, selectedFunctions, cancellationToken).Program;
 
     /// <summary>Converts canonical declarations and retains type evidence for analysis.</summary>
     public static SourceLoweringResult Lower(
         IReadOnlyDictionary<DeclQualifiedName, Declaration> declarations,
-        ICache<SourceTransformationInput, LoweredSourceFunction>? cache = null,
         IReadOnlySet<DeclQualifiedName>? selectedFunctions = null,
         CancellationToken cancellationToken = default) =>
-        LowerCore(declarations, cache, selectedFunctions, cancellationToken, null);
+        new LoweringContext(declarations, cancellationToken)
+        .Lower(declarations, selectedFunctions, cancellationToken);
 
-    private static SourceLoweringResult LowerCore(
-        IReadOnlyDictionary<DeclQualifiedName, Declaration> declarations,
-        ICache<SourceTransformationInput, LoweredSourceFunction>? cache,
-        IReadOnlySet<DeclQualifiedName>? selectedFunctions,
-        CancellationToken cancellationToken,
-        IReadOnlyDictionary<DeclQualifiedName, FunctionTypeInfo>? suppliedFunctionTypes)
+    internal sealed class SccLowering
     {
-        var aliasTypes =
-            declarations.Where(entry => entry.Value is Declaration.AliasDeclaration)
-            .ToImmutableDictionary(
-                entry => entry.Key,
-                entry =>
+        private readonly DeclarationUnitCache _cache;
+
+        private readonly LoweringContext _lowering;
+
+        private readonly SourceLoweringRebinding _rebind;
+
+        public SccLowering(IEnumerable<SccModel> models, DeclarationUnitCache cache)
+        {
+            this._cache = cache;
+            var declarations = ImmutableDictionary.CreateBuilder<DeclQualifiedName, Declaration>();
+            var outward = new Dictionary<DeclQualifiedName, DeclQualifiedName>();
+
+            foreach (var model in models)
+            {
+                var view = SccCompiler.View(model, cache);
+
+                foreach (var entry in view.DependencyMetadata.Concat(view.OwnDeclarations))
+                    declarations[entry.Key] = entry.Value;
+
+                foreach (var entry in view.OutwardNames)
+                    outward[entry.Key] = entry.Value;
+            }
+
+            _lowering = new(declarations.ToImmutable(), default, outward);
+            _rebind = new(name => outward.GetValueOrDefault(name, name));
+        }
+
+        public SccLoweringResult Lower(SccModel model)
+        {
+            var own = _lowering.Lower(SccCompiler.View(model, _cache).OwnDeclarations, null, default);
+            var functions = ImmutableDictionary.CreateBuilder<FunctionId, Function>();
+            var bindings = ImmutableDictionary.CreateBuilder<BindingId, string>();
+
+            foreach (var (id, function) in own.Program.Functions)
+            {
+                var rebound =
+                    _rebind.Apply(
+                        new(
+                            function,
+                            own.Program
+                            .BindingNames
+                            .Where(entry => BindingOwner(entry.Key).SourceDeclaration == id.SourceDeclaration)
+                            .ToImmutableDictionary()));
+
+                functions.Add(id, rebound.Function);
+                bindings.AddRange(rebound.BindingNames);
+            }
+
+            return new(functions.ToImmutable(), bindings.ToImmutable());
+        }
+
+        private static FunctionId BindingOwner(BindingId binding) =>
+            binding switch
+            {
+                BindingId.Local local => local.Owner,
+                BindingId.Temporary temporary => temporary.Owner,
+
+                _ =>
+                throw new NotImplementedException(
+                    nameof(BindingOwner) + " does not handle binding: " + binding.GetType().Name)
+            };
+    }
+
+    private sealed class LoweringContext
+    {
+        private readonly ImmutableDictionary<DeclQualifiedName, TypeInference.TypeAliasDefinition> _aliasTypes;
+
+        private readonly TypeInference.FunctionInferenceEnvironment _environment;
+
+        private readonly ImmutableDictionary<DeclQualifiedName, FunctionTypeInfo> _immutableFunctionTypes;
+
+        private readonly ImmutableDictionary<DeclQualifiedName, FunctionTypeInfo> _immutableConstructorTypes;
+
+        private readonly HashSet<DeclQualifiedName> _functionNames;
+
+        private readonly HashSet<DeclQualifiedName> _constructorNames;
+
+        public LoweringContext(
+            IReadOnlyDictionary<DeclQualifiedName, Declaration> declarations,
+            CancellationToken cancellationToken,
+            IReadOnlyDictionary<DeclQualifiedName, DeclQualifiedName>? functionAliases = null)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+
+            _aliasTypes =
+                declarations.Where(entry => entry.Value is Declaration.AliasDeclaration)
+                .ToImmutableDictionary(
+                    entry => entry.Key,
+                    entry =>
+                    {
+                        var alias = ((Declaration.AliasDeclaration)entry.Value).TypeAlias;
+
+                        return
+                            new TypeInference.TypeAliasDefinition(
+                                alias.Generics,
+                                TypeInference.TypeAnnotationToInferredType(alias.TypeAnnotation));
+                    });
+
+            var signatures = ImmutableDictionary.CreateBuilder<string, Type>();
+
+            foreach (var (name, declaration) in declarations)
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+
+                if (ElmCompiler.GetDeclarationName(declaration) != name.DeclName)
                 {
-                    var alias = ((Declaration.AliasDeclaration)entry.Value).TypeAlias;
+                    throw new ArgumentException(
+                        "Canonical declaration keys must agree with their source declarations.",
+                        nameof(declarations));
+                }
 
-                    return
-                        new TypeInference.TypeAliasDefinition(
-                            alias.Generics,
-                            TypeInference.TypeAnnotationToInferredType(alias.TypeAnnotation));
-                });
-
-        var signatures = ImmutableDictionary.CreateBuilder<string, Type>();
-
-        foreach (var (name, declaration) in declarations)
-        {
-            cancellationToken.ThrowIfCancellationRequested();
-
-            if (ElmCompiler.GetDeclarationName(declaration) != name.DeclName)
-            {
-                throw new ArgumentException(
-                    "Canonical declaration keys must agree with their source declarations.",
-                    nameof(declarations));
-            }
-
-            TypeInference.CollectFunctionSignaturesFromDeclaration(
-                declaration,
-                string.Join(".", name.Namespaces),
-                signatures);
-        }
-
-        var environment = new TypeInference.FunctionInferenceEnvironment(signatures.ToImmutable());
-        var functionTypes = environment.FunctionTypes.ToBuilder();
-        var constructorTypes = ImmutableDictionary.CreateBuilder<DeclQualifiedName, FunctionTypeInfo>();
-        var constructorNames = new HashSet<DeclQualifiedName>();
-
-        foreach (var (name, declaration) in declarations)
-        {
-            if (declaration is Declaration.AliasDeclaration { TypeAlias.TypeAnnotation: TypeAnnotation.Record })
-                constructorNames.Add(name);
-
-            if (declaration is not Declaration.ChoiceTypeDeclaration choice)
-                continue;
-
-            foreach (var constructor in choice.TypeDeclaration.Constructors)
-            {
-                var id = DeclQualifiedName.Create(name.Namespaces, constructor.Name);
-                constructorNames.Add(id);
-                var type = environment.FunctionTypes[id];
-
-                constructorTypes.Add(
-                    id,
-                    new FunctionTypeInfo(
-                        type.ReturnType,
-                        [
-                        .. type.ParameterTypes.Select(
-                            parameter => TypeInference.ExpandTypeAliases(parameter, aliasTypes, name.Namespaces))
-                        ]));
-            }
-        }
-
-        var sourceFunctions = declarations.Where(entry => entry.Value is Declaration.FunctionDeclaration).ToArray();
-        SourceLoweringProjection.Context? projectionContext = null;
-
-        foreach (var (name, declaration) in sourceFunctions)
-        {
-            cancellationToken.ThrowIfCancellationRequested();
-
-            if (suppliedFunctionTypes is not null)
-            {
-                if (suppliedFunctionTypes.TryGetValue(name, out var supplied))
-                    functionTypes[name] = supplied;
-
-                continue;
-            }
-
-            var function = ((Declaration.FunctionDeclaration)declaration).Function;
-
-            if (function.Signature is not null)
-            {
-                functionTypes[name] =
-                    new(
-                        TypeInference.GetFunctionReturnType(function),
-                        TypeInference.GetFunctionParameterTypes(function));
-
-                continue;
-            }
-
-            if (cache is not null &&
-                !(function.Declaration.Arguments.Count is 0 &&
-                function.Declaration.Expression is AST.Expression.UnitExpr))
-            {
-                var projection =
-                    new SourceLoweringProjection(
-                        name,
-                        projectionContext ??= new(declarations, cancellationToken));
-
-                var normalized =
-                    SourceCompilationCaches.InferFunctionType(
-                        projection.Input("canonical-function-inference-v6", includeFunctionTypes: false),
-                        projection.Declarations);
-
-                functionTypes[name] =
-                    new(
-                        SourceLoweringProjection.MapType(normalized.ReturnType, projection.Rebind),
-                        [
-                        .. normalized.ParameterTypes.Select(
-                            type => SourceLoweringProjection.MapType(type, projection.Rebind))
-                        ]);
-
-                continue;
-            }
-
-            var inferred =
-                TypeInference.InferFunctionDeclarationType(
-                    function.Declaration.Expression,
-                    function.Declaration.Arguments,
+                TypeInference.CollectFunctionSignaturesFromDeclaration(
+                    declaration,
                     string.Join(".", name.Namespaces),
-                    environment);
+                    signatures);
+            }
 
-            functionTypes[name] =
-                new(
-                    inferred.returnType,
-                    [
+            _environment = new TypeInference.FunctionInferenceEnvironment(signatures.ToImmutable());
+            var functionTypes = _environment.FunctionTypes.ToBuilder();
+            var constructorTypes = ImmutableDictionary.CreateBuilder<DeclQualifiedName, FunctionTypeInfo>();
+            _constructorNames = [];
+
+            foreach (var (name, declaration) in declarations)
+            {
+                if (declaration is Declaration.AliasDeclaration { TypeAlias.TypeAnnotation: TypeAnnotation.Record })
+                    _constructorNames.Add(name);
+
+                if (declaration is not Declaration.ChoiceTypeDeclaration choice)
+                    continue;
+
+                foreach (var constructor in choice.TypeDeclaration.Constructors)
+                {
+                    var id = DeclQualifiedName.Create(name.Namespaces, constructor.Name);
+                    _constructorNames.Add(id);
+                    var type = _environment.FunctionTypes[id];
+
+                    constructorTypes.Add(
+                        id,
+                        new FunctionTypeInfo(
+                            type.ReturnType,
+                            [
+                            .. type.ParameterTypes.Select(
+                                parameter => TypeInference.ExpandTypeAliases(parameter, _aliasTypes, name.Namespaces))
+                            ]));
+                }
+            }
+
+            var sourceFunctions = declarations.Where(entry => entry.Value is Declaration.FunctionDeclaration).ToArray();
+
+            foreach (var (name, declaration) in sourceFunctions)
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+
+                if (functionAliases?.TryGetValue(name, out var original) is true && original != name)
+                    continue;
+
+                var function = ((Declaration.FunctionDeclaration)declaration).Function;
+
+                if (function.Signature is not null)
+                {
+                    functionTypes[name] =
+                        new(
+                            TypeInference.GetFunctionReturnType(function),
+                            TypeInference.GetFunctionParameterTypes(function));
+
+                    continue;
+                }
+
+                var inferred =
+                    TypeInference.InferFunctionDeclarationType(
+                        function.Declaration.Expression,
+                        function.Declaration.Arguments,
+                        string.Join(".", name.Namespaces),
+                        _environment);
+
+                functionTypes[name] =
+                    new(
+                        inferred.returnType,
+                        [
                         .. function.Declaration.Arguments.Select(
                             argument => argument is AST.Pattern.VarPattern variable &&
                                 inferred.parameterTypes.TryGetValue(variable.Name, out var type)
@@ -179,95 +231,76 @@ public static class FromCanonicalSyntax
                             type
                             :
                             new Type.UnknownType())
-                    ]);
+                        ]);
+            }
+
+            foreach (var (alias, original) in functionAliases ?? ImmutableDictionary<DeclQualifiedName, DeclQualifiedName>.Empty)
+            {
+                if (declarations.TryGetValue(original, out var declaration) &&
+                    declaration is Declaration.FunctionDeclaration &&
+                    functionTypes.TryGetValue(original, out var type))
+                {
+                    functionTypes[alias] = type;
+                }
+            }
+
+            _immutableFunctionTypes = functionTypes.ToImmutable();
+            _immutableConstructorTypes = constructorTypes.ToImmutable();
+            _functionNames = [.. sourceFunctions.Select(entry => entry.Key)];
         }
 
-        var immutableFunctionTypes = functionTypes.ToImmutable();
-        var immutableConstructorTypes = constructorTypes.ToImmutable();
-        var functionNames = sourceFunctions.Select(entry => entry.Key).ToHashSet();
-
-        var functions = ImmutableDictionary.CreateBuilder<FunctionId, Function>();
-        var bindingNames = ImmutableDictionary.CreateBuilder<BindingId, string>();
-
-        var evidence =
-            ImmutableDictionary.CreateBuilder<Expression, GenericRecordAccessEvidence>(
-                ReferenceEqualityComparer.Instance);
-
-        foreach (var (name, declaration) in sourceFunctions.OrderBy(entry => entry.Key))
+        public SourceLoweringResult Lower(
+            IReadOnlyDictionary<DeclQualifiedName, Declaration> declarations,
+            IReadOnlySet<DeclQualifiedName>? selectedFunctions,
+            CancellationToken cancellationToken)
         {
-            cancellationToken.ThrowIfCancellationRequested();
+            var functions = ImmutableDictionary.CreateBuilder<FunctionId, Function>();
+            var bindingNames = ImmutableDictionary.CreateBuilder<BindingId, string>();
 
-            if (selectedFunctions is not null && !selectedFunctions.Contains(name))
-                continue;
+            var evidence =
+                ImmutableDictionary.CreateBuilder<Expression, GenericRecordAccessEvidence>(
+                    ReferenceEqualityComparer.Instance);
 
-            LoweredSourceFunction lowered;
-
-            if (cache is not null)
+            foreach (var (name, declaration) in declarations.OrderBy(entry => entry.Key))
             {
-                var projection =
-                    new SourceLoweringProjection(
-                        name,
-                        projectionContext ??= new(declarations, cancellationToken),
-                        immutableFunctionTypes);
-
-                var input = projection.Input("canonical-semantic-function-v6", includeFunctionTypes: true);
-
-                if (!cache.TryGetValue(input, out var normalized))
-                {
-                    var resolved =
-                        LowerCore(
-                            projection.Declarations.SetItem(projection.Name, input.Syntax),
-                            null,
-                            new HashSet<DeclQualifiedName> { projection.Name },
-                            cancellationToken,
-                            projection.FunctionTypes);
-
-                    normalized =
-                        new(
-                            resolved.Program.Functions[new FunctionId.Source(projection.Name)],
-                            resolved.Program.BindingNames,
-                            resolved.GenericAccessEvidence);
-
-                    cancellationToken.ThrowIfCancellationRequested();
-                    cache.Set(input, normalized);
-                }
-
-                lowered = new SourceLoweringRebinding(projection.Rebind).Apply(normalized);
-            }
-            else
-            {
-                var rewriter =
-                    new Rewriter(
-                        aliasTypes,
-                        immutableFunctionTypes,
-                        immutableConstructorTypes,
-                        environment,
-                        functionNames,
-                        constructorNames);
-
-                var function = rewriter.RewriteFunction(((Declaration.FunctionDeclaration)declaration).Function, name);
-                lowered = new(function, rewriter.BindingNames.ToImmutable(), rewriter.Evidence.ToImmutable());
                 cancellationToken.ThrowIfCancellationRequested();
 
+                if (declaration is not Declaration.FunctionDeclaration functionDeclaration ||
+                    selectedFunctions is not null && !selectedFunctions.Contains(name))
+                {
+                    continue;
+                }
+
+                var rewriter =
+                    new Rewriter(
+                        _aliasTypes,
+                        _immutableFunctionTypes,
+                        _immutableConstructorTypes,
+                        _environment,
+                        _functionNames,
+                        _constructorNames);
+
+                var function = rewriter.RewriteFunction(functionDeclaration.Function, name);
+                cancellationToken.ThrowIfCancellationRequested();
+
+                functions.Add(new FunctionId.Source(name), function);
+                bindingNames.AddRange(rewriter.BindingNames);
+
+                foreach (var item in rewriter.Evidence)
+                    evidence[item.Key] = item.Value;
             }
 
-            functions.Add(new FunctionId.Source(name), lowered.Function);
-            bindingNames.AddRange(lowered.BindingNames);
-
-            foreach (var item in lowered.Evidence)
-                evidence[item.Key] = item.Value;
+            return
+                new(
+                    new Program(
+                        functions.ToImmutable(),
+                        declarations.Where(entry => entry.Value is not Declaration.FunctionDeclaration)
+                        .ToImmutableDictionary())
+                    {
+                        BindingNames = bindingNames.ToImmutable()
+                    },
+                    evidence.ToImmutable());
         }
-
-        return
-            new(
-                new Program(
-                    functions.ToImmutable(),
-                    declarations.Where(entry => entry.Value is not Declaration.FunctionDeclaration)
-                    .ToImmutableDictionary())
-                {
-                    BindingNames = bindingNames.ToImmutable()
-                },
-                evidence.ToImmutable());
     }
 
     private sealed class Rewriter(

@@ -98,7 +98,7 @@ public partial class ElmSyntaxInterpreter
     }
 
     private static readonly ConditionalWeakTable<DefaultApplicationResolver, ApplicationCacheModel> s_applicationCacheModels =
-        new();
+        [];
 
     private static ApplicationCacheExecution? CreateApplicationCacheExecution(
         Func<Application, ApplicationResolution> resolver, EvaluationConfig config)

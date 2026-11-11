@@ -1,16 +1,57 @@
+using Pine.Core.Caching;
 using System;
 using System.Collections.Generic;
+using System.Collections.Immutable;
 using System.Linq;
 
 namespace Pine.Core.Elm.ElmCompilerInDotnet.CompilerModel;
 
+/// <summary>Exact owner-local lifting input, without source metadata or diagnostic spellings.</summary>
+public sealed record LambdaLiftingInput(FunctionId Owner, Function Function);
+
+/// <summary>The rewritten owner and every helper generated from its body, without program metadata.</summary>
+public sealed record LambdaLiftingResult(
+    Function Function,
+    ImmutableDictionary<FunctionId, Function> GeneratedFunctions);
+
 /// <summary>Closure conversion using lexical identities and owner-local function sites, never synthetic names.</summary>
 public static class LambdaLifting
 {
-    /// <summary>Lifts lambdas and mutually recursive local functions. Already-lifted input is unchanged.</summary>
-    public static Program Lift(Program program)
+    /// <summary>
+    /// Lifts lambdas and mutually recursive local functions, optionally caching each owner independently.
+    /// Already-lifted input is unchanged. Caller metadata is preserved, never retained in the cache.
+    /// </summary>
+    public static Program Lift(
+        Program program,
+        ICache<LambdaLiftingInput, LambdaLiftingResult>? cache = null)
     {
         var functions = program.Functions.ToBuilder();
+
+        foreach (var (id, function) in program.Functions.OrderBy(entry => entry.Key, IdentityComparer.Instance))
+        {
+            var input = new LambdaLiftingInput(id, function);
+
+            if (cache is null || !cache.TryGetValue(input, out var result))
+            {
+                result = LiftFunction(input);
+                cache?.Set(input, result);
+            }
+
+            foreach (var (generatedId, generatedFunction) in result.GeneratedFunctions)
+            {
+                if (!functions.TryAdd(generatedId, generatedFunction))
+                    throw new InvalidOperationException("A local function site was emitted more than once.");
+            }
+
+            functions[id] = result.Function;
+        }
+
+        return program with { Functions = functions.ToImmutable() };
+    }
+
+    private static LambdaLiftingResult LiftFunction(LambdaLiftingInput input)
+    {
+        var functions = ImmutableDictionary.CreateBuilder<FunctionId, Function>();
 
         ValueList<BindingId> Order(IEnumerable<BindingId> bindings) =>
             new(bindings.Distinct().OrderBy(binding => binding, IdentityComparer.Instance));
@@ -57,7 +98,7 @@ public static class LambdaLifting
                 :
                 new ValueList<Pattern>(new[] { CapturePattern(captures) }.Concat(parameters));
 
-            if (!functions.TryAdd(id, new(liftedParameters, body)))
+            if (id == input.Owner || !functions.TryAdd(id, new(liftedParameters, body)))
                 throw new InvalidOperationException("A local function site was emitted more than once.");
         }
 
@@ -156,10 +197,8 @@ public static class LambdaLifting
             return ExpressionTransform.MapChildren(expression, Rewrite);
         }
 
-        foreach (var (id, function) in program.Functions.OrderBy(entry => entry.Key, IdentityComparer.Instance))
-            functions[id] = function with { Body = Rewrite(function.Body) };
-
-        return program with { Functions = functions.ToImmutable() };
+        var function = input.Function with { Body = Rewrite(input.Function.Body) };
+        return new(function, functions.ToImmutable());
     }
 
     private static Pattern Variable(BindingId binding) =>

@@ -1,4 +1,5 @@
 using Pine.Core;
+using Pine.Core.Caching;
 using Pine.Core.CLI;
 using Pine.Core.CodeAnalysis;
 using Pine.Core.Elm;
@@ -24,6 +25,7 @@ using System.Text;
 using System.Threading;
 
 using Type = Pine.Core.Elm.ElmCompilerInDotnet.TypeInference.InferredType;
+using SyntaxTypes = Pine.Core.Elm.Syntax.Concrete;
 
 namespace Pine.CLI;
 
@@ -166,11 +168,18 @@ public static class RunCommand
         bool batchOnly = false,
         Func<IReadOnlyList<RunDeclarationSelection.Candidate>, string>? selectDeclaration = null,
         bool watch = false,
-        Func<IReadOnlyList<string>, IFileWatcher>? createWatcher = null)
+        Func<IReadOnlyList<string>, IFileWatcher>? createWatcher = null,
+        Canonicalization.DeclarationCache? canonicalizationCache = null)
     {
         output ??= Console.Out;
         error ??= Console.Error;
         cacheDirectory ??= Filesystem.CacheDirectory;
+        canonicalizationCache ??= new();
+
+        var sourceParseCache =
+            new Dictionary<string, Result<SyntaxTypes.ParseError, SyntaxTypes.File>>(StringComparer.Ordinal);
+
+        var compilationLifetime = new CacheInvocationLifetime();
         var batchInputs = new List<BatchInput>(inputs ?? []);
 
         using var branchResolution =
@@ -248,6 +257,9 @@ public static class RunCommand
 
                 using var scope = tracker.EnterScope("source-resolution-and-compilation", entryPoint);
 
+                using var compilationInvocation =
+                    compilationLifetime.BeginInvocation([.. canonicalizationCache.Semantic.Lifetimes]);
+
                 var result =
                     RunCompilation.Compile(
                         programSource,
@@ -261,7 +273,9 @@ public static class RunCommand
                             RunDeclarationSelection.CreateConsole(error, color.Value),
                             Console.IsInputRedirected,
                             batchOnly,
-                            token)));
+                            token)),
+                        canonicalizationCache,
+                        sourceParseCache);
 
                 compilationDuration = stopwatch.Elapsed - sourceLoadingDuration;
                 executionStarted = true;
@@ -642,6 +656,8 @@ public static class RunCommand
         }
         finally
         {
+            compilationLifetime.WaitForMaintenanceAsync().GetAwaiter().GetResult();
+
             if (!watchStarted)
                 WriteDurations();
         }

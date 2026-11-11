@@ -2,6 +2,7 @@ using AwesomeAssertions;
 using Pine.Core.Caching;
 using Pine.Core.CodeAnalysis;
 using Pine.Core.Elm.ElmCompilerInDotnet;
+using Pine.Core.Elm.ElmCompilerInDotnet.DeclarationUnits;
 using Pine.Core.Elm.Syntax;
 using Pine.Core.Elm.Syntax.Interpreter;
 using Pine.Core.Elm.Testing;
@@ -10,6 +11,8 @@ using Pine.Core.IO;
 using Pine.Core.Tests.Elm.LanguageServer;
 using System;
 using System.Collections.Concurrent;
+using System.Collections.Generic;
+using System.Collections.Immutable;
 using System.Diagnostics.CodeAnalysis;
 using System.Linq;
 using System.Text;
@@ -58,6 +61,73 @@ public class ElmTestDiscoveryCacheTests
 
     private static void AssertSameInventory(ElmTestDiscoveryResult actual, ElmTestDiscoveryResult expected) =>
         JsonSerializer.Serialize(actual.Items).Should().Be(JsonSerializer.Serialize(expected.Items));
+
+    [Fact]
+    public async Task Runner_compilation_reuses_unchanged_SCC_results_after_edits_without_retaining_captures()
+    {
+        const string source =
+            """
+            stable x = x
+            changing _ = 42
+            suite =
+                let expected = 42
+                in Test.test "answer" (\_ -> Expect.equal expected (stable (changing 0)))
+            """;
+
+        var caches = ElmTestDiscoveryCaches.CreateInMemory();
+        await using var session = new ElmTestRunCacheSession(discoveryCaches: caches);
+        var storage = caches.CanonicalDeclarations.Semantic;
+        session.DeclarationCanonicalization.Semantic.Should().BeSameAs(storage);
+
+        var stable =
+            SccGraph.Create(
+                ImmutableDictionary<string, Core.Elm.Syntax.Abstract.Declaration>.Empty.Add(
+                    "stable",
+                    Core.Elm.Syntax.Abstract.ConvertFromConcrete.FromDeclaration(Parse("stable x = x"))),
+                [],
+                [],
+                []);
+
+        var input = new SccSyntaxInput(stable, true, false, true);
+
+        ElmTestDiscoveryResult Run(string text, CompletedTestKind expected)
+        {
+            var discovery = Discover(text, caches);
+            using var invocation = session.BeginCompilationInvocation();
+
+            var entry =
+                discovery.PrepareExecution(
+                    canonicalizationCache: session.DeclarationCanonicalization).Single().Value;
+
+            ElmTestRunner.ExecuteDiscoveredTest(discovery.Items.Single(), entry, session, default)
+                .Kind.Should().Be(expected);
+
+            return discovery;
+        }
+
+        Run(source, CompletedTestKind.Passed);
+        storage.SyntaxTransforms.TryGetValue(input, out var transformed).Should().BeTrue();
+        storage.CompilerModels.TryGetValue(transformed!["stable"].Unit, out var lowered).Should().BeTrue();
+        var passes = storage.SyntaxTransforms.Count;
+        var models = storage.CompilerModels.Count;
+        var emission = storage.Emission.Count;
+        emission.Should().BeGreaterThan(0);
+
+        Run(source, CompletedTestKind.Passed);
+        storage.SyntaxTransforms.Count.Should().Be(passes);
+        storage.CompilerModels.Count.Should().Be(models);
+        storage.Emission.Count.Should().Be(emission);
+
+        var edited = source.Replace("changing _ = 42", "changing _ = 43", StringComparison.Ordinal);
+        Run(edited, CompletedTestKind.Failed);
+        Run(edited.Replace("expected = 42", "expected = 43", StringComparison.Ordinal), CompletedTestKind.Passed);
+        Run(source, CompletedTestKind.Passed);
+        storage.SyntaxTransforms.TryGetValue(input, out var reused).Should().BeTrue();
+        reused.Should().BeSameAs(transformed);
+        storage.CompilerModels.TryGetValue(reused!["stable"].Unit, out var reusedLowering).Should().BeTrue();
+        reusedLowering.Should().BeSameAs(lowered);
+        await session.WaitForCompilationMaintenanceAsync();
+    }
 
     [Fact]
     public async Task Body_edits_reuse_callers_but_run_current_productive_code()
@@ -241,6 +311,129 @@ public class ElmTestDiscoveryCacheTests
 
         foreach (var input in declarations.Take(2))
             caches.PreparedDeclarations.TryGetValue(input, out _).Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task SCC_transformation_tiers_trim_independently_of_canonical_template_counts()
+    {
+        var caches = ElmTestDiscoveryCaches.CreateInMemory();
+        var storage = caches.CanonicalDeclarations.Semantic;
+
+        var models =
+            Enumerable.Range(0, 7).Select(
+                index => SccGraph.Create(
+                    ImmutableDictionary<string, Core.Elm.Syntax.Abstract.Declaration>.Empty.Add(
+                        "root",
+                        Core.Elm.Syntax.Abstract.ConvertFromConcrete.FromDeclaration(Parse("root = " + index))),
+                    [],
+                    [],
+                    [],
+                    storage)).ToArray();
+
+        void Lower(int index)
+        {
+            var result =
+                SccCompiler.Transform(
+                    ImmutableDictionary<string, UnitExport>.Empty.Add("root", new(models[index], "root")),
+                    false,
+                    false,
+                    true,
+                    storage).Extract(error => throw new InvalidOperationException(error));
+
+            SccCompiler.Lower(result.Values, storage);
+        }
+
+        foreach (var index in Enumerable.Range(0, 6))
+            Lower(index);
+
+        using (caches.BeginInvocation())
+        {
+            Lower(0);
+            Lower(1);
+        }
+
+        await caches.WaitForMaintenanceAsync();
+        storage.SyntaxTransforms.Count.Should().Be(6);
+        Lower(6);
+
+        using (caches.BeginInvocation())
+        {
+            Lower(0);
+            Lower(1);
+        }
+
+        await caches.WaitForMaintenanceAsync();
+        storage.SyntaxTransforms.Count.Should().Be(4);
+        storage.CompilerModels.Count.Should().Be(4);
+        storage.Canonical.Count.Should().Be(0);
+    }
+
+    private sealed record FixedUsage(int EntryCount) : ICacheUsage;
+
+    private sealed class BlockingLifetime : IMarkerCacheLifetime<long>
+    {
+        public int Count => 100;
+
+        public int WorkingSet { get; set; } = 10;
+
+        public long Marker { get; private set; }
+
+        public List<int> Budgets { get; } = [];
+
+        public List<Func<long, CacheRetention>> Policies { get; } = [];
+
+        public TaskCompletionSource Release { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        public ICacheUsage SetMarker(long marker)
+        {
+            Marker = marker;
+            return new FixedUsage(WorkingSet);
+        }
+
+        public Task TrimAsync(
+            int budget,
+            Func<long, CacheRetention> retention,
+            CancellationToken cancellationToken = default)
+        {
+            Budgets.Add(budget);
+            Policies.Add(retention);
+            return Budgets.Count == 1 ? Release.Task : Task.CompletedTask;
+        }
+    }
+
+    [Fact]
+    public async Task Concurrent_cleanup_coalesces_latest_budget_and_pins_active_invocations()
+    {
+        var lifetime = new BlockingLifetime();
+        var caches = ElmTestDiscoveryCaches.CreateInMemory();
+
+        using (caches.BeginInvocation(lifetime))
+        {
+        }
+
+        lifetime.Budgets.Should().Equal(20);
+
+        try
+        {
+            lifetime.WorkingSet = 2;
+
+            using (caches.BeginInvocation(lifetime))
+            {
+                lifetime.Marker.Should().Be(2);
+                lifetime.Policies.Single()(lifetime.Marker).Should().BeOfType<CacheRetention.Retain>();
+            }
+
+            lifetime.Budgets.Should().Equal([20], "cleanup remains single-flight");
+            lifetime.Policies.Single()(2).Should().Be(new CacheRetention.Ranked(2));
+            var completed = caches.WaitForMaintenanceAsync();
+            lifetime.Release.SetResult();
+            await completed.WaitAsync(TimeSpan.FromSeconds(10));
+            lifetime.Budgets.Should().Equal(20, 4);
+        }
+        finally
+        {
+            lifetime.Release.TrySetResult();
+        }
     }
 
     [Theory]

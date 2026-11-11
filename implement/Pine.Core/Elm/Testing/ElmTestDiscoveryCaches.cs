@@ -47,10 +47,11 @@ public sealed record ElmTestDiscoveryCaches(
             };
     }
 
-    /// <summary>Starts independent marker/working-set accounting for one discovery, including retries.</summary>
-    public IDisposable BeginInvocation() =>
-        _lifetime.BeginInvocation(CanonicalDeclarations, PreparedLifetime);
+    /// <summary>Starts per-tier accounting for discovery or compilation, including retries and caller-supplied tiers.</summary>
+    public IDisposable BeginInvocation(params IMarkerCacheLifetime<long>?[] additionalLifetimes) =>
+        _lifetime.BeginInvocation(
+            [.. CanonicalDeclarations.Semantic.Lifetimes, PreparedLifetime, .. additionalLifetimes]);
 
-    /// <summary>Waits for cleanup of both tiers without owning/discarding the supplied storage.</summary>
+    /// <summary>Waits for all scheduled cleanup without discarding the supplied storage.</summary>
     public Task WaitForMaintenanceAsync() => _lifetime.WaitForMaintenanceAsync();
 }

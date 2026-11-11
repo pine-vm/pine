@@ -32,6 +32,10 @@ public static class Canonicalize
 
     /// <summary>Rebinds resolved references without consulting any source scope.</summary>
     public static Declaration MapNames(Declaration syntax, Func<DeclQualifiedName, DeclQualifiedName> map) =>
+        MapNames(syntax, (name, _) => map(name));
+
+    /// <summary>Rebinds names with the namespace selected by each syntax context.</summary>
+    public static Declaration MapNames(Declaration syntax, Func<DeclQualifiedName, bool, DeclQualifiedName> map) =>
         new Worker([], true, true, map).RewriteDeclaration(syntax, SyntaxPath.Root, SyntaxPath.Root, []);
 
     /// <summary>Temporary declaration-local references disappear when SCC dependencies are attached.</summary>
@@ -48,11 +52,11 @@ public static class Canonicalize
         null;
 
     private sealed class Worker(IEnumerable<ResolutionAnswer> answers, bool planning, bool preserveOperators,
-        Func<DeclQualifiedName, DeclQualifiedName>? map = null)
+        Func<DeclQualifiedName, bool, DeclQualifiedName>? map = null)
     {
-        private readonly Dictionary<NameQuery, ResolutionAnswer> answers = answers.ToDictionary(item => item.Query);
+        private readonly Dictionary<NameQuery, ResolutionAnswer> _answers = answers.ToDictionary(item => item.Query);
 
-        private readonly HashSet<NameQuery> seen = [];
+        private readonly HashSet<NameQuery> _seen = [];
 
         public List<NameQuery> Questions { get; } = [];
 
@@ -66,14 +70,14 @@ public static class Canonicalize
 
         private ResolutionAnswer Ask(NameQuery query)
         {
-            if (seen.Add(query))
+            if (_seen.Add(query))
                 Questions.Add(query);
 
             if (planning)
                 return new(query, ResolutionKind.Absent);
 
             return
-                answers.TryGetValue(query, out var answer)
+                _answers.TryGetValue(query, out var answer)
                 ?
                 answer
                 :
@@ -87,7 +91,8 @@ public static class Canonicalize
                 return
                     map(
                         DeclQualifiedName.FromString(
-                            (query.Qualifier.Length is 0 ? "" : query.Qualifier + ".") + query.Name));
+                            (query.Qualifier.Length is 0 ? "" : query.Qualifier + ".") + query.Name),
+                        query.Kind is QueryKind.Type);
             }
 
             var answer = Ask(query);

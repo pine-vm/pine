@@ -1,4 +1,3 @@
-using Pine.Core.Caching;
 using Pine.Core.Elm.ElmCompilerInDotnet;
 using Pine.Core.Elm.Syntax;
 using Pine.Core.Elm.Syntax.Concrete;
@@ -30,19 +29,9 @@ public sealed class ElmTestRunCacheSession(
     IReadOnlyDictionary<PineValue, PrecompiledLeaf>? precompiledLeaves = null,
     InvocationCacheGenerationOptions? generationOptions = null,
     ContinuousInvocationCacheLearning? cacheLearning = null,
-    SourceCompilationCaches? compilationCaches = null,
     ElmTestDiscoveryCaches? discoveryCaches = null,
     InvocationCacheStatistics? cacheStatistics = null) : IDisposable, IAsyncDisposable
 {
-    /// <summary>
-    /// Retained pure source transformations. Supply alternate stores or cascades here;
-    /// concurrent hosts require thread-safe implementations.
-    /// </summary>
-    public SourceCompilationCaches CompilationCaches { get; } =
-        compilationCaches ?? SourceCompilationCaches.CreateInMemory();
-
-    private readonly CacheInvocationLifetime _compilationLifetime = new();
-
     private readonly Lazy<ElmTestDiscoveryCaches> _discoveryCaches =
         new(() => discoveryCaches ?? ElmTestDiscoveryCaches.CreateInMemory());
 
@@ -54,10 +43,11 @@ public sealed class ElmTestRunCacheSession(
     /// after preparation, including failed/cancelled preparation. Async children inherit the marker.
     /// </summary>
     public IDisposable BeginCompilationInvocation() =>
-        _compilationLifetime.BeginInvocation(CompilationCaches.OperatorLifetime, CompilationCaches.SemanticLifetime);
+        DiscoveryCaches.BeginInvocation();
 
     /// <summary>Awaits currently scheduled transformation cleanup, propagating storage/policy failures.</summary>
-    public Task WaitForCompilationMaintenanceAsync() => _compilationLifetime.WaitForMaintenanceAsync();
+    public Task WaitForCompilationMaintenanceAsync() =>
+        _discoveryCaches.IsValueCreated ? _discoveryCaches.Value.WaitForMaintenanceAsync() : Task.CompletedTask;
 
     /// <summary>Compilation, parsing, encoding and reduction caches shared by preparation and workers.</summary>
     public PineVMSharedCaches VmCaches { get; } = new();
@@ -140,9 +130,6 @@ public sealed class ElmTestRunCacheSession(
     {
         CacheLearning?.Dispose();
         WaitForCompilationMaintenanceAsync().GetAwaiter().GetResult();
-
-        if (_discoveryCaches.IsValueCreated)
-            _discoveryCaches.Value.WaitForMaintenanceAsync().GetAwaiter().GetResult();
     }
 
     /// <summary>Stops and awaits session-owned background learning.</summary>
@@ -152,9 +139,6 @@ public sealed class ElmTestRunCacheSession(
             await CacheLearning.DisposeAsync().ConfigureAwait(false);
 
         await WaitForCompilationMaintenanceAsync().ConfigureAwait(false);
-
-        if (_discoveryCaches.IsValueCreated)
-            await _discoveryCaches.Value.WaitForMaintenanceAsync().ConfigureAwait(false);
     }
 
     /// <summary>Source parsing keyed by complete source text, never by path or timestamp.</summary>

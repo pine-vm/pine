@@ -551,6 +551,8 @@ public static class ElmTestRunner
 
         if (!useSyntaxDiscovery)
         {
+            using var compilationInvocation = cacheSession?.BeginCompilationInvocation();
+
             using var environmentCompilationScope =
                 new TimedScope(() => instrumentation?.EnterScope("environment-compilation", appDirectory));
 
@@ -885,7 +887,7 @@ public static class ElmTestRunner
                     syntaxDiscovery.PrepareExecution(
                         discoveredTests.Where(test => test.Kind == DiscoveredTestKind.Runnable).Select(test => test.Id!),
                         cancellationToken: instrumentation?.CancellationToken ?? default,
-                        compilationCaches: cacheSession?.CompilationCaches);
+                        canonicalizationCache: cacheSession?.DeclarationCanonicalization);
 
                 foreach (var test in discoveredTests.Where(test => test.Kind == DiscoveredTestKind.Runnable))
                 {

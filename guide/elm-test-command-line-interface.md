@@ -90,22 +90,31 @@ The older `CompileAndRunTests` API retains compiler/PineVM discovery for compati
 
 ### Reusable source transformations
 
-`ElmTestRunCacheSession.CompilationCaches` retains operator-lowered syntax and resolved
-per-function compiler IR independently of VM invocation results. Watch sessions and the
-language-server testing service reuse these in-memory caches across edited snapshots.
-`PrepareExecution(..., compilationCaches: caches)` also accepts caller-configured storage.
-Each model uses `ICache<SourceTransformationInput, TValue>`; implementations may use
-different synchronization or combine memory and persistent layers.
-`LanguageServerTestingService` accepts the same optional `compilationCaches` configuration.
+Watch sessions and the language-server testing service retain one
+`ElmTestRunCacheSession.DeclarationCanonicalization` across edited snapshots. Its semantic
+bundle reuses canonical templates, SCC construction and views, SCC syntax transformations,
+compiler-model conversion, lambda lifting, and pure source SCC emission. Discovery and runner
+compilation share that bundle; syntax-preserving discovery still uses the original AST for
+source navigation.
 
-The inputs include canonical syntax, source identity, lowering switches, algorithm versions,
-and a cryptographic fingerprint of the complete type/name environment. Semantic conversion
-includes body-inferred types, not only explicit signatures. A body-only edit that preserves
-those types reuses other functions. Signature, alias, constructor, arity or name-set changes
-conservatively invalidate the environment; generated-closure shape changes can do the same.
-Only reachable function bodies are converted to semantic IR and lambda-lifted; all source
-type metadata remains available. Captures and application-specific generated Pine bodies are
-always rebuilt, never reused as source-only results.
+`PrepareExecution(..., canonicalizationCache: session.DeclarationCanonicalization)`
+uses that bundle's SCC syntax and compiler-model caches, independently of VM invocation
+results. Supply `discoveryCaches` to the session or `LanguageServerTestingService` to
+configure shared ownership across compilations. There is no separate per-function
+`compilationCaches` tier.
+
+SCC inputs contain canonical members, shared direct dependencies, and pass options, never
+source paths or captured values. Edits invalidate changed SCCs and their dependent
+transformations; independent SCC results remain reusable. Operator lowering and
+compiler-model conversion consume SCC members and explicit dependencies. They share
+pass-local inference metadata and never construct anonymous per-function environments
+or JSON fingerprints before cache lookup. A body edit changes dependent SCC inputs even
+when their own syntax stays unchanged; those misses are intentional.
+
+Only reachable source graphs are lowered, with their required type/constructor metadata.
+Captures and application-specific generated Pine bodies are rebuilt for each execution.
+They are excluded from the retained lambda-lifting and SCC-emission caches, so changing a
+captured value, test selection, seed, or fuzz count cannot reuse a previous runtime closure.
 
 `MemoryCache<TKey, TValue, TMarker>` implements the separate `IMarkerCacheLifetime<TMarker>`
 interface. `SetMarker` sets the marker for the current async execution context and returns
@@ -125,29 +134,20 @@ an incorrectly undersized one-variant budget. Last-touched markers of active pre
 are pinned; at most one cleanup per tier runs at a time. Empty selections do not initialize
 or evict compilation caches. Session disposal awaits scheduled cleanup.
 
-For an optional persistent layer beneath memory, use Pine.Core's high-level file store:
+For retained compiler storage across runs:
 
 ```csharp
-var caches = SourceCompilationCaches.CreateInMemory(
-    backingStore: cacheFileStore,
-    directory: ImmutableList.Create("elm", "source-transformations"));
-using var session = new ElmTestRunCacheSession(compilationCaches: caches);
+var discoveryCaches = ElmTestDiscoveryCaches.CreateInMemory();
+using var session = new ElmTestRunCacheSession(discoveryCaches: discoveryCaches);
 using var invocation = session.BeginCompilationInvocation();
-var entries = inventory.PrepareExecution(compilationCaches: session.CompilationCaches);
+var entries = inventory.PrepareExecution(
+    canonicalizationCache: session.DeclarationCanonicalization);
 ```
 
-`SourceTransformationInput.ComputeHash()` returns a deterministic, domain-separated SHA-256
-digest; syntax digests are weakly memoized, and the shared environment is fingerprinted once
-per pass rather than once per declaration. `OperatorCodec` and `SemanticCodec` round-trip
-the models, including lexical identities, binding spellings and reference-bound type evidence.
-`FileStoreCache<TKey, TValue>` and `LayeredCache<TKey, TValue>` are reusable with other models
-and compose with `IFileStore` backends. File entries carry input and payload digests; corrupt
-data, codec failures and storage failures are explicit errors, not false cache hits or silent
-misses. Concurrency/atomic replacement guarantees of a persistent tier depend on its file-store
-implementation; a caller can supply a coordinated or transactional store.
-Algorithm, builtin-type-semantics or encoding changes require bumping the corresponding
-transformation/format version before sharing persisted entries with older implementations.
-Watch/LSP defaults remain memory-only; disk retention policy is caller-owned.
+`ElmTestDiscoveryCaches.CreateInMemory(backingStore: ..., directory: ...)` can additionally
+persist prepared syntax-interpreter declarations. SCC transformation storage is memory-only;
+the removed `SourceCompilationCaches` file-store formats are no longer read.
+The independent binary AST and SCC encodings remain available for persistence.
 Keep session-managed memory fronts separate when sharing a backing store across sessions;
 each session owns its marker counter and cleanup controller.
 

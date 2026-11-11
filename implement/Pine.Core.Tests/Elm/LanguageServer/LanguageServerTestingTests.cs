@@ -1,6 +1,5 @@
 using AwesomeAssertions;
 using Pine.Core.Addressing;
-using Pine.Core.Elm.ElmCompilerInDotnet;
 using Pine.Core.Elm.LanguageServer;
 using Pine.Core.Elm.Testing;
 using Pine.Core.Encodings;
@@ -61,37 +60,40 @@ public class LanguageServerTestingTests
             """;
 
         var current = Tree(declarations);
-        var caches = SourceCompilationCaches.CreateInMemory();
         var discoveryCaches = ElmTestDiscoveryCaches.CreateInMemory();
 
         using var service =
             new LanguageServerTestingService(
                 (_, _) => Task.FromResult(Snapshot(current)),
-                compilationCaches: caches,
                 discoveryCaches: discoveryCaches);
 
         var initial = await service.DiscoverAsync(new(VirtualWorkspace.RootUri));
         initial.Complete.Should().BeTrue(initial.Error?.Message);
         var first = await service.RunAsync(new(VirtualWorkspace.RootUri, initial.Version, "first"));
         first.Results.Single().State.Should().Be("passed");
-        var operatorEntries = caches.OperatorLifetime!.Count;
-        var semanticEntries = caches.SemanticLifetime!.Count;
         var canonicalEntries = discoveryCaches.CanonicalDeclarations.Count;
         var preparedEntries = discoveryCaches.PreparedLifetime!.Count;
-        operatorEntries.Should().BeGreaterThan(0);
-        semanticEntries.Should().BeGreaterThan(0);
+        var compilerCache = discoveryCaches.CanonicalDeclarations.Semantic;
+        var syntaxEntries = compilerCache.SyntaxTransforms.Count;
+        var modelEntries = compilerCache.CompilerModels.Count;
+        var emissionEntries = compilerCache.Emission.Count;
+        syntaxEntries.Should().BeGreaterThan(0);
+        modelEntries.Should().BeGreaterThan(0);
+        emissionEntries.Should().BeGreaterThan(0);
         var repeated = await service.RunAsync(new(VirtualWorkspace.RootUri, initial.Version, "repeated"));
         repeated.Results.Single().State.Should().Be("passed");
-        caches.OperatorLifetime.Count.Should().Be(operatorEntries);
-        caches.SemanticLifetime.Count.Should().Be(semanticEntries);
+        compilerCache.SyntaxTransforms.Count.Should().Be(syntaxEntries);
+        compilerCache.CompilerModels.Count.Should().Be(modelEntries);
+        compilerCache.Emission.Count.Should().Be(emissionEntries);
 
         current = Tree(declarations.Replace("answer _ = 42", "answer _ = 43", StringComparison.Ordinal));
         var updated = await service.DiscoverAsync(new(VirtualWorkspace.RootUri));
         updated.Complete.Should().BeTrue(updated.Error?.Message);
         var edited = await service.RunAsync(new(VirtualWorkspace.RootUri, updated.Version, "edited"));
         edited.Results.Single().State.Should().Be("failed");
-        caches.OperatorLifetime.Count.Should().Be(operatorEntries + 1);
-        caches.SemanticLifetime.Count.Should().Be(semanticEntries + 1);
+        compilerCache.SyntaxTransforms.Count.Should().BeGreaterThan(syntaxEntries);
+        compilerCache.CompilerModels.Count.Should().BeGreaterThan(modelEntries);
+        compilerCache.Emission.Count.Should().BeGreaterThan(emissionEntries);
         discoveryCaches.CanonicalDeclarations.Count.Should().Be(canonicalEntries + 1);
         discoveryCaches.PreparedLifetime.Count.Should().Be(preparedEntries + 1);
     }

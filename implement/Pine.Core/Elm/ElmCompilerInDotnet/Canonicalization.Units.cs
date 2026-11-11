@@ -22,7 +22,6 @@ public partial class Canonicalization
         IReadOnlyList<SourceSlot> Slots,
         CanonicalizationResult<Node<Declaration>> Presentation,
         bool Transformed,
-        bool PreserveOperators,
         string Intrinsic,
         bool Closed);
 
@@ -136,7 +135,6 @@ public partial class Canonicalization
                     errors,
                     shadowings),
                 transformed,
-                context.PreserveOperatorApplications,
                 declaration.Value is Declaration.ChoiceTypeDeclaration &&
                 context.CurrentModuleName is ["String"] &&
                 GetDeclarationName(declaration.Value) is "String"
@@ -427,44 +425,20 @@ public partial class Canonicalization
                 return;
             }
 
-            var external = new List<UnitExport>();
-            var externalSlots = new Dictionary<DeclQualifiedName, int>();
+            if (members.Select(item => string.Join(".", item.Namespaces)).Distinct().Count() != 1)
+                throw new ArgumentException("Elm recursion cannot cross module boundaries.");
 
-            int External(DeclQualifiedName owner)
+            var syntax = ImmutableDictionary.CreateBuilder<string, Abstract.Declaration>(StringComparer.Ordinal);
+            var values = ImmutableDictionary.CreateBuilder<DeclQualifiedName, SccModel>();
+            var types = ImmutableDictionary.CreateBuilder<DeclQualifiedName, TypeSccModel>();
+            var qualifiers = new Dictionary<DeclQualifiedName, int>();
+
+            int Qualifier(DeclQualifiedName owner)
             {
-                if (externalSlots.TryGetValue(owner, out var slot))
-                    return slot;
+                if (!qualifiers.TryGetValue(owner, out var qualifier))
+                    qualifiers.Add(owner, qualifier = qualifiers.Count);
 
-                slot = external.Count;
-                external.Add(exports[owner]);
-                externalSlots.Add(owner, slot);
-                return slot;
-            }
-
-            var syntax = new List<Abstract.Declaration>();
-            var interfaces = new List<InterfaceDefinition>();
-            var interfaceSlots = new Dictionary<DeclQualifiedName, int>();
-
-            int Interface(SourceSlot source)
-            {
-                if (interfaceSlots.TryGetValue(source.Reference, out var slot))
-                    return slot;
-
-                slot = interfaces.Count;
-
-                interfaces.Add(
-                    source.Interface ??
-                    throw new InvalidOperationException("Type-only binding has no interface shape."));
-
-                interfaceSlots.Add(source.Reference, slot);
-                return slot;
-            }
-
-            foreach (var dependency in members.SelectMany(item => preparations[item].Slots.SelectMany(slot => slot.Dependencies))
-                .Where(dependency => !localSlots.ContainsKey(dependency))
-                .Distinct())
-            {
-                External(dependency);
+                return qualifier;
             }
 
             foreach (var item in members)
@@ -472,48 +446,61 @@ public partial class Canonicalization
                 var preparation = preparations[item];
 
                 syntax.Add(
+                    item.DeclName,
                     UnitCanonicalization.MapNames(
                         preparation.Canonical.Syntax,
-                        reference =>
+                        (reference, isType) =>
                         {
                             if (UnitCanonicalization.ReferenceSlot(reference.Namespaces) is not { } slot)
                                 return reference;
 
                             var source = preparation.Slots[slot];
 
-                            if (source.Owner is null)
+                            if (source.Owner is not null && localSlots.ContainsKey(source.Owner))
+                                return DeclQualifiedName.Create([], reference.DeclName);
+
+                            var owner = source.Owner ?? source.Reference;
+
+                            var key =
+                                DeclQualifiedName.Create(["Dependency", "D" + Qualifier(owner)], reference.DeclName);
+
+                            var target =
+                                source.Owner is not null
+                                ?
+                                exports[source.Owner].Unit
+                                :
+                                BuildInterface(
+                                    source.Interface ??
+                                    throw new InvalidOperationException("Type-only binding has no interface shape."),
+                                    storage);
+
+                            if (isType)
                             {
-                                return
-                                    DeclQualifiedName.Create(
-                                        ["PineInterface", "I" + Interface(source)],
-                                        reference.DeclName);
+                                types[key] =
+                                    target is SccModel.TypeScc type
+                                    ?
+                                    type.Value
+                                    :
+                                    throw new ArgumentException("A type reference cannot select a value SCC.");
                             }
+                            else
+                                values[key] = target;
 
-                            if (localSlots.TryGetValue(source.Owner, out var local))
-                                return DeclQualifiedName.Create(["PineUnit", "M" + local], reference.DeclName);
-
-                            return
-                                DeclQualifiedName.Create(
-                                    [
-                                    "PineDependency",
-                                    "D" + External(source.Owner)
-                                    ],
-                                    reference.DeclName);
+                            return key;
                         }));
             }
 
-            var input =
-                new UnitInput(new(syntax), new(external), preparations[members[0]].PreserveOperators)
-                {
-                    Interfaces = new(interfaces),
-                    MemberIntrinsics = new(members.Select(item => preparations[item].Intrinsic))
-                };
+            var unit =
+                SccGraph.Create(
+                    syntax.ToImmutable(),
+                    values.ToImmutable(),
+                    types.ToImmutable(),
+                    members.Where(item => preparations[item].Intrinsic.Length > 0)
+                    .ToImmutableDictionary(item => item.DeclName, item => preparations[item].Intrinsic),
+                    storage);
 
-            var ordered = storage.Order(input);
-            var unit = storage.Intern(ordered.Input);
-
-            for (var slot = 0; slot < members.Count; slot++)
-                exports.Add(members[slot], new(unit, ordered.MemberSlots[slot]));
+            foreach (var own in members)
+                exports.Add(own, new(unit, own.DeclName));
         }
 
         foreach (var name in preparations.Keys.Order())
@@ -523,5 +510,47 @@ public partial class Canonicalization
         }
 
         return exports;
+    }
+
+    private static SccModel BuildInterface(InterfaceDefinition definition, DeclarationUnitCache storage)
+    {
+        var types = ImmutableDictionary.CreateBuilder<DeclQualifiedName, TypeSccModel>();
+
+        for (var index = 0; index < definition.Nominals.Count; index++)
+        {
+            var shape = definition.Nominals[index];
+            var syntax = InterfaceShapes.OpaqueType(shape.Name, shape.Arity).Syntax;
+
+            var unit =
+                SccGraph.Create(
+                    ImmutableDictionary<string, Abstract.Declaration>.Empty.Add(shape.Name, syntax),
+                    [],
+                    [],
+                    [],
+                    storage);
+
+            types.Add(DeclQualifiedName.Create(["Nominal", "T" + index], shape.Name), ((SccModel.TypeScc)unit).Value);
+        }
+
+        var linked =
+            UnitCanonicalization.MapNames(
+                definition.Syntax,
+                name => name.Namespaces is ["PineNominal", var nominal]
+                ?
+                DeclQualifiedName.Create(["Nominal", nominal], name.DeclName)
+                :
+                name);
+
+        var member =
+            ElmCompiler.GetDeclarationName(linked) ??
+            throw new InvalidOperationException("An interface declaration must have a name.");
+
+        return
+            SccGraph.Create(
+                ImmutableDictionary<string, Abstract.Declaration>.Empty.Add(member, linked),
+                [],
+                types.ToImmutable(),
+                [],
+                storage);
     }
 }

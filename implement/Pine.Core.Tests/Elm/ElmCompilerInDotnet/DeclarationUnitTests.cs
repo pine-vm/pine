@@ -11,6 +11,7 @@ using Pine.Core.PineLanguage;
 using Pine.Core.Tests.Elm.ElmCompilerTests;
 using System;
 using System.Collections.Generic;
+using System.Collections.Immutable;
 using System.Linq;
 using System.Text;
 using System.Text.Json;
@@ -258,7 +259,10 @@ public class DeclarationUnitTests
         consumers.Should().HaveCount(2);
 
         foreach (var consumer in consumers)
-            consumer.Value.Unit.Input.Dependencies.Single().Unit.Should().BeSameAs(shared.Unit);
+        {
+            consumer.Value.Unit.Should().BeOfType<SccModel.ValueScc>().Which.Value.Dependencies.Values.Single()
+                .Should().BeSameAs(shared.Unit);
+        }
 
         UnitConstruction.Flatten([result.UnitExports[Name("Main", "root")]]).Count.Should().Be(
             3,
@@ -678,30 +682,24 @@ public class DeclarationUnitTests
     [Fact]
     public void Recursive_slots_are_independent_of_module_names_and_root_enumeration()
     {
-        const string First = "module Alpha exposing (f)\nimport Zeta\nf value = Zeta.f value";
-        const string Second = "module Zeta exposing (f)\nimport Alpha\nf value = Alpha.f value";
+        const string First = "module Alpha exposing (..)\nf value = g value\ng value = f value";
         var cache = new Canonicalization.DeclarationCache();
-        var original = Canonical(cache, [First, Second], Name("Alpha", "f"), Name("Zeta", "f"));
+        var original = Canonical(cache, [First], Name("Alpha", "f"), Name("Alpha", "g"));
 
         var renamed =
             Canonical(
                 cache,
                 [
-                    Second.Replace("Alpha", "Last", StringComparison.Ordinal).Replace(
-                        "Zeta",
-                        "First",
-                        StringComparison.Ordinal),
-                    First.Replace("Alpha", "Last", StringComparison.Ordinal).Replace(
-                        "Zeta",
-                        "First",
-                        StringComparison.Ordinal)
+                    First.Replace("Alpha", "Last", StringComparison.Ordinal)
                 ],
-                Name("Last", "f"),
-                Name("First", "f"));
+                Name("Last", "g"),
+                Name("Last", "f"));
 
-        renamed.UnitExports[Name("First", "f")].Unit.Should().BeSameAs(original.UnitExports[Name("Alpha", "f")].Unit);
+        renamed.UnitExports[Name("Last", "f")].Unit.Should().BeSameAs(original.UnitExports[Name("Alpha", "f")].Unit);
         original.UnitExports.Values.Select(export => export.Unit).Distinct().Should().ContainSingle();
-        original.UnitExports.Values.First().Unit.Input.Members.Should().HaveCount(2);
+
+        original.UnitExports
+            .Values.First().Unit.Should().BeOfType<SccModel.ValueScc>().Which.Value.Members.Should().HaveCount(2);
     }
 
     [Fact]
@@ -752,9 +750,14 @@ public class DeclarationUnitTests
         var result = Canonical(new(), texts, Name("Main", "root"));
         result.UnitExports[Name("A", "Item")].Unit.Should().BeSameAs(result.UnitExports[Name("B", "Item")].Unit);
 
-        result.UnitExports[Name("Main", "root")].Unit.Input.Dependencies.Should().HaveCount(
-            2,
+        var value = result.UnitExports[Name("Main", "root")].Unit.Should().BeOfType<SccModel.ValueScc>().Which.Value;
+        value.Dependencies.Count.Should().Be(1);
+
+        value.TypeDependencies.Count.Should().Be(
+            1,
             "distinct nominal binding roles must survive even if both refer to the same artifact");
+
+        value.Dependencies.Keys.Single().Namespaces.Should().NotEqual(value.TypeDependencies.Keys.Single().Namespaces);
 
         var typedUsage =
             texts.Select(
@@ -802,7 +805,7 @@ public class DeclarationUnitTests
         foreach (var model in new[]
         {
             typeof(CanonicalizationInput), typeof(CanonicalDeclaration),
-            typeof(UnitInput), typeof(InterfaceDefinition)
+            typeof(ValueSccModel), typeof(TypeSccModel), typeof(InterfaceDefinition)
         })
         {
             model.GetProperties().Should().NotContain(
@@ -819,34 +822,46 @@ public class DeclarationUnitTests
             AST.ConvertFromConcrete.FromDeclaration(
                 Parse("module Main exposing (..)\nroot = Unknown.value").Declarations[0].Value);
 
-        Action open = () => UnitConstruction.Create(new(new([syntax]), [], false));
+        Action open = () => Create(syntax);
         open.Should().Throw<ArgumentException>().WithMessage("*unbound reference*");
 
         var closed =
-            UnitConstruction.Create(
-                new(
-                    new(
-                        [
-                            AST.ConvertFromConcrete.FromDeclaration(
-                                Parse("module Main exposing (..)\nroot = 42").Declarations[0].Value)
-                        ]),
-                    [],
-                    false));
+            Create(
+                AST.ConvertFromConcrete.FromDeclaration(
+                    Parse("module Main exposing (..)\nroot = 42").Declarations[0].Value));
 
-        Action badExport = () => UnitConstruction.Create(new(closed.Input.Members, new([new(closed, 1)]), false));
+        Action badExport = () => _ = new UnitExport(closed, "absent");
         badExport.Should().Throw<ArgumentException>().WithMessage("*nonexistent member*");
-        Action empty = () => UnitConstruction.Create(new([], [], false));
+        Action empty = () => SccGraph.Create([], [], [], []);
         empty.Should().Throw<ArgumentException>();
 
         var wrongSymbol =
             AST.ConvertFromConcrete.FromDeclaration(
                 Parse("module Main exposing (..)\nroot = PineDependency.D0.absent").Declarations[0].Value);
 
-        Action dangling = () => UnitConstruction.Create(new(new([wrongSymbol]), new([new(closed, 0)]), false));
-        dangling.Should().Throw<ArgumentException>().WithMessage("*unbound reference*");
+        Action dangling =
+            () => SccGraph.Create(
+                ImmutableDictionary<string, AST.Declaration>.Empty.Add("root", wrongSymbol),
+                ImmutableDictionary<DeclQualifiedName, SccModel>.Empty.Add(Name("PineDependency.D0", "absent"), closed),
+                [],
+                []);
+
+        dangling.Should().Throw<ArgumentException>().WithMessage("*requested symbol*");
 
         Action disconnected =
-            () => UnitConstruction.Create(new(new([closed.Input.Members[0], closed.Input.Members[0]]), [], false));
+            () => SccGraph.Create(
+                ImmutableDictionary<string, AST.Declaration>.Empty
+                .Add(
+                    "root",
+                    AST.ConvertFromConcrete.FromDeclaration(
+                        Parse("module M exposing (..)\nroot = 1").Declarations[0].Value))
+                .Add(
+                    "other",
+                    AST.ConvertFromConcrete.FromDeclaration(
+                        Parse("module M exposing (..)\nother = 1").Declarations[0].Value)),
+                [],
+                [],
+                []);
 
         disconnected.Should().Throw<ArgumentException>().WithMessage("*strongly connected*");
     }
@@ -858,27 +873,21 @@ public class DeclarationUnitTests
             AST.ConvertFromConcrete.FromDeclaration(
                 Parse("module Main exposing (..)\nroot = 42").Declarations[0].Value);
 
-        var first = UnitConstruction.Create(new(new([syntax]), [], false));
-        var second = UnitConstruction.Create(new(new([syntax]), [], false));
+        var first = Create(syntax);
+        var second = Create(syntax);
         first.Should().NotBeSameAs(second);
         first.Should().Be(second);
         first.GetHashCode().Should().Be(second.GetHashCode());
-        new UnitExport(first, 0).Should().Be(new UnitExport(second, 0));
-        typeof(DeclarationUnit).GetConstructors().Should().BeEmpty();
+        new UnitExport(first, "root").Should().Be(new UnitExport(second, "root"));
     }
 
     [Fact]
     public async Task Concurrent_interning_retains_and_returns_one_representation()
     {
         var input =
-            new UnitInput(
-                new(
-                    [
-                        AST.ConvertFromConcrete.FromDeclaration(
-                            Parse("module Main exposing (..)\nroot = 42").Declarations[0].Value)
-                    ]),
-                [],
-                false);
+            Create(
+                AST.ConvertFromConcrete.FromDeclaration(
+                    Parse("module Main exposing (..)\nroot = 42").Declarations[0].Value));
 
         var cache = new DeclarationUnitCache();
         var results = await Task.WhenAll(Enumerable.Range(0, 32).Select(_ => Task.Run(() => cache.Intern(input))));
@@ -887,5 +896,290 @@ public class DeclarationUnitTests
             result.Should().BeSameAs(results[0]);
 
         cache.Units.Count.Should().Be(1);
+    }
+
+    private static SccModel Create(AST.Declaration syntax) =>
+        SccGraph.Create(
+            ImmutableDictionary<string, AST.Declaration>.Empty.Add(ElmCompiler.GetDeclarationName(syntax)!, syntax),
+            [],
+            [],
+            []);
+
+    [Fact]
+    public void Type_and_constructor_symbols_use_separate_collections_and_share_type_values()
+    {
+        var result =
+            Canonical(
+                new(),
+                [
+                    """
+                    module Types exposing (..)
+                    type Payload = Thunk Int
+                    type Tree = Payload Payload
+                    """,
+                    """
+                    module Main exposing (..)
+                    import Types
+                    root : Types.Payload -> Types.Tree
+                    root value = Types.Payload value
+                    unwrap (Types.Payload value) = value
+                    """
+                ],
+                Name("Main", "root"),
+                Name("Main", "unwrap"));
+
+        var payload =
+            result.UnitExports[Name("Types", "Payload")].Unit.Should().BeOfType<SccModel.TypeScc>().Which.Value;
+
+        var tree = result.UnitExports[Name("Types", "Tree")].Unit.Should().BeOfType<SccModel.TypeScc>().Which.Value;
+        tree.TypeDependencies.Values.Single().Should().BeSameAs(payload);
+        var root = result.UnitExports[Name("Main", "root")].Unit.Should().BeOfType<SccModel.ValueScc>().Which.Value;
+
+        root.TypeDependencies.Values.Should().Contain(value => ReferenceEquals(value, payload))
+            .And.Contain(value => ReferenceEquals(value, tree));
+
+        root.Dependencies.Values.Single().Should().BeOfType<SccModel.TypeScc>().Which.Value.Should().BeSameAs(tree);
+        tree.Members.Keys.Should().Equal("Tree");
+
+        // The same spelling selects different declarations in the two namespaces.
+        var key = Name("Types", "Payload");
+
+        var namespaced =
+            new SccModel.ValueScc(
+                new(
+                    ImmutableDictionary<string, ValueDeclaration>.Empty.Add(
+                        "use",
+                        new ValueDeclaration.FunctionDeclaration(
+                            ((AST.Declaration.FunctionDeclaration)AST.ConvertFromConcrete.FromDeclaration(
+                                Parse(
+                        "module M exposing (..)\nuse : Types.Payload -> Types.Tree\nuse x = Types.Payload x").Declarations[0].Value)).Function)),
+                    ImmutableDictionary<DeclQualifiedName, SccModel>.Empty.Add(key, new SccModel.TypeScc(tree)),
+                    ImmutableDictionary<DeclQualifiedName, TypeSccModel>.Empty.Add(key, payload).Add(
+                        Name("Types", "Tree"),
+                        tree)));
+
+        UnitConstruction.Lookup(namespaced, key, true).Member.Should().Be("Payload");
+        UnitConstruction.Lookup(namespaced, key, false).Member.Should().Be("Tree");
+        UnitConstruction.Flatten([new(namespaced, "use")]).Should().HaveCount(3);
+
+        Core.Elm.ElmCompilerInDotnet.CompilerModel.ProgramValidation.Validate(
+            SccCompiler.Lower([new(namespaced, "use")]));
+    }
+
+    [Fact]
+    public void Constructor_expressions_patterns_and_record_aliases_select_owning_type_members()
+    {
+        var result =
+            Canonical(
+                new(),
+                [
+                    """
+                    module Main exposing (..)
+                    type Choice = First Int | Second
+                    type alias Record = { value : Int }
+                    root value =
+                        case value of
+                            First x -> Record x
+                            Second -> Record 0
+                    """
+                ],
+                Name("Main", "root"));
+
+        var value = result.UnitExports[Name("Main", "root")].Unit.Should().BeOfType<SccModel.ValueScc>().Which.Value;
+        value.Dependencies.Should().HaveCount(3);
+        var choices = value.Dependencies.Where(entry => entry.Key.DeclName is "First" or "Second").ToArray();
+        choices[0].Value.Should().BeSameAs(choices[1].Value);
+
+        foreach (var choice in choices)
+            UnitConstruction.Lookup(new SccModel.ValueScc(value), choice.Key, false).Member.Should().Be("Choice");
+
+        UnitConstruction.Lookup(
+            new SccModel.ValueScc(value),
+            value.Dependencies.Keys.Single(key => key.DeclName == "Record"),
+            false)
+            .Member.Should().Be("Record");
+    }
+
+    [Fact]
+    public void Graph_rewriting_splits_removed_cycles_and_qualifies_new_external_references()
+    {
+        var source =
+            Canonical(
+                new(),
+                ["module Main exposing (..)\nf x = g x\ng x = f x"],
+                Name("Main", "f"),
+                Name("Main", "g"));
+
+        var input = source.UnitExports[Name("Main", "f")].Unit.Should().BeOfType<SccModel.ValueScc>().Which;
+
+        var members =
+            input.Value.Members.ToImmutableDictionary(
+                entry => entry.Key,
+                entry => (AST.Declaration)new AST.Declaration.FunctionDeclaration(
+                    ((ValueDeclaration.FunctionDeclaration)entry.Value).Function));
+
+        members =
+            members.SetItem(
+                "f",
+                AST.ConvertFromConcrete.FromDeclaration(
+                    Parse("module M exposing (..)\nf x = x").Declarations[0].Value));
+
+        var result = SccGraph.Repartition(input, members);
+        result["f"].Unit.Should().NotBe(result["g"].Unit);
+        var g = result["g"].Unit.Should().BeOfType<SccModel.ValueScc>().Which.Value;
+        g.Members.Should().ContainSingle();
+        g.Dependencies.Values.Single().Should().BeSameAs(result["f"].Unit);
+        g.Dependencies.Keys.Single().Namespaces.Should().NotBeEmpty();
+        UnitConstruction.Flatten(result.Values).Should().HaveCount(2);
+    }
+
+    [Fact]
+    public void Syntax_passes_repartition_graphs_and_reuse_independent_results()
+    {
+        var cache = new DeclarationUnitCache();
+
+        var canonical =
+            Canonical(
+                new(),
+                ["module Main exposing (..)\nf x = Debug.log (g x) x\ng x = f x"],
+                Name("Main", "f"),
+                Name("Main", "g"));
+
+        var roots = canonical.UnitExports.ToDictionary(entry => entry.Key.FullName, entry => entry.Value);
+
+        var cold =
+            SccCompiler.Transform(roots, false, false, true, cache)
+            .Extract(error => throw new InvalidOperationException(error));
+
+        cold["Main.f"].Unit.Should().NotBe(cold["Main.g"].Unit);
+        var count = cache.SyntaxTransforms.Count;
+
+        var warm =
+            SccCompiler.Transform(roots, false, false, true, cache)
+            .Extract(error => throw new InvalidOperationException(error));
+
+        warm["Main.f"].Should().BeSameAs(cold["Main.f"]);
+        warm["Main.g"].Should().BeSameAs(cold["Main.g"]);
+        cache.SyntaxTransforms.Count.Should().Be(count);
+        var firstProgram = SccCompiler.Lower(cold.Values, cache);
+        var loweredCount = cache.CompilerModels.Count;
+        var secondProgram = SccCompiler.Lower(warm.Values, cache);
+        cache.CompilerModels.Count.Should().Be(loweredCount);
+
+        foreach (var entry in firstProgram.Functions)
+            secondProgram.Functions[entry.Key].Should().BeSameAs(entry.Value);
+    }
+
+    [Fact]
+    public void SCC_construction_rejects_mixed_members_and_wrong_namespace_selections()
+    {
+        var syntax =
+            Parse("module M exposing (..)\ntype Item = Constructor\nvalue = 1").Declarations
+            .Select(node => AST.ConvertFromConcrete.FromDeclaration(node.Value)).ToArray();
+
+        Action mixed =
+            () => SccGraph.Create(
+                syntax.ToImmutableDictionary(item => ElmCompiler.GetDeclarationName(item)!),
+                [],
+                [],
+                []);
+
+        mixed.Should().Throw<ArgumentException>().WithMessage("*value members*");
+        var type = Create(syntax[0]).Should().BeOfType<SccModel.TypeScc>().Subject;
+
+        Action wrongValue =
+            () => new ValueSccModel(
+                ImmutableDictionary<string, ValueDeclaration>.Empty.Add(
+                    "value",
+                    new ValueDeclaration.FunctionDeclaration(((AST.Declaration.FunctionDeclaration)syntax[1]).Function)),
+                ImmutableDictionary<DeclQualifiedName, SccModel>.Empty.Add(Name("M", "Item"), type),
+                []);
+
+        wrongValue.Should().Throw<ArgumentException>().WithMessage("*constructor*");
+
+        Action wrongType =
+            () => new TypeSccModel(
+                type.Value.Members,
+                ImmutableDictionary<DeclQualifiedName, TypeSccModel>.Empty.Add(Name("M", "Constructor"), type.Value));
+
+        wrongType.Should().Throw<ArgumentException>().WithMessage("*type*");
+    }
+
+    [Fact]
+    public void Compiler_stage_caches_are_invocation_owned_and_can_be_reused_across_compilations()
+    {
+        var tree =
+            TestCase.DefaultAppWithoutPackages(
+                ["module Main exposing (..)\nroot value = (\\x -> x) value\nother x = x"]).AsFileTree();
+
+        var root = Name("Main", "root");
+        var cache = new Canonicalization.DeclarationCache();
+
+        CompilationPipelineStageResults Lower(
+            Canonicalization.DeclarationCache? storage,
+            params DeclQualifiedName[] roots) =>
+            ElmCompiler.LowerToCompilerModel(
+                tree,
+                roots,
+                canonicalizationCache: storage,
+                includeBundledKernelModules: false)
+            .Extract(error => throw new InvalidOperationException(error));
+
+        var cold = Lower(cache, root);
+        var views = cache.Semantic.CompilerViews.Count;
+        var models = cache.Semantic.CompilerModels.Count;
+        var passes = cache.Semantic.SyntaxTransforms.Count;
+        var lifting = cache.Semantic.LambdaLifting.Count;
+        var warm = Lower(cache, root);
+        cache.Semantic.CompilerViews.Count.Should().Be(views);
+        cache.Semantic.CompilerModels.Count.Should().Be(models);
+        cache.Semantic.SyntaxTransforms.Count.Should().Be(passes);
+        cache.Semantic.LambdaLifting.Count.Should().Be(lifting);
+
+        foreach (var entry in cold.CompilerProgram.Functions)
+            warm.CompilerProgram.Functions[entry.Key].Should().BeSameAs(entry.Value);
+
+        var added = Lower(cache, Name("Main", "other"), root);
+
+        foreach (var entry in cold.CompilerProgram.Functions)
+            added.CompilerProgram.Functions[entry.Key].Should().BeSameAs(entry.Value);
+
+        var independent = Lower(null, root);
+
+        independent.CompilerProgram.Functions[cold.SourceFunctionIds[root]]
+            .Should().NotBeSameAs(cold.CompilerProgram.Functions[cold.SourceFunctionIds[root]]);
+
+        cache.Clear();
+        cache.Semantic.CompilerViews.Count.Should().Be(0);
+        cache.Semantic.CompilerModels.Count.Should().Be(0);
+        cache.Semantic.SyntaxTransforms.Count.Should().Be(0);
+        cache.Semantic.LambdaLifting.Count.Should().Be(0);
+    }
+
+    [Fact]
+    public void SCC_lowering_preserves_constructor_and_record_runtime_behavior()
+    {
+        var (environment, pipeline) =
+            ElmCompilerTestHelper.CompileElmModules(
+                [
+                    """
+                    module Main exposing (..)
+                    type Choice = First Record | Second
+                    type alias Record = { value : Int, rest : List Choice }
+                    root _ =
+                        case First (Record 42 []) of
+                            First x -> x.value
+                            Second -> 0
+                    """
+                ],
+                disableInlining: false);
+
+        OptimizationOpportunityFinder.FindGenericRecordAccessOpportunities(pipeline.CompilerProgram).Should().BeEmpty();
+
+        var value =
+            environment.Modules.Single(module => module.moduleName == "Main").moduleContent.FunctionDeclarations["root"];
+
+        ElmCompilerTestHelper.CreateFunctionValueInvocationDelegate(value, new PineVMParseCache())([PineValue.EmptyList])
+            .returnValue.Should().Be(IntegerEncoding.EncodeSignedInteger(42));
     }
 }

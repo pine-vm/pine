@@ -5,10 +5,11 @@ using System.Collections.Immutable;
 using System.Linq;
 
 using Model = Pine.Core.Elm.ElmCompilerInDotnet.CompilerModel;
+using LoweredSourceFunction = Pine.Core.Elm.ElmCompilerInDotnet.CompilerModel.LoweredSourceFunction;
 
 namespace Pine.Core.Elm.ElmCompilerInDotnet;
 
-/// <summary>Pure identity rebinding, with no source resolution or semantic lowering on cache hits.</summary>
+/// <summary>Rebinds compiler handles and lexical identities without source resolution or semantic lowering.</summary>
 internal sealed class SourceLoweringRebinding(Func<DeclQualifiedName, DeclQualifiedName> map)
 {
     private readonly Dictionary<Model.FunctionId, Model.FunctionId> functions = [];
@@ -17,10 +18,6 @@ internal sealed class SourceLoweringRebinding(Func<DeclQualifiedName, DeclQualif
 
     public LoweredSourceFunction Apply(LoweredSourceFunction source)
     {
-        var evidence =
-            ImmutableDictionary.CreateBuilder<Model.Expression, GenericRecordAccessEvidence>(
-                ReferenceEqualityComparer.Instance);
-
         Model.Expression Expression(Model.Expression expression)
         {
             var children = Model.ExpressionTransform.MapChildren(expression, Expression);
@@ -82,13 +79,6 @@ internal sealed class SourceLoweringRebinding(Func<DeclQualifiedName, DeclQualif
                         nameof(Apply) + " does not handle expression variant: " + expression.GetType().Name)
                 };
 
-            if (source.Evidence.TryGetValue(expression, out var item))
-            {
-                evidence.Add(
-                    result,
-                    item with { SubjectType = SourceLoweringProjection.MapType(item.SubjectType, map) });
-            }
-
             return result;
         }
 
@@ -98,8 +88,7 @@ internal sealed class SourceLoweringRebinding(Func<DeclQualifiedName, DeclQualif
         return
             new(
                 function,
-                source.BindingNames.ToImmutableDictionary(entry => Binding(entry.Key), entry => entry.Value),
-                evidence.ToImmutable());
+                source.BindingNames.ToImmutableDictionary(entry => Binding(entry.Key), entry => entry.Value));
     }
 
     private string MapOperator(string name) => map(DeclQualifiedName.FromString(name)).FullName;

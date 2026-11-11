@@ -864,7 +864,7 @@ public partial class ElmSyntaxInterpreter
     private static readonly System.Runtime.CompilerServices.ConditionalWeakTable<
         IReadOnlyDictionary<DeclQualifiedName, PreparedDeclaration>,
         IReadOnlyDictionary<string, DeclQualifiedName>>
-        s_infixOperatorMaps = new();
+        s_infixOperatorMaps = [];
 
     private static IReadOnlyDictionary<string, DeclQualifiedName> CreateInfixOperatorMap(
         IReadOnlyDictionary<DeclQualifiedName, PreparedDeclaration> declarations)
@@ -4422,7 +4422,7 @@ public partial class ElmSyntaxInterpreter
     private static readonly System.Runtime.CompilerServices.ConditionalWeakTable<
         IReadOnlyDictionary<DeclQualifiedName, PreparedDeclaration>,
         ImmutableDictionary<DeclQualifiedName, PreparedDeclaration>>
-        s_declarationSnapshots = new();
+        s_declarationSnapshots = [];
 
     private static ImmutableDictionary<DeclQualifiedName, PreparedDeclaration> GetDeclarationSnapshot(
         IReadOnlyDictionary<DeclQualifiedName, PreparedDeclaration> declarations) =>

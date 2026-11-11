@@ -1,6 +1,7 @@
 using AwesomeAssertions;
 using Pine.CLI;
 using Pine.Core.CLI;
+using Pine.Core.Elm.ElmCompilerInDotnet;
 using Pine.Core.Files;
 using System;
 using System.Collections.Generic;
@@ -138,6 +139,8 @@ public sealed class RunWatchCommandTests : IDisposable
     public async Task Run_watch_recompiles_program_sources_with_literal_or_remote_arguments(
         bool remoteInput, bool reportDurations)
     {
+        var compilerCache = new Canonicalization.DeclarationCache();
+
         var helper =
             Path.Combine(
                 Directory.CreateDirectory(Path.Combine(_directory, "Formatting")).FullName,
@@ -180,6 +183,7 @@ public sealed class RunWatchCommandTests : IDisposable
                     reportDurations: reportDurations,
                     entryPoint: Module,
                     sourceLoader: loader,
+                    canonicalizationCache: compilerCache,
                     selectDeclaration:
                     _ =>
                     {
@@ -193,6 +197,14 @@ public sealed class RunWatchCommandTests : IDisposable
             File.ReadAllText(destination).Should().Be("value");
             error.ToString().Should().Contain("Watching program sources in " + _directory);
             AssertDurations(compilations: 1, executions: 1);
+            var canonicalEntries = compilerCache.Count;
+            var syntaxEntries = compilerCache.Semantic.SyntaxTransforms.Count;
+            var modelEntries = compilerCache.Semantic.CompilerModels.Count;
+            var emissionEntries = compilerCache.Semantic.Emission.Count;
+            canonicalEntries.Should().BeGreaterThan(0);
+            syntaxEntries.Should().BeGreaterThan(0);
+            modelEntries.Should().BeGreaterThan(0);
+            emissionEntries.Should().BeGreaterThan(0);
 
             // Waiting must not be included in the next run's execution duration.
             await Task.Delay(TimeSpan.FromSeconds(2));
@@ -207,6 +219,10 @@ public sealed class RunWatchCommandTests : IDisposable
             File.ReadAllText(destination).Should().Be("value!");
             error.ToString().Should().Contain("Program source changed: " + helper);
             AssertDurations(compilations: 2, executions: 2);
+            compilerCache.Count.Should().Be(canonicalEntries + 1);
+            compilerCache.Semantic.SyntaxTransforms.Count.Should().BeGreaterThan(syntaxEntries);
+            compilerCache.Semantic.CompilerModels.Count.Should().BeGreaterThan(modelEntries);
+            compilerCache.Semantic.Emission.Count.Should().BeGreaterThan(emissionEntries);
 
             if (reportDurations)
             {
@@ -651,7 +667,8 @@ public sealed class RunWatchCommandTests : IDisposable
         string? entryPoint = null,
         string? inputDirectory = null,
         RunSource.Loader? sourceLoader = null,
-        Func<IReadOnlyList<RunDeclarationSelection.Candidate>, string>? selectDeclaration = null) =>
+        Func<IReadOnlyList<RunDeclarationSelection.Candidate>, string>? selectDeclaration = null,
+        Canonicalization.DeclarationCache? canonicalizationCache = null) =>
         RunCommand.Execute(
             entryPoint ?? Module + "/" + declaration,
             inputDirectory: inputDirectory,
@@ -670,7 +687,8 @@ public sealed class RunWatchCommandTests : IDisposable
             batchOnly: batchOnly,
             selectDeclaration: selectDeclaration,
             watch: true,
-            createWatcher: createWatcher);
+            createWatcher: createWatcher,
+            canonicalizationCache: canonicalizationCache);
 
     private sealed class NotifyingWriter : StringWriter
     {

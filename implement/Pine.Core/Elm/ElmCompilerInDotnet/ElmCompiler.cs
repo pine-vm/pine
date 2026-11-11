@@ -111,8 +111,7 @@ public partial class ElmCompiler
         IDictionary<string, Result<ConcreteSyntax.ParseError, ConcreteSyntax.File>>? sourceParseCache = null,
         Canonicalization.DeclarationCache? canonicalizationCache = null,
         IReadOnlyDictionary<string, ConcreteSyntax.File>? parsedSources = null,
-        IReadOnlyDictionary<string, ElmModuleTypeInterface>? moduleTypeInterfaces = null,
-        SourceCompilationCaches? compilationCaches = null)
+        IReadOnlyDictionary<string, ElmModuleTypeInterface>? moduleTypeInterfaces = null)
     {
         syntaxOptimization ??= new ElmSyntaxOptimizationConfig.SyntaxOptimizationEnabled();
 
@@ -124,7 +123,6 @@ public partial class ElmCompiler
             [];
 
         canonicalizationCache ??= new();
-        compilationCaches ??= canonicalizationCache.Semantic.Lowering;
 
         var canonicalizationResult =
             ParseAndCanonicalizeForLowering(
@@ -142,38 +140,48 @@ public partial class ElmCompiler
         var canonicalized =
             canonicalizationResult.Extract(error => throw new InvalidOperationException(error.ToString()));
 
-        var flat =
-            DeclarationUnits.UnitConstruction.Flatten(
-                canonicalized.UnitExports.Values,
-                canonicalizationCache.Semantic.Projections);
-
-        var prepared = flat;
+        var prepared = canonicalized.UnitExports;
 
         if (syntaxOptimization is ElmSyntaxOptimizationConfig.SyntaxOptimizationEnabled enabled)
         {
             var lowering =
-                BuiltinOperatorLowering.Apply(
-                    prepared,
-                    new BuiltinOperatorLowering.Configuration(LowerBuiltinOperators: true, LowerElmCoreBasics: true),
-                    compilationCaches.OperatorLowering);
+                DeclarationUnits.SccCompiler.Transform(
+                    prepared.ToDictionary(entry => entry.Key.FullName, entry => entry.Value),
+                    lowerOperators: true,
+                    lowerCoreBasics: true,
+                    removeDebugLog: false,
+                    canonicalizationCache.Semantic);
 
             if (lowering.IsErrOrNull() is { } lowerError)
                 return lowerError;
 
-            prepared = lowering.Extract(error => throw new InvalidOperationException(error));
+            prepared =
+                lowering.Extract(error => throw new InvalidOperationException(error))
+                .ToDictionary(entry => DeclQualifiedName.FromString(entry.Key), entry => entry.Value);
 
             if (enabled.RemoveDebugLogApplications)
             {
+                var removal =
+                    DeclarationUnits.SccCompiler.Transform(
+                        prepared.ToDictionary(entry => entry.Key.FullName, entry => entry.Value),
+                        lowerOperators: false,
+                        lowerCoreBasics: false,
+                        removeDebugLog: true,
+                        canonicalizationCache.Semantic);
+
+                if (removal.IsErrOrNull() is { } removalError)
+                    return removalError;
+
                 prepared =
-                    prepared.ToImmutableDictionary(
-                        entry => entry.Key,
-                        entry => DebugLogRemoval.RewriteDeclaration(entry.Value));
+                    removal.Extract(error => throw new InvalidOperationException(error))
+                    .ToDictionary(entry => DeclQualifiedName.FromString(entry.Key), entry => entry.Value);
             }
         }
 
         var program =
             CompilerModel.LambdaLifting.Lift(
-                CompilerModel.FromCanonicalSyntax.Convert(prepared, compilationCaches.SemanticFunctions));
+                DeclarationUnits.SccCompiler.Lower(prepared.Values, canonicalizationCache.Semantic),
+                canonicalizationCache.Semantic.LambdaLifting);
 
         CompilerModel.ProgramValidation.Validate(program);
 
@@ -186,9 +194,9 @@ public partial class ElmCompiler
                 RootDeclarationNames = canonicalized.RootDeclarations,
                 SourceReferences = canonicalized.References,
                 SourceFilePaths = canonicalized.FilePaths,
-                UnitExports = canonicalized.UnitExports,
+                UnitExports = prepared,
                 SourceFunctionIds =
-                canonicalized.UnitExports.ToDictionary(
+                prepared.ToDictionary(
                     entry => entry.Key,
                     entry => (CompilerModel.FunctionId)new CompilerModel.FunctionId.Source(
                         DeclarationUnits.UnitConstruction.MemberName(entry.Value, entry.Key.DeclName)))
@@ -586,8 +594,7 @@ public partial class ElmCompiler
         IDictionary<string, Result<ConcreteSyntax.ParseError, ConcreteSyntax.File>>? sourceParseCache = null,
         Canonicalization.DeclarationCache? canonicalizationCache = null,
         IReadOnlyDictionary<string, ConcreteSyntax.File>? parsedSources = null,
-        IReadOnlyDictionary<string, ElmModuleTypeInterface>? moduleTypeInterfaces = null,
-        SourceCompilationCaches? compilationCaches = null)
+        IReadOnlyDictionary<string, ElmModuleTypeInterface>? moduleTypeInterfaces = null)
     {
         syntaxOptimization ??= SyntaxOptimizationConfigDefault;
         canonicalizationCache ??= new();
@@ -601,8 +608,7 @@ public partial class ElmCompiler
                 sourceParseCache,
                 canonicalizationCache,
                 parsedSources,
-                moduleTypeInterfaces,
-                compilationCaches);
+                moduleTypeInterfaces);
 
         if (loweringResult.IsErrOrNull() is { } loweringErr)
             return loweringErr;

@@ -1,5 +1,6 @@
 using Pine.Core.CodeAnalysis;
 using Pine.Core.Elm.ElmCompilerInDotnet;
+using Pine.Core.Elm.ElmCompilerInDotnet.DeclarationUnits;
 using Pine.Core.Internal;
 using Pine.Core.PineLanguage;
 using System;
@@ -25,10 +26,18 @@ public partial class ElmSyntaxInterpreter
     internal static IReadOnlyList<PineEvaluation> CompileApplicationsToPine(
         IReadOnlyList<(PineValueInProcess Function, IReadOnlyList<PineValueInProcess> Arguments)> applications,
         IReadOnlyDictionary<DeclQualifiedName, AST.Declaration> canonicalDeclarations,
+        IReadOnlyDictionary<DeclQualifiedName, UnitExport> canonicalUnits,
         CancellationToken cancellationToken,
-        SourceCompilationCaches? compilationCaches = null)
+        DeclarationUnitCache? unitCache = null)
     {
-        var export = new PineClosureCompiler(canonicalDeclarations, cancellationToken, compilationCaches);
+        unitCache ??= new();
+
+        var export =
+            new PineClosureCompiler(
+                canonicalDeclarations,
+                canonicalUnits,
+                cancellationToken,
+                unitCache);
 
         var roots =
             applications.Select(
@@ -40,8 +49,9 @@ public partial class ElmSyntaxInterpreter
 
     private sealed class PineClosureCompiler(
         IReadOnlyDictionary<DeclQualifiedName, AST.Declaration> canonicalDeclarations,
+        IReadOnlyDictionary<DeclQualifiedName, UnitExport> canonicalUnits,
         CancellationToken cancellationToken,
-        SourceCompilationCaches? compilationCaches)
+        DeclarationUnitCache unitCache)
     {
         private static readonly DeclQualifiedName s_ignoredDebugLog =
             DeclQualifiedName.Create(["Debug"], "log");
@@ -110,13 +120,147 @@ public partial class ElmSyntaxInterpreter
                 m_bodies.Add(pending.Name, CompileValue(pending.Value));
             }
 
+            var valueOwners = new Dictionary<DeclQualifiedName, DeclQualifiedName>();
+            var typeOwners = new Dictionary<DeclQualifiedName, DeclQualifiedName>();
+
+            foreach (var (name, declaration) in canonicalDeclarations)
+            {
+                switch (declaration)
+                {
+                    case AST.Declaration.FunctionDeclaration:
+                    case AST.Declaration.PortDeclaration:
+                    case AST.Declaration.InfixDeclaration:
+                        valueOwners.Add(name, name);
+                        break;
+
+                    case AST.Declaration.ChoiceTypeDeclaration choice:
+                        typeOwners.Add(name, name);
+
+                        foreach (var constructor in choice.TypeDeclaration.Constructors)
+                            valueOwners.Add(DeclQualifiedName.Create(name.Namespaces, constructor.Name), name);
+
+                        break;
+
+                    case AST.Declaration.AliasDeclaration alias:
+                        typeOwners.Add(name, name);
+
+                        if (alias.TypeAlias.TypeAnnotation is AST.TypeAnnotation.Record)
+                            valueOwners.Add(name, name);
+
+                        break;
+
+                    default:
+                        throw new NotImplementedException(
+                            nameof(Compile) + " does not handle declaration variant: " + declaration.GetType().Name);
+                }
+            }
+
+            var sourceUnits = new Dictionary<string, UnitExport>();
+
+            foreach (var intrinsic in new[] { "String.String", "Char.Char" })
+            {
+                if (canonicalUnits.TryGetValue(DeclQualifiedName.FromString(intrinsic), out var unit))
+                    sourceUnits.Add(intrinsic, unit);
+            }
+
+            DeclQualifiedName Require(DeclQualifiedName name, bool isType)
+            {
+                if (!SccValidation.Native(name) &&
+                    (isType ? typeOwners : valueOwners).TryGetValue(name, out var owner))
+                {
+                    sourceUnits[owner.FullName] = canonicalUnits[owner];
+                }
+
+                return name;
+            }
+
+            foreach (var declaration in m_generated.Values)
+                Canonicalize.MapNames(declaration, Require);
+
+            foreach (var body in m_bodies.Values.Concat(
+                m_captures.Values.SelectMany(captures => captures.Select(capture => capture.Value))))
+            {
+                foreach (var reference in Model.Compilation.References(body))
+                {
+                    switch (reference)
+                    {
+                        case Model.Reference.Function function:
+                            Require(function.Id.SourceDeclaration, false);
+                            break;
+
+                        case Model.Reference.Constructor constructor:
+                            Require(constructor.Name, false);
+                            break;
+
+                        case Model.Reference.Local:
+                        case Model.Reference.Native:
+                            break;
+
+                        default:
+                            throw new NotImplementedException(
+                                nameof(Compile) + " does not handle reference variant: " + reference.GetType().Name);
+                    }
+                }
+            }
+
+            var transformed =
+                SccCompiler.Transform(
+                    sourceUnits,
+                    lowerOperators: true,
+                    lowerCoreBasics: false,
+                    removeDebugLog: true,
+                    unitCache)
+                .Extract(
+                    error => throw new ElmCompilationException("Failed lowering discovered Elm test sources: " + error));
+
+            var sourceProgram =
+                Model.LambdaLifting.Lift(
+                    SccCompiler.Lower(transformed.Values, unitCache),
+                    unitCache.LambdaLifting);
+
+            var valueNames = new Dictionary<DeclQualifiedName, DeclQualifiedName>();
+            var typeNames = new Dictionary<DeclQualifiedName, DeclQualifiedName>();
+
+            foreach (var (symbol, owner) in valueOwners)
+            {
+                if (transformed.TryGetValue(owner.FullName, out var export))
+                    valueNames.Add(symbol, UnitConstruction.MemberName(export, symbol.DeclName));
+            }
+
+            foreach (var (symbol, owner) in typeOwners)
+            {
+                if (transformed.TryGetValue(owner.FullName, out var export))
+                    typeNames.Add(symbol, UnitConstruction.MemberName(export, symbol.DeclName));
+            }
+
+            var rebind = new SourceLoweringRebinding(name => valueNames.GetValueOrDefault(name, name));
+
+            Model.Function Rebind(Model.Function function) =>
+                rebind.Apply(new(function, [])).Function;
+
+            foreach (var name in m_bodies.Keys.ToArray())
+                m_bodies[name] = Rebind(new([], m_bodies[name])).Body;
+
+            foreach (var name in m_captures.Keys.ToArray())
+            {
+                m_captures[name] =
+                    [
+                    .. m_captures[name].Select(
+                        capture => (capture.Name, Rebind(new([], capture.Value)).Body))
+                    ];
+            }
+
             var declarations =
-                canonicalDeclarations
-                .Where(
-                    entry => entry.Key.Namespaces.Count != 1 ||
-                        entry.Key.Namespaces[0] is not ("Basics" or "Debug") ||
-                        entry.Value is not AST.Declaration.FunctionDeclaration)
-                .Concat(m_generated)
+                UnitConstruction.Flatten(transformed.Values, unitCache.Projections)
+                .Concat(
+                    m_generated.Select(
+                        entry => KeyValuePair.Create(
+                            entry.Key,
+                            DebugLogRemoval.RewriteDeclaration(
+                                Canonicalize.MapNames(
+                                    entry.Value,
+                                    (name, isType) =>
+                                    (isType ? typeNames : valueNames).GetValueOrDefault(name, name))))))
                 .Append(
                     KeyValuePair.Create(
                         s_ignoredDebugLog,
@@ -124,13 +268,15 @@ public partial class ElmSyntaxInterpreter
                             s_ignoredDebugLog,
                             [new AST.Pattern.AllPattern(), new AST.Pattern.VarPattern("value")],
                             AST.Expression.Identifier.Create([], "value"))))
-                .ToImmutableDictionary(
-                    entry => entry.Key,
-                    entry => DebugLogRemoval.RewriteDeclaration(LowerOperatorApplications(entry.Value)));
+                .ToImmutableDictionary();
 
             // Preserve source compilation's pipe and short-circuit semantics before creating resolved IR.
             declarations =
-                BuiltinOperatorLowering.Apply(declarations, compilationCaches?.OperatorLowering, cancellationToken)
+                BuiltinOperatorLowering.Apply(
+                    declarations,
+                    new(LowerBuiltinOperators: true, LowerElmCoreBasics: false),
+                    cancellationToken,
+                    selectedFunctions: m_generated.Keys.Append(s_ignoredDebugLog).ToHashSet())
                 .Extract(
                     error => throw new ElmCompilationException("Failed lowering discovered Elm test closures: " + error));
 
@@ -194,11 +340,17 @@ public partial class ElmSyntaxInterpreter
             var program =
                 Model.FromCanonicalSyntax.Convert(
                     declarations,
-                    compilationCaches?.SemanticFunctions,
-                    sourceReachable.Except(m_bodies.Keys).ToHashSet(),
+                    sourceReachable.Except(m_bodies.Keys).Where(
+                        name => m_generated.ContainsKey(name) || name == s_ignoredDebugLog).ToHashSet(),
                     cancellationToken);
 
             var functions = program.Functions.ToBuilder();
+
+            program =
+                sourceProgram with
+                {
+                    BindingNames = sourceProgram.BindingNames.AddRange(program.BindingNames)
+                };
 
             foreach (var (name, body) in m_bodies)
             {
@@ -241,6 +393,7 @@ public partial class ElmSyntaxInterpreter
             }
 
             program = Model.LambdaLifting.Lift(program with { Functions = functions.ToImmutable() });
+            program = program with { Functions = sourceProgram.Functions.AddRange(program.Functions) };
             var reachable = new HashSet<Model.FunctionId>();
             var pendingFunctions = new Stack<Model.FunctionId>(roots.Select(name => new Model.FunctionId.Source(name)));
 
@@ -261,7 +414,22 @@ public partial class ElmSyntaxInterpreter
             Model.ProgramValidation.Validate(program);
 
             var compiled =
-                Model.Compilation.Compile(program)
+                Model.Compilation.Compile(
+                    program,
+                    compileScc:
+                    input =>
+                    {
+                        // Captured runtime values belong to this execution, not retained semantic storage.
+                        if (input.Members.Any(member => !sourceProgram.Functions.ContainsKey(member.Key)))
+                            return Model.Compilation.CompileScc(input);
+
+                        if (unitCache.Emission.TryGetValue(input, out var cached))
+                            return cached;
+
+                        var result = Model.Compilation.CompileScc(input);
+                        unitCache.Emission.Set(input, result);
+                        return result;
+                    })
                 .Extract(
                     error =>
                     throw new ElmCompilationException("Failed compiling discovered Elm test closures: " + error));
@@ -282,36 +450,6 @@ public partial class ElmSyntaxInterpreter
                                 PineValue.List([PineValue.List([.. callable.EnvFunctions])]));
                     })
                 ];
-        }
-
-        private static AST.Declaration LowerOperatorApplications(AST.Declaration declaration) =>
-            declaration is AST.Declaration.FunctionDeclaration function
-            ?
-            new AST.Declaration.FunctionDeclaration(
-                function.Function with
-                {
-                    Declaration =
-                    function.Function.Declaration with
-                    {
-                        Expression = LowerOperatorApplications(function.Function.Declaration.Expression)
-                    }
-                })
-            :
-            declaration;
-
-        private static AST.Expression LowerOperatorApplications(AST.Expression expression)
-        {
-            var lowered =
-                ElmSyntaxAbstractTransformations.MapChildExpressions(expression, LowerOperatorApplications);
-
-            return
-                lowered is AST.Expression.OperatorApplication operation && operation.Operator.Contains('.')
-                ?
-                new AST.Expression.Application(
-                    new AST.Expression.Identifier(DeclQualifiedName.FromString(operation.Operator)),
-                    [operation.Left, operation.Right])
-                :
-                lowered;
         }
 
         private Model.Expression CompileValue(PineValueInProcess value)

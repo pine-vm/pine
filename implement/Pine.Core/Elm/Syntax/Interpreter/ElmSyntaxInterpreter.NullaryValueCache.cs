@@ -56,7 +56,7 @@ public partial class ElmSyntaxInterpreter
         public NullaryObserverStores WithoutOperators { get; } = new();
 
         public ConditionalWeakTable<IReadOnlyDictionary<string, DeclQualifiedName>, NullaryObserverStores> WithOperators { get; } =
-            new();
+            [];
     }
 
     private sealed class NullaryObserverStores
@@ -65,11 +65,11 @@ public partial class ElmSyntaxInterpreter
 
         public ConditionalWeakTable<IReadOnlyDictionary<PreparedExpression, Action<PineValueInProcess>>,
             ConcurrentDictionary<NullaryDeclarationKey, CompletedNullaryValue>> WithObservers
-        { get; } = new();
+        { get; } = [];
     }
 
     private static readonly ConditionalWeakTable<IReadOnlyDictionary<DeclQualifiedName, PreparedDeclaration>, NullaryValueStores>
-        s_nullaryValueStores = new();
+        s_nullaryValueStores = [];
 
     private static NullaryValueCache? CreateNullaryValueCacheExecution(
         Func<Application, ApplicationResolution> resolver,

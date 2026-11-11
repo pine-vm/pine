@@ -1,4 +1,5 @@
 using AwesomeAssertions;
+using Pine.Core.CodeAnalysis;
 using Pine.Core.Elm.ElmCompilerInDotnet;
 using Pine.Core.Elm.Syntax;
 using Pine.Core.Elm.Syntax.Abstract;
@@ -23,6 +24,44 @@ public class BuiltinOperatorLoweringTests
             = RBNode_elm_builtin NColor key value (Dict key value) (Dict key value)
             | RBEmpty_elm_builtin
         """;
+
+    [Fact]
+    public void Rewrites_only_selected_functions()
+    {
+        var parsed =
+            ElmSyntaxParser.ParseModuleText(
+                """
+                module Test exposing (..)
+
+                add : Int -> Int -> Int
+                add left right = left + right
+
+                sub : Int -> Int -> Int
+                sub left right = left - right
+                """).Extract(error => throw new Exception("Failed parsing: " + error));
+
+        var canonicalized =
+            Canonicalization.CanonicalizeOrThrow([parsed])
+            .Extract(error => throw new Exception("Failed canonicalization: " + error))
+            .Single().Value.Extract(error => throw new Exception("Module has errors: " + error));
+
+        var declarations =
+            ElmCompiler.FlattenModulesToDeclarationDictionary(
+                [ConvertFromConcrete.FromFile(canonicalized)]);
+
+        var selected = DeclQualifiedName.FromString("Test.add");
+        var unselected = DeclQualifiedName.FromString("Test.sub");
+
+        var lowered =
+            BuiltinOperatorLowering.Apply(
+                declarations,
+                new(LowerBuiltinOperators: true, LowerElmCoreBasics: false),
+                selectedFunctions: new System.Collections.Generic.HashSet<DeclQualifiedName> { selected })
+            .Extract(error => throw new Exception("Failed lowering: " + error));
+
+        lowered[selected].Should().NotBe(declarations[selected]);
+        lowered[unselected].Should().BeSameAs(declarations[unselected]);
+    }
 
     [Fact]
     public void Lowers_int_add_operator_application()

@@ -6,6 +6,7 @@ using Pine.Core.Elm.Syntax;
 using Pine.Core.Elm.Syntax.Concrete;
 using Pine.Core.Encodings;
 using Pine.Core.Files;
+using Pine.Core.Functional;
 using Pine.Core.IO;
 using Pine.Core.Json;
 using Pine.Core.PineLanguage;
@@ -21,6 +22,7 @@ using System.Threading;
 
 using ExpressionSyntax = Pine.Core.Elm.Syntax.Concrete.Expression;
 using Type = Pine.Core.Elm.ElmCompilerInDotnet.TypeInference.InferredType;
+using SyntaxFile = Pine.Core.Elm.Syntax.Concrete.File;
 
 namespace Pine.CLI;
 
@@ -42,15 +44,23 @@ internal sealed record RunCompilation(
         string cacheDirectory,
         TextWriter diagnostics,
         CancellationToken token,
-        Func<IReadOnlyList<RunDeclarationSelection.Candidate>, string>? selectDeclaration = null)
+        Func<IReadOnlyList<RunDeclarationSelection.Candidate>, string>? selectDeclaration = null,
+        Canonicalization.DeclarationCache? canonicalizationCache = null,
+        IDictionary<string, Result<ParseError, SyntaxFile>>? sourceParseCache = null)
     {
         var file =
             source.Tree.GetNodeAtPath(source.FilePath) as FileTree.FileNode
             ?? throw new IOException("Selected Elm module is not a file.");
 
-        var syntax =
-            ElmSyntaxParser.ParseModuleText(Encoding.UTF8.GetString(file.Bytes.Span))
-            .Extract(error => throw new ArgumentException("Cannot parse selected module: " + error));
+        var sourceText = Encoding.UTF8.GetString(file.Bytes.Span);
+
+        if (sourceParseCache?.TryGetValue(sourceText, out var parsed) is not true)
+        {
+            parsed = ElmSyntaxParser.ParseModuleText(sourceText);
+            sourceParseCache?[sourceText] = parsed;
+        }
+
+        var syntax = parsed.Extract(error => throw new ArgumentException("Cannot parse selected module: " + error));
 
         var functions =
             syntax.Declarations
@@ -130,8 +140,10 @@ internal sealed record RunCompilation(
                     selected.filePath,
                     [source.FilePath],
                     ElmPackageSubstitutions.DefaultBuild.Value,
+                    provider: null,
                     cancellationToken: token,
-                    projectDirectory: selected.filePath.Count is 1 ? source.DirectoryPath : null).GetAwaiter().GetResult();
+                    projectDirectory: selected.filePath.Count is 1 ? source.DirectoryPath : null,
+                    sourceParseCache: sourceParseCache).GetAwaiter().GetResult();
 
             tree = build.Sources;
             // Parent-source loading can prefix the original source path.
@@ -279,9 +291,17 @@ internal sealed record RunCompilation(
         var (environment, pipeline) =
             (build is null
             ?
-            ElmCompiler.CompileInteractiveEnvironment(tree, [root])
+            ElmCompiler.CompileInteractiveEnvironment(
+                tree,
+                [root],
+                sourceParseCache: sourceParseCache,
+                canonicalizationCache: canonicalizationCache)
             :
-            ElmCompiler.CompileResolvedEnvironment(build, [root]))
+            ElmCompiler.CompileResolvedEnvironment(
+                build,
+                [root],
+                sourceParseCache: sourceParseCache,
+                canonicalizationCache: canonicalizationCache))
             .Extract(error => throw new ElmCompilationException(error));
 
         token.ThrowIfCancellationRequested();

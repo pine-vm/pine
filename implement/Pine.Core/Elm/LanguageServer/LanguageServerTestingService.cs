@@ -53,7 +53,6 @@ public sealed class LanguageServerTestingService(
     IElmPackageProvider? packageProvider = null,
     Func<PineTestsEvent, Task>? publishEvent = null,
     Action<string>? log = null,
-    SourceCompilationCaches? compilationCaches = null,
     ElmTestDiscoveryCaches? discoveryCaches = null) : IDisposable
 {
     /// <summary>Maximum number of immutable versions retained per source root by one server connection.</summary>
@@ -74,11 +73,19 @@ public sealed class LanguageServerTestingService(
 
     private readonly CancellationTokenSource _lifetime = new();
 
-    private readonly Lazy<ElmTestRunCacheSession> _cache =
-        new(() => new(generationOptions: new(), compilationCaches: compilationCaches));
+    private readonly Lazy<(ElmTestDiscoveryCaches Discovery, Lazy<ElmTestRunCacheSession> Execution)> _caches =
+        new(
+            () =>
+            {
+                var discovery = discoveryCaches ?? ElmTestDiscoveryCaches.CreateInMemory();
 
-    private readonly Lazy<ElmTestDiscoveryCaches> _discoveryCaches =
-        new(() => discoveryCaches ?? ElmTestDiscoveryCaches.CreateInMemory());
+                return
+                    (discovery,
+                    new(
+                        () => new(
+                            generationOptions: new(),
+                            discoveryCaches: discovery)));
+            });
 
     private long _accessSequence;
 
@@ -322,7 +329,7 @@ public sealed class LanguageServerTestingService(
                 await Task.Run(
                     () =>
                     {
-                        var cache = _cache.Value;
+                        var cache = _caches.Value.Execution.Value;
                         using var invocation = cache.BeginCompilationInvocation();
 
                         var prepared =
@@ -330,7 +337,7 @@ public sealed class LanguageServerTestingService(
                                 executable.Select(item => item.Id),
                                 settings,
                                 token,
-                                cache.CompilationCaches);
+                                cache.DeclarationCanonicalization);
 
                         token.ThrowIfCancellationRequested();
                         return prepared;
@@ -352,7 +359,11 @@ public sealed class LanguageServerTestingService(
                             var watch = Stopwatch.StartNew();
 
                             var completed =
-                                ElmTestRunner.ExecuteDiscoveredTest(item, entries[item.Id], _cache.Value, token);
+                                ElmTestRunner.ExecuteDiscoveredTest(
+                                    item,
+                                    entries[item.Id],
+                                    _caches.Value.Execution.Value,
+                                    token);
 
                             var result = ToProtocolResult(retained, item, completed, watch.Elapsed, settings);
                             results.Add(result);
@@ -484,7 +495,7 @@ public sealed class LanguageServerTestingService(
                                 packageProvider: packageProvider,
                                 cancellationToken: token,
                                 manifestPath: manifestPath,
-                                caches: _discoveryCaches.Value);
+                                caches: _caches.Value.Discovery);
 
                         token.ThrowIfCancellationRequested();
 
@@ -1055,11 +1066,13 @@ public sealed class LanguageServerTestingService(
     {
         _lifetime.Cancel();
 
-        if (_cache.IsValueCreated)
-            _cache.Value.Dispose();
+        if (_caches.IsValueCreated)
+        {
+            if (_caches.Value.Execution.IsValueCreated)
+                _caches.Value.Execution.Value.Dispose();
 
-        if (_discoveryCaches.IsValueCreated)
-            _discoveryCaches.Value.WaitForMaintenanceAsync().GetAwaiter().GetResult();
+            _caches.Value.Discovery.WaitForMaintenanceAsync().GetAwaiter().GetResult();
+        }
 
         lock (_snapshotLock)
         {

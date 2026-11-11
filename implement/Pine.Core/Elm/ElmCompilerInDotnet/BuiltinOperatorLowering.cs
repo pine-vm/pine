@@ -1,9 +1,10 @@
-using Pine.Core.Caching;
 using Pine.Core.CodeAnalysis;
+using Pine.Core.Elm.ElmCompilerInDotnet.DeclarationUnits;
 using Pine.Core.Elm.Syntax.Abstract;
 using Pine.Core.Encodings;
 using Pine.Core.Functional;
 using Pine.Core.PineLanguage;
+using System;
 using System.Collections.Generic;
 using System.Collections.Immutable;
 using System.Linq;
@@ -69,19 +70,16 @@ public static class BuiltinOperatorLowering
     /// (in the abstract syntax model) that have already passed earlier syntax optimization stages.
     /// </summary>
     /// <param name="declarations">The flat declaration dictionary to rewrite.</param>
-    /// <param name="cache">Optional caller-owned pure transformation storage.</param>
     /// <param name="cancellationToken">Cancellation for this pass, never retained in cached values.</param>
     /// <returns>The rewritten declarations, or an error message.</returns>
     public static Result<string, ImmutableDictionary<DeclQualifiedName, Declaration>> Apply(
         ImmutableDictionary<DeclQualifiedName, Declaration> declarations,
-        ICache<SourceTransformationInput, Declaration>? cache = null,
         CancellationToken cancellationToken = default) =>
         Apply(
             declarations,
             new Configuration(
                 LowerBuiltinOperators: true,
                 LowerElmCoreBasics: false),
-            cache,
             cancellationToken);
 
     internal static Result<string, ImmutableDictionary<DeclQualifiedName, Declaration>> ApplyElmCoreBasics(
@@ -92,12 +90,12 @@ public static class BuiltinOperatorLowering
                 LowerBuiltinOperators: false,
                 LowerElmCoreBasics: true));
 
-    /// <summary>Applies an explicit lowering configuration with optional exact-input storage.</summary>
+    /// <summary>Applies an explicit lowering configuration to execution-local declarations.</summary>
     public static Result<string, ImmutableDictionary<DeclQualifiedName, Declaration>> Apply(
         ImmutableDictionary<DeclQualifiedName, Declaration> declarations,
         Configuration configuration,
-        ICache<SourceTransformationInput, Declaration>? cache = null,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default,
+        IReadOnlySet<DeclQualifiedName>? selectedFunctions = null)
     {
         cancellationToken.ThrowIfCancellationRequested();
 
@@ -107,67 +105,7 @@ public static class BuiltinOperatorLowering
             return declarations;
         }
 
-        if (cache is not null)
-        {
-            var results = ImmutableDictionary.CreateBuilder<DeclQualifiedName, Declaration>();
-
-            var configurationKey =
-                $"builtin-operator-lowering-v6/{configuration.LowerBuiltinOperators}/{configuration.LowerElmCoreBasics}";
-
-            SourceLoweringProjection.Context? projectionContext = null;
-
-            foreach (var (name, declaration) in declarations)
-            {
-                cancellationToken.ThrowIfCancellationRequested();
-
-                if (declaration is not Declaration.FunctionDeclaration ||
-                    declaration is Declaration.FunctionDeclaration
-                    {
-                        Function.Signature: null,
-                        Function.Declaration.Arguments.Count: 0,
-                        Function.Declaration.Expression: AbstractSyntax.Expression.UnitExpr
-                    })
-                {
-                    results[name] = declaration;
-                    continue;
-                }
-
-                var projection =
-                    new SourceLoweringProjection(
-                        name,
-                        projectionContext ??= new(declarations, cancellationToken));
-
-                var input = projection.Input(configurationKey, includeFunctionTypes: false);
-
-                if (!cache.TryGetValue(input, out var normalized))
-                {
-                    normalized =
-                        Apply(projection.Declarations.SetItem(projection.Name, input.Syntax), configuration, cancellationToken: cancellationToken)
-                        .Extract(error => throw new System.InvalidOperationException(error))[projection.Name];
-
-                    normalized = SourceCompilationCaches.NormalizeSyntax(normalized);
-
-                    cancellationToken.ThrowIfCancellationRequested();
-                    cache.Set(input, normalized);
-                }
-
-                results[name] = projection.Rebind(normalized);
-            }
-
-            return results.ToImmutable();
-        }
-
-        var inferenceEnvironment =
-            new TypeInference.FunctionInferenceEnvironment(BuildFunctionSignatures(declarations));
-
-        var functionTypes = BuildFunctionTypes(declarations, inferenceEnvironment);
-        var aliasTypes = BuildAliasTypes(declarations);
-
-        var choiceTypeDefinitions =
-            TypeInference.BuildChoiceTypeDefinitions(declarations);
-
-        var constructorArgumentTypes =
-            BuildConstructorArgumentTypes(choiceTypeDefinitions, aliasTypes);
+        var lowering = new LoweringContext(declarations, configuration);
 
         var resultBuilder =
             ImmutableDictionary.CreateBuilder<DeclQualifiedName, Declaration>();
@@ -176,32 +114,116 @@ public static class BuiltinOperatorLowering
         {
             cancellationToken.ThrowIfCancellationRequested();
 
-            if (decl is not Declaration.FunctionDeclaration)
+            if (selectedFunctions is not null && !selectedFunctions.Contains(key) ||
+                decl is not Declaration.FunctionDeclaration)
             {
                 resultBuilder[key] = decl;
                 continue;
             }
 
-            var moduleNameString = string.Join(".", key.Namespaces);
-
-            var rewritten =
-                RewriteDeclaration(
-                    decl,
-                    configuration,
-                    moduleNameString,
-                    functionTypes,
-                    aliasTypes,
-                    choiceTypeDefinitions,
-                    constructorArgumentTypes,
-                    inferenceEnvironment);
-
-            resultBuilder[key] = rewritten;
+            resultBuilder[key] = lowering.Rewrite(key, decl);
 
             cancellationToken.ThrowIfCancellationRequested();
 
         }
 
         return resultBuilder.ToImmutable();
+    }
+
+    internal sealed class SccLowering
+    {
+        private readonly DeclarationUnitCache cache;
+
+        private readonly LoweringContext lowering;
+
+        public SccLowering(IEnumerable<SccModel> models, Configuration configuration, DeclarationUnitCache cache)
+        {
+            this.cache = cache;
+            var declarations = ImmutableDictionary.CreateBuilder<DeclQualifiedName, Declaration>();
+
+            foreach (var model in models)
+            {
+                var view = SccCompiler.View(model, cache);
+
+                foreach (var entry in view.DependencyMetadata.Concat(view.OwnDeclarations))
+                    declarations[entry.Key] = entry.Value;
+            }
+
+            lowering = new(declarations.ToImmutable(), configuration);
+        }
+
+        public ImmutableDictionary<string, Declaration> Rewrite(SccModel model)
+        {
+            var view = SccCompiler.View(model, cache);
+
+            return
+                SccValidation.Members(model).ToImmutableDictionary(
+                    entry => entry.Key,
+                    entry =>
+                    {
+                        if (entry.Value is not Declaration.FunctionDeclaration)
+                            return entry.Value;
+
+                        var name = UnitConstruction.MemberName(new(model, entry.Key), entry.Key);
+
+                        return
+                            Canonicalize.MapNames(
+                                lowering.Rewrite(name, view.OwnDeclarations[name]),
+                                (reference, isType) =>
+                                {
+                                    if (SccValidation.Native(reference))
+                                        return reference;
+
+                                    var names = isType ? view.InwardTypes : view.InwardValues;
+
+                                    return
+                                        names.TryGetValue(reference, out var inward)
+                                        ?
+                                        inward
+                                        :
+                                        throw new ArgumentException(
+                                            "Operator lowering introduced an unbound reference: " + reference);
+                                });
+                    },
+                    StringComparer.Ordinal);
+        }
+    }
+
+    private sealed class LoweringContext
+    {
+        private readonly Configuration configuration;
+
+        private readonly TypeInference.FunctionInferenceEnvironment environment;
+
+        private readonly IReadOnlyDictionary<DeclQualifiedName, FunctionTypeInfo> functions;
+
+        private readonly IReadOnlyDictionary<DeclQualifiedName, TypeInference.TypeAliasDefinition> aliases;
+
+        private readonly IReadOnlyDictionary<DeclQualifiedName, TypeInference.ChoiceTypeDefinition> choices;
+
+        private readonly IReadOnlyDictionary<DeclQualifiedName, IReadOnlyList<TypeInference.InferredType>> constructors;
+
+        public LoweringContext(
+            ImmutableDictionary<DeclQualifiedName, Declaration> declarations, Configuration configuration)
+        {
+            this.configuration = configuration;
+            environment = new(BuildFunctionSignatures(declarations));
+            functions = BuildFunctionTypes(declarations, environment);
+            aliases = BuildAliasTypes(declarations);
+            choices = TypeInference.BuildChoiceTypeDefinitions(declarations);
+            constructors = BuildConstructorArgumentTypes(choices, aliases);
+        }
+
+        public Declaration Rewrite(DeclQualifiedName name, Declaration declaration) =>
+            RewriteDeclaration(
+                declaration,
+                configuration,
+                string.Join(".", name.Namespaces),
+                functions,
+                aliases,
+                choices,
+                constructors,
+                environment);
     }
 
     private static Declaration RewriteDeclaration(
@@ -366,6 +388,15 @@ public static class BuiltinOperatorLowering
                 AbstractSyntax.Expression.Negation negation =>
                 new AbstractSyntax.Expression.Negation(
                     RewriteExpression(negation.Expression, context)),
+
+                AbstractSyntax.Expression.OperatorApplication operatorApplication when operatorApplication.Operator.Contains('.') =>
+                RewriteApplication(
+                    new AbstractSyntax.Expression.Application(
+                        new AbstractSyntax.Expression.Identifier(
+                            DeclQualifiedName.FromString(operatorApplication.Operator)),
+                        [operatorApplication.Left, operatorApplication.Right]),
+                    context,
+                    expandedExpectedType),
 
                 AbstractSyntax.Expression.OperatorApplication operatorApplication =>
                 new AbstractSyntax.Expression.OperatorApplication(
@@ -884,7 +915,7 @@ public static class BuiltinOperatorLowering
                     // Runtime equality interprets these tags as collections, independently of source modules.
                     if (definition.Constructors.Any(
                         constructor =>
-                        SourceLoweringProjection.IsRuntimeCollectionConstructor(constructor.TagName)))
+                        constructor.TagName is "RBNode_elm_builtin" or "RBEmpty_elm_builtin" or "Set_elm_builtin"))
                     {
                         return false;
                     }

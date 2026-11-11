@@ -3,6 +3,7 @@ using Pine.Core.CodeAnalysis;
 using Pine.Core.Elm.ElmCompilerInDotnet.CompilerModel;
 using Pine.Core.Elm.Syntax.Abstract;
 using System;
+using System.Collections.Generic;
 using System.Collections.Immutable;
 using System.Threading;
 using System.Threading.Tasks;
@@ -132,9 +133,19 @@ public sealed record CanonicalDeclaration(
 public sealed record UnitExport
 {
     /// <summary>Selects an existing member of a validated immutable unit.</summary>
-    public UnitExport(DeclarationUnit unit, int member)
+    public UnitExport(SccModel unit, string member)
     {
-        if (member < 0 || member >= unit.Input.Members.Count)
+        var exists =
+            unit switch
+            {
+                SccModel.ValueScc value => value.Value.Members.ContainsKey(member),
+                SccModel.TypeScc type => type.Value.Members.ContainsKey(member),
+
+                _ =>
+                throw new NotImplementedException(nameof(UnitExport) + " does not handle SCC: " + unit.GetType().Name)
+            };
+
+        if (!exists)
             throw new ArgumentException("A dependency export selects a nonexistent member.", nameof(member));
 
         Unit = unit;
@@ -142,13 +153,13 @@ public sealed record UnitExport
     }
 
     /// <summary>The shared artifact, not a copy of its transitive closure.</summary>
-    public DeclarationUnit Unit { get; }
+    public SccModel Unit { get; }
 
-    /// <summary>The selected own-member slot.</summary>
-    public int Member { get; }
+    /// <summary>The selected own-member name.</summary>
+    public string Member { get; }
 
-    /// <summary>The content address and member slot, independent of source ownership.</summary>
-    public string Address => Unit.Address + ":" + Member;
+    /// <summary>A derived caller handle, independent of source ownership.</summary>
+    public string Address => Unit.Fingerprint + ":" + Member;
 
     /// <inheritdoc/>
     public bool Equals(UnitExport? other) => other is not null && Member == other.Member && Unit.Equals(other.Unit);
@@ -157,46 +168,11 @@ public sealed record UnitExport
     public override int GetHashCode() => HashCode.Combine(Unit, Member);
 }
 
-/// <summary>Only own members and direct, already-closed dependencies are stored in an SCC.</summary>
-public sealed record UnitInput(
-    ValueList<Declaration> Members,
-    ValueList<UnitExport> Dependencies,
-    bool PreserveOperators)
-{
-    /// <summary>Type-only facilities expressed as local nominal templates, not executable implementations.</summary>
-    public ValueList<InterfaceDefinition> Interfaces { get; init; } = [];
-
-    /// <summary>Intrinsic runtime representations for own members; empty strings denote ordinary declarations.</summary>
-    public ValueList<string> MemberIntrinsics { get; init; } = [];
-}
-
 /// <summary>A nominal type parameter in a type-only API; source ownership is supplied by the caller.</summary>
 public sealed record NominalShape(string Name, int Arity);
 
 /// <summary>Closed interface syntax and its local nominal parameters.</summary>
 public sealed record InterfaceDefinition(Declaration Syntax, ValueList<NominalShape> Nominals);
-
-/// <summary>A shared immutable SCC artifact. Source bindings are deliberately outside this model.</summary>
-public sealed record DeclarationUnit
-{
-    internal DeclarationUnit(string address, UnitInput input)
-    {
-        Address = address;
-        Input = input;
-    }
-
-    /// <summary>Validated content identity; dependency equality does not walk transitive bodies.</summary>
-    public string Address { get; }
-
-    /// <summary>Own syntax and direct, already-closed dependencies.</summary>
-    public UnitInput Input { get; }
-
-    /// <inheritdoc/>
-    public bool Equals(DeclarationUnit? other) => other is not null && Address == other.Address;
-
-    /// <inheritdoc/>
-    public override int GetHashCode() => StringComparer.Ordinal.GetHashCode(Address);
-}
 
 /// <summary>Caller-owned, independently retained memoization of source-free transformations.</summary>
 public sealed class DeclarationUnitCache : IMarkerCacheLifetime<long>
@@ -204,14 +180,41 @@ public sealed class DeclarationUnitCache : IMarkerCacheLifetime<long>
     private readonly Lock _unitGate = new();
 
     /// <summary>Atomically interns a unit without retaining duplicate representations on concurrent misses.</summary>
-    public DeclarationUnit Intern(UnitInput input)
+    public SccModel Intern(SccModel input)
+        =>
+        Construct(
+            new(
+                SccValidation.Members(input).ToImmutableDictionary(),
+                input is SccModel.ValueScc value ? value.Value.Dependencies : [],
+                input switch
+                {
+                    SccModel.ValueScc values => values.Value.TypeDependencies,
+                    SccModel.TypeScc types => types.Value.TypeDependencies,
+
+                    _ =>
+                    throw new NotImplementedException(nameof(Intern) + " does not handle SCC: " + input.GetType().Name)
+                },
+                input is SccModel.TypeScc type ? type.Value.IntrinsicRepresentations : []),
+            input);
+
+    /// <summary>Looks up the exact construction input before validating or hashing its syntax again.</summary>
+    public SccModel Construct(SccConstructionInput input) => Construct(input, null);
+
+    private SccModel Construct(SccConstructionInput input, SccModel? existing)
     {
         lock (_unitGate)
         {
             if (Units.TryGetValue(input, out var unit))
                 return unit;
 
-            unit = UnitConstruction.Create(input);
+            unit =
+                existing ??
+                SccGraph.Create(
+                    input.Members,
+                    input.Dependencies,
+                    input.TypeDependencies,
+                    input.IntrinsicRepresentations);
+
             Units.Set(input, unit);
             return unit;
         }
@@ -224,37 +227,24 @@ public sealed class DeclarationUnitCache : IMarkerCacheLifetime<long>
     public MemoryCache<Declaration, ValueList<NameQuery>, long> Queries { get; } = new(0);
 
     /// <summary>Interned SCC artifacts.</summary>
-    public MemoryCache<UnitInput, DeclarationUnit, long> Units { get; } = new(0);
-
-    /// <summary>Source-independent recursive slot labeling.</summary>
-    public MemoryCache<UnitInput, OrderedUnitInput, long> Orderings { get; } = new(0);
+    public MemoryCache<SccConstructionInput, SccModel, long> Units { get; } = new(0);
 
     /// <summary>Own-member compiler projections, keyed by source-free content address.</summary>
-    public MemoryCache<string, ImmutableDictionary<DeclQualifiedName, Declaration>, long> Projections { get; } = new(0);
+    public MemoryCache<SccModel, ImmutableDictionary<DeclQualifiedName, Declaration>, long> Projections { get; } =
+        new(0);
 
-    /// <summary>Labels recursive slots without repeating this transformation on equal inputs.</summary>
-    public OrderedUnitInput Order(UnitInput input)
-    {
-        if (Orderings.TryGetValue(input, out var ordered))
-            return ordered;
+    /// <summary>Binding-preserving compiler views of own syntax and direct dependency metadata.</summary>
+    public MemoryCache<SccModel, SccCompilerView, long> CompilerViews { get; } = new(0);
 
-        ordered = UnitOrdering.Apply(input);
-        Orderings.Set(input, ordered);
-        return ordered;
-    }
+    /// <summary>Syntax graph transformations can return several resulting SCCs.</summary>
+    public MemoryCache<SccSyntaxInput, ImmutableDictionary<string, UnitExport>, long> SyntaxTransforms { get; } =
+        new(0);
 
-    /// <summary>Source-free lowering artifacts; artifact names encode content and local slots only.</summary>
-    public SourceCompilationCaches Lowering { get; }
+    /// <summary>Own resolved compiler functions, independently reusable from syntax passes.</summary>
+    public MemoryCache<SccModel, SccLoweringResult, long> CompilerModels { get; } = new(0);
 
-    private readonly MemoryCache<SourceTransformationInput, Declaration, long> _operators = new(0);
-
-    private readonly MemoryCache<SourceTransformationInput, LoweredSourceFunction, long> _functions = new(0);
-
-    /// <summary>Creates independently owned storage; no global interning or history is required.</summary>
-    public DeclarationUnitCache()
-    {
-        Lowering = new(_operators, _functions) { OperatorLifetime = _operators, SemanticLifetime = _functions };
-    }
+    /// <summary>Owner-local closure conversion, independent of unrelated roots and compiler metadata.</summary>
+    public MemoryCache<LambdaLiftingInput, LambdaLiftingResult, long> LambdaLifting { get; } = new(0);
 
     /// <summary>Pure SCC emission results, independent of the calling source path.</summary>
     public MemoryCache<SccCompilationInput,
@@ -264,15 +254,22 @@ public sealed class DeclarationUnitCache : IMarkerCacheLifetime<long>
     /// <summary>Number of retained canonical declaration/input combinations.</summary>
     public int Count => Canonical.Count;
 
+    /// <summary>Independent working-set lifetimes for long-lived compilation hosts.</summary>
+    public IReadOnlyList<IMarkerCacheLifetime<long>> Lifetimes =>
+        [
+            Canonical, Queries, Units, Projections, CompilerViews, SyntaxTransforms,
+            CompilerModels, LambdaLifting, Emission
+        ];
+
     /// <inheritdoc/>
     public ICacheUsage SetMarker(long marker)
     {
         var usages =
             new[]
             {
-                Canonical.SetMarker(marker), Queries.SetMarker(marker), Units.SetMarker(marker), Orderings.SetMarker(marker),
-                Projections.SetMarker(marker), Emission.SetMarker(marker),
-                Lowering.OperatorLifetime!.SetMarker(marker), Lowering.SemanticLifetime!.SetMarker(marker)
+                Canonical.SetMarker(marker), Queries.SetMarker(marker), Units.SetMarker(marker),
+                Projections.SetMarker(marker), CompilerViews.SetMarker(marker), SyntaxTransforms.SetMarker(marker),
+                CompilerModels.SetMarker(marker), LambdaLifting.SetMarker(marker), Emission.SetMarker(marker)
             };
 
         return new CombinedUsage(usages);
@@ -287,11 +284,12 @@ public sealed class DeclarationUnitCache : IMarkerCacheLifetime<long>
         await Canonical.TrimAsync(budget, retention, cancellationToken);
         await Queries.TrimAsync(budget, retention, cancellationToken);
         await Units.TrimAsync(budget, retention, cancellationToken);
-        await Orderings.TrimAsync(budget, retention, cancellationToken);
         await Projections.TrimAsync(budget, retention, cancellationToken);
+        await CompilerViews.TrimAsync(budget, retention, cancellationToken);
+        await SyntaxTransforms.TrimAsync(budget, retention, cancellationToken);
+        await CompilerModels.TrimAsync(budget, retention, cancellationToken);
+        await LambdaLifting.TrimAsync(budget, retention, cancellationToken);
         await Emission.TrimAsync(budget, retention, cancellationToken);
-        await Lowering.OperatorLifetime!.TrimAsync(budget, retention, cancellationToken);
-        await Lowering.SemanticLifetime!.TrimAsync(budget, retention, cancellationToken);
     }
 
     /// <summary>Releases all retained semantic artifacts.</summary>
@@ -300,11 +298,12 @@ public sealed class DeclarationUnitCache : IMarkerCacheLifetime<long>
         Canonical.Clear();
         Queries.Clear();
         Units.Clear();
-        Orderings.Clear();
         Projections.Clear();
+        CompilerViews.Clear();
+        SyntaxTransforms.Clear();
+        CompilerModels.Clear();
+        LambdaLifting.Clear();
         Emission.Clear();
-        _operators.Clear();
-        _functions.Clear();
     }
 
     private sealed class CombinedUsage(ICacheUsage[] usages) : ICacheUsage

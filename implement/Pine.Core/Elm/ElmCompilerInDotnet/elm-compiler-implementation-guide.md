@@ -431,23 +431,38 @@ The [frontend design contract](../../../../explore/internal-analysis/2026-10-07-
 + Reuse unchanged work based on the consulted inputs, including scope changes and failed lookups, while preserving cross-declaration optimization.
 + Do not introduce compiler-level snapshots or program revisions. Editor coordination and Interactive history belong to callers.
 
-`Canonicalization.CanonicalizeDeclarations` indexes source scopes, resolves references in demanded bodies, and demands their owning declarations. Its distinct type/value indexes handle shared spellings without false naming clashes. Caller-owned parse dictionaries reuse unchanged source texts. A caller-owned `Canonicalization.DeclarationCache` memoizes canonicalization over concrete declaration syntax, its module identity, and only the immutable resolution facts actually consulted. No cache key is a program revision.
+`Canonicalization.CanonicalizeDeclarations` indexes source scopes, resolves references in demanded bodies, and demands their owning declarations. Its distinct type/value indexes handle shared spellings without false naming clashes. Caller-owned parse dictionaries reuse unchanged source texts. Semantic processing follows [Elm Dependency-Closed Declaration Units](../../../../guide/elm-dependency-closed-declaration-units.md).
 
-On a miss, the cache retains typed input observations: module-name membership
-(including shadowing checks), consulted type/value imports, aliases, operator
-targets, resolved symbol owners or ambiguity, and negative-lookup availability.
-On a hit, it compares these facts directly against the current resolution inputs;
-it neither serializes a scope nor constructs a temporary projected-scope object.
-Unrelated exports, declarations, imports, and dependency bodies do not invalidate
-a declaration whose consulted facts remain equal. Changed or formerly missing
-facts invalidate it, including constructor ownership and diagnostic details.
-Intrinsic compiler implementations are constants, not caller-supplied inputs.
+Declaration templates are keyed by range-free abstract syntax, explicit anonymous
+resolution answers, and canonicalization options. The boundary supplies current
+answers, including missing, private, ambiguous, shadowing, and fresh-name
+observations, before every lookup. Dependency bodies, package labels, source
+owners, and source locations are not template inputs. Diagnostics and
+output-to-input structural paths are rebound to the current caller's concrete
+syntax outside semantic caching.
 
-Cache entries contain immutable input snapshots and results, not resolver
-delegates, source-context closures, or the compilation driver's mutable state.
-Dependency names and source references survive hits so demand traversal and
-diagnostics remain current. Concrete syntax includes ranges: a moved declaration
-does not reuse stale source locations.
+`DeclarationUnits.SccModel` distinguishes `ValueScc` from `TypeScc`. Value members
+are functions, ports, and infix definitions; type members are choice types and
+aliases. References within a component are unqualified. Direct dependencies
+are keyed by qualified symbols in separate value and type collections.
+Constructor keys select their owning type member without replacing the
+constructor symbol. Several keys, including type and constructor keys, can
+share the same retained `TypeSccModel`. Relative dependency qualifiers preserve
+distinct binding roles even when their target artifacts are equal.
+
+Immutable SCC values embed shared dependency values, not transitive copies or
+semantic SCC identifiers. Internal fingerprints accelerate comparison and
+derived compiler naming. Fingerprints now stream the versioned binary SCC
+format into SHA-256, with external references to binary declaration hashes and
+dependency SCC fingerprints instead of serializing JSON. The compiler-independent
+AST codec supports shared expression/annotation references across declaration
+batches; see the [binary encoding guide](../../../../guide/elm-abstract-syntax-binary-encoding.md)
+for the wire formats, streaming APIs, and persistence/resolver contract.
+Construction validates member kinds, namespace-specific
+symbol selection, closure, and strong connectivity; concurrent interning returns
+one retained representation. `SccGraph.Repartition` rebuilds components after
+edge changes, qualifies newly external member references with collision-free
+names, and returns a member-to-export map that can select multiple SCCs.
 
 Retain one `Canonicalization.DeclarationCache` for the desired application scope
 and pass it via `canonicalizationCache` to compilation, analysis, or query entry
@@ -456,13 +471,43 @@ server owns one for repeated diagnostics. The cache supports concurrent callers,
 deduplicates equal input versions on insertion, exposes retained-entry `Count`,
 and releases entries through `Clear`. In-flight calls may publish results after
 a clear. Different historical input combinations remain reusable until cleared
-or the cache is discarded.
+or the cache is discarded. When omitted, this cache and every compiler stage's
+storage are created for that invocation, not retained globally.
 
-The declaration lookup uses a value-type key with cached hashing. Its syntax-node
-and immutable module-sequence components also memoize structural hashes, as do
-qualified declaration names and imported-module identities. Input-observation
-lookup keys cache their hashes as well. Repeated cache lookup does not rebuild
-or recursively rehash the syntax or resolution scope.
+`DeclarationCache.Semantic` also owns independently keyed caches for SCC
+construction, compiler projections and binding-preserving views, builtin/core
+operator lowering, debug-log removal, conversion to compiler functions,
+owner-local lambda lifting, and SCC emission (including emission failures).
+Syntax passes consume and produce SCC graphs. Removing edges can split an SCC;
+the pipeline's `UnitExports` and `SourceFunctionIds` describe the resulting
+exports. Derived views retain own syntax and direct dependency metadata, not
+dependency function bodies. Closure traversal visits each shared component once
+through both dependency collections.
+
+Pass the same `canonicalizationCache` to successive `LowerToCompilerModel`,
+`CompileInteractiveEnvironment`, or `CompileResolvedEnvironment` calls to reuse
+all stages. Operator lowering and compiler-model conversion operate on SCC
+inputs and cache only SCC results. Their pass-local inference contexts share
+derived binding-preserving views; no per-function anonymous projection,
+environment fingerprint, or nested lowering cache is constructed. Fully cached
+passes skip inference-context construction entirely. Partial misses prepare only
+the missing SCCs' dependency closure, plus native String/Char type metadata,
+not unrelated cached roots. Marker/trim controls and
+`Clear` cover the graph caches as well as canonicalization.
+
+The uncached declaration helpers are used for execution-local generated closures
+and standalone syntax/IR analysis. They share the lowering kernels, not a second
+semantic cache architecture. `SourceLoweringProjection`, `SourceCompilationCaches`,
+and the `compilationCaches` parameters have been removed. Retain the canonicalization
+bundle instead; changing a dependency body intentionally changes dependent SCC keys.
+
+Elm test watch sessions and language-server testing retain this same bundle for
+syntax-preserving discovery and runner compilation. Runner compilation lowers
+reachable source SCCs through `SccCompiler`, rebinds generated callbacks to their
+resulting exports, and caches pure source emission. Runtime captures remain
+execution-local and are never inserted into source SCC, lambda-lifting, or
+emission storage. Their hosts mark each semantic tier independently so old
+transformation versions can be trimmed even when canonical templates stay warm.
 
 `AnalyzeApplication` checks application declarations and import/exposing diagnostics without lowering or emission. `QueryDeclaration` uses the same demand logic for definition and partial type information. These operations return source-located diagnostics, including unavailable dependencies rather than treating incomplete analysis as clean.
 
@@ -474,16 +519,18 @@ At a high level, the compiler processes demanded declarations in the following o
 
 1. Parse Elm source into Elm syntax trees.
 2. Canonicalize explicit roots and their semantic dependencies, using source scopes for resolution.
-3. Lambda-lift closures into top-level helper functions.
-4. Run the specialization stage, unless the caller disables the syntax-optimization pipeline.
-5. Run the inlining stage on the already-specialized declarations.
-6. Run lambda lifting again on code introduced or exposed by specialization and inlining.
-7. Run builtin-operator lowering on the optimized Elm syntax.
-8. Compile the resulting Elm expressions and declarations to Pine values.
+3. Construct the typed, dependency-closed SCC graph.
+4. Unless syntax optimization is disabled, lower builtin/core operators and
+   optionally remove `Debug.log`, rebuilding the graph after each pass.
+5. Convert SCCs to the compiler-owned model, then lambda-lift closures.
+6. Emit SCC callable artifacts and package only the requested roots.
 
 Source-oriented analysis APIs still accept source syntax. The compilation pipeline does not synthesize module shells after canonicalization. Emission groups the requested exports by namespace for existing environment consumers, but does not export dependency declarations.
 
-The specialization and inlining stages therefore work on already-canonicalized, already-lambda-lifted Elm syntax. They are still operating on Elm syntax trees at this point; they do not work on Pine expressions yet.
+Future Elm syntax optimizations, including inlining and monomorphization, operate
+on the SCC graph before conversion to the compiler-owned model. They may change
+the SCC partition and must preserve dependency binding roles when moving syntax
+between scopes; they are not currently enabled by the standard pipeline.
 
 ### Canonicalization
 
@@ -509,13 +556,20 @@ Besides canonicalizing references in module contents, the canonicalization stage
 
 Canonicalization diagnostics identify the owning declaration rather than merely its source module. The terminal displays every declaration in the demand chain, each declaration location, the exact reference in its predecessor, and relevant import/alias/exposing context. Same-module hops are not collapsed. Type and constructor references retain both the referenced symbol and the owning declaration. Backend errors use the same declaration-chain display and report unavailable executable implementations without presenting dependency-layout internals as a user remedy.
 
-`DeclarationReference` records this source provenance; cached declaration results retain it so warm and cold diagnostic output agree. Imports remain source-scope metadata, not dependency edges. Unresolved-reference details distinguish missing sources or APIs from export and scope violations, and point to the supplied target source when available. Resolved compilation failures also list authoritative package replacement identities.
+`DeclarationReference` records this source provenance in the caller's result,
+outside shared semantic cache values. Imports remain source-scope metadata, not
+dependency edges. Unresolved-reference details distinguish missing sources or
+APIs from export and scope violations, and point to the supplied target source
+when available. Resolved compilation failures also list authoritative package
+replacement identities.
 
 `AnalyzeApplication` and `QueryDeclaration` reuse the resolution explanations and expose related source locations. Rootless analysis does not label its declarations as compilation roots. The CLI treats `ElmCompilationException` as an expected diagnostic failure, prints the message to the error console and returns a failing exit status; unexpected implementation exceptions are not hidden by a broad catch.
 
 ### Specialization
 
-The dedicated specialization stage runs after the first lambda-lifting pass and before the dedicated inlining stage. The compiler currently enters this stage from `ElmCompiler.cs` by calling `ElmSyntaxSpecialization.Apply(...)` on the lambda-lifted modules.
+The standalone `ElmSyntaxSpecialization` helper implements specialization over
+flat syntax. It is not part of the standard SCC pipeline. A future graph-based
+stage must preserve dependency scopes and rebuild the SCC partition.
 
 **Specialization** means creating an additional declaration whose parameter list or return type is specialized for a particular call pattern.
 
@@ -555,15 +609,16 @@ The input to the stage is a set of Elm declaration syntax nodes. The output is a
 
 The current stage also has deliberate limits:
 
-+ It is optional and can be disabled by the caller.
-+ It does not try to specialize every call site; the current compiler configuration restricts it to opportunities that align with the current function-oriented heuristics.
++ Standalone callers configure it independently; the standard compiler does not enable it.
++ It does not try to specialize every call site; its configuration restricts it to opportunities that align with the current function-oriented heuristics.
 + It avoids relying on local let-bound helper references as specialization triggers, because those can interact poorly with lifted dependencies across module boundaries.
 + It preserves recursion by generating specialized recursive variants instead of blindly expanding recursive calls inline.
 + It skips specialization for very large function bodies to avoid excessive work and code growth.
 
 ### Inlining
 
-The dedicated inlining stage runs after specialization and before the second lambda-lifting pass.
+The standalone `ElmSyntaxInlining` helper can follow standalone specialization.
+Neither flat-syntax helper runs in the standard SCC pipeline.
 
 #### Definition of Inlining
 
@@ -595,7 +650,8 @@ Because of these limits, there are optimizations that remain outside this stage.
 
 ### Builtin Operator Lowering
 
-After specialization, inlining, and the second lambda-lifting pass, the compiler runs a builtin-operator-lowering stage.
+The standard compiler runs builtin/core operator lowering on the canonical SCC
+graph, before conversion to the compiler model and lambda lifting.
 
 This stage stays in Elm syntax, but it rewrites certain canonicalized Elm operator applications into explicit builtin-oriented Elm expressions that later compilation stages can map more directly into Pine. In particular, when type inference proves an arithmetic operation is on `Int`, the stage lowers:
 
@@ -631,11 +687,12 @@ The check is recursive over composite types via a single `TypeSupportsPrimitiveE
 
 ### Current Implementation Deviations From This Conceptual Split
 
-The current implementation already uses separate pipeline stages in `ElmCompiler.cs`, but it still deviates from the conceptual split above in a few ways:
+The standalone optimization helpers still deviate from the conceptual split
+above in a few ways. They must be adapted to SCC graphs before integration:
 
 + The main implementation still lives in `Inlining.cs`, which contains both specialization and inlining logic behind the internal `PipelineStage` enum (`Combined`, `SpecializationOnly`, `InliningOnly`). The public wrapper classes `ElmSyntaxSpecialization` and `ElmSyntaxInlining` are currently thin entry points over that shared implementation, rather than fully separate implementations.
-+ The shared implementation still exposes a combined entry point, `Inlining.Inline(...)`, which conceptually mixes specialization and inlining even though the production compiler pipeline now calls the two dedicated stages separately.
-+ Configuration and heuristics are still named from the inlining perspective: the shared stage uses `Inlining.Config` and the helper `ShouldInline(...)` to decide not only classic inlining but also several specialization opportunities. So the implementation boundary is cleaner in the pipeline than it is in the naming and control flow inside the optimization engine.
++ The shared implementation still exposes a combined entry point, `Inlining.Inline(...)`, which conceptually mixes specialization and inlining. Neither that entry point nor its dedicated wrappers runs in the production compiler pipeline.
++ Configuration and heuristics are still named from the inlining perspective: the shared stage uses `Inlining.Config` and the helper `ShouldInline(...)` to decide not only classic inlining but also several specialization opportunities. The wrapper boundary is cleaner than the naming and control flow inside the optimization engine.
 + `Inlining.cs` still contains logic and comments that treat specialization-generated declarations as part of the broader “inlining” machinery, for example in `InlineModule(...)`, which collects generated declarations and immediately reprocesses them. That behavior is correct for the shared engine, but it means the code structure still blurs the distinction between “specialization adds declarations” and “inlining rewrites existing declarations only”.
 
 ## Let Blocks
@@ -877,8 +934,10 @@ cannot retain a hash for old fields. Publication uses the same atomic encoding
 as concrete-syntax hashes; concurrent first readers may compute the same pure
 hash, while subsequent reads return the stored value without traversing children
 or maps. Fieldless variants use their constant type hash.
-This is preparation for memoizing `CompileScc`; it does not install an SCC cache
-or change application cache lifetime.
+The invocation's `DeclarationCache.Semantic.Emission` memoizes `CompileScc`,
+including source-independent failures. Reusing the cache bundle explicitly
+extends its lifetime across compilations; source diagnostic presentation is
+always reconstructed from the current invocation.
 
 `ElmCompiler.LowerToCompilerModel` returns `CompilationPipelineStageResults`.
 `CompilerProgram` is the actual lowering result; `FunctionsForEmission` projects

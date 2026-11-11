@@ -77,8 +77,6 @@ public class TestWatchCommandTests
         session.CacheLearning.Should().NotBeNull();
         session.CacheStatistics.Should().BeNull();
         session.GetCacheStatisticsSnapshot().Should().BeNull();
-        session.CompilationCaches.OperatorLifetime.Should().NotBeNull();
-        session.CompilationCaches.SemanticLifetime.Should().NotBeNull();
         session.CacheLearning!.CurrentPolicy.Should().BeSameAs(InvocationCachePolicy.Empty);
         var snapshot = session.CacheLearning.GetSnapshot();
         snapshot.AcceptedCount.Should().Be(0);
@@ -1025,7 +1023,14 @@ public class TestWatchCommandTests
         using var directory = new TestDirectory();
         Directory.CreateDirectory(Path.Combine(directory.Path, "tests"));
         File.WriteAllText(Path.Combine(directory.Path, "elm.json"), ElmJson);
-        File.WriteAllText(Path.Combine(directory.Path, "tests", "Tests.elm"), FuzzTests);
+
+        var source =
+            FuzzTests
+            .Replace("suite =", "answer value = value\nsuite =", StringComparison.Ordinal)
+            .Replace("Expect.equal value value", "Expect.equal value (answer value)", StringComparison.Ordinal);
+
+        var sourcePath = Path.Combine(directory.Path, "tests", "Tests.elm");
+        File.WriteAllText(sourcePath, source);
         using var cancellation = new CancellationTokenSource(s_wait);
         var output = new NotifyingWriter();
         var console = CreateConsole(output);
@@ -1089,10 +1094,13 @@ public class TestWatchCommandTests
             first.Learning.PendingCount.Should().BeLessThanOrEqualTo(16);
             first.Learning.SampleCount.Should().BeLessThanOrEqualTo(8);
             first.Learning.IsDisposed.Should().BeFalse();
-            var operatorEntries = first.Session.CompilationCaches.OperatorLifetime!.Count;
-            var semanticEntries = first.Session.CompilationCaches.SemanticLifetime!.Count;
-            operatorEntries.Should().BeGreaterThan(0);
-            semanticEntries.Should().BeGreaterThan(0);
+            var compilerCache = first.Session.DeclarationCanonicalization.Semantic;
+            var syntaxEntries = compilerCache.SyntaxTransforms.Count;
+            var modelEntries = compilerCache.CompilerModels.Count;
+            var emissionEntries = compilerCache.Emission.Count;
+            syntaxEntries.Should().BeGreaterThan(0);
+            modelEntries.Should().BeGreaterThan(0);
+            emissionEntries.Should().BeGreaterThan(0);
             File.WriteAllText(Path.Combine(directory.Path, "unrelated.txt"), "trigger without changing tests");
             watcher.RaiseChange();
             var second = await sessions.Reader.ReadAsync().AsTask().WaitAsync(s_wait);
@@ -1106,8 +1114,9 @@ public class TestWatchCommandTests
             second.Sources.Should().Be(first.Sources);
             second.Canonical.Should().Be(first.Canonical);
             second.Prepared.Should().Be(first.Prepared);
-            second.Session.CompilationCaches.OperatorLifetime!.Count.Should().Be(operatorEntries);
-            second.Session.CompilationCaches.SemanticLifetime!.Count.Should().Be(semanticEntries);
+            compilerCache.SyntaxTransforms.Count.Should().Be(syntaxEntries);
+            compilerCache.CompilerModels.Count.Should().Be(modelEntries);
+            compilerCache.Emission.Count.Should().Be(emissionEntries);
             second.Session.InvocationResults.Count.Should().Be(0);
             second.Learning.AcceptedCount.Should().BeGreaterThanOrEqualTo(first.Learning.AcceptedCount);
 
@@ -1117,6 +1126,23 @@ public class TestWatchCommandTests
             second.Learning.RunCount.Should().BeGreaterThanOrEqualTo(first.Learning.RunCount);
             second.Learning.IsDisposed.Should().BeFalse();
             factoryCalls.Should().Be(1);
+
+            File.WriteAllText(
+                sourcePath,
+                source.Replace("answer value = value", "answer value = value + 1", StringComparison.Ordinal));
+
+            watcher.RaiseChange();
+            var edited = await sessions.Reader.ReadAsync().AsTask().WaitAsync(s_wait);
+            (await output.NextRun()).Should().Contain("TEST RUN FAILED");
+            edited.Session.Should().BeSameAs(first.Session);
+            compilerCache.SyntaxTransforms.Count.Should().BeGreaterThan(syntaxEntries);
+            compilerCache.CompilerModels.Count.Should().BeGreaterThan(modelEntries);
+            compilerCache.Emission.Count.Should().BeGreaterThan(emissionEntries);
+
+            File.WriteAllText(sourcePath, source);
+            watcher.RaiseChange();
+            (await sessions.Reader.ReadAsync().AsTask().WaitAsync(s_wait)).Session.Should().BeSameAs(first.Session);
+            (await output.NextRun()).Should().Contain("TEST RUN PASSED");
         }
         finally
         {

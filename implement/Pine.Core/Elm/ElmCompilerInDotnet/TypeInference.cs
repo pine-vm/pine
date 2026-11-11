@@ -3499,7 +3499,7 @@ public static partial class TypeInference
 
     /// <summary>
     /// Immutable signature environment shared by function inference calls in a lowering pass.
-    /// Qualified names and function type information are prepared once, rather than per function.
+    /// Qualified names, unqualified fallback lookup and function types are prepared once per pass.
     /// </summary>
     public sealed class FunctionInferenceEnvironment
     {
@@ -3548,10 +3548,34 @@ public static partial class TypeInference
         }
     }
 
-    private sealed class FunctionSignatureLookup(
-        IReadOnlyDictionary<string, InferredType> source,
-        IReadOnlyDictionary<string, InferredType> typeOnly) : IReadOnlyDictionary<string, InferredType>
+    private sealed class FunctionSignatureLookup : IReadOnlyDictionary<string, InferredType>
     {
+        private readonly IReadOnlyDictionary<string, InferredType> source;
+
+        private readonly IReadOnlyDictionary<string, InferredType> typeOnly;
+
+        private readonly Dictionary<string, InferredType> unqualified = new(StringComparer.Ordinal);
+
+        public FunctionSignatureLookup(
+            IReadOnlyDictionary<string, InferredType> source,
+            IReadOnlyDictionary<string, InferredType> typeOnly)
+        {
+            this.source = source;
+            this.typeOnly = typeOnly;
+
+            // Preserve the suffix scan's first match and source-over-interface precedence.
+            foreach (var (name, type) in Entries)
+            {
+                var separator = name.LastIndexOf('.');
+
+                if (separator >= 0)
+                    unqualified.TryAdd(name[(separator + 1)..], type);
+            }
+        }
+
+        public bool TryGetUnqualified(string name, out InferredType? type) =>
+            unqualified.TryGetValue(name, out type);
+
         private IEnumerable<KeyValuePair<string, InferredType>> Entries =>
             source.Concat(typeOnly.Where(entry => !source.ContainsKey(entry.Key)));
 
@@ -4020,12 +4044,21 @@ public static partial class TypeInference
                     else if (funcRef.QualifiedName.Namespaces.Count is 0)
                     {
                         // A qualified name must never borrow another module's signature.
-                        foreach (var kvp in functionSignatures)
+                        if (functionSignatures is FunctionSignatureLookup lookup)
                         {
-                            if (kvp.Key.EndsWith("." + funcRef.QualifiedName.DeclName, StringComparison.Ordinal))
+                            lookup.TryGetUnqualified(funcRef.QualifiedName.DeclName, out funcType);
+                        }
+                        else
+                        {
+                            var suffix = "." + funcRef.QualifiedName.DeclName;
+
+                            foreach (var kvp in functionSignatures)
                             {
-                                funcType = kvp.Value;
-                                break;
+                                if (kvp.Key.EndsWith(suffix, StringComparison.Ordinal))
+                                {
+                                    funcType = kvp.Value;
+                                    break;
+                                }
                             }
                         }
                     }
