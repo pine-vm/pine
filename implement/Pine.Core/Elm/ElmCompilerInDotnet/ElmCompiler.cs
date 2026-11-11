@@ -149,7 +149,7 @@ public partial class ElmCompiler
                     prepared.ToDictionary(entry => entry.Key.FullName, entry => entry.Value),
                     lowerOperators: true,
                     lowerCoreBasics: true,
-                    removeDebugLog: false,
+                    removeDebugLog: enabled.RemoveDebugLogApplications,
                     canonicalizationCache.Semantic);
 
             if (lowering.IsErrOrNull() is { } lowerError)
@@ -158,24 +158,6 @@ public partial class ElmCompiler
             prepared =
                 lowering.Extract(error => throw new InvalidOperationException(error))
                 .ToDictionary(entry => DeclQualifiedName.FromString(entry.Key), entry => entry.Value);
-
-            if (enabled.RemoveDebugLogApplications)
-            {
-                var removal =
-                    DeclarationUnits.SccCompiler.Transform(
-                        prepared.ToDictionary(entry => entry.Key.FullName, entry => entry.Value),
-                        lowerOperators: false,
-                        lowerCoreBasics: false,
-                        removeDebugLog: true,
-                        canonicalizationCache.Semantic);
-
-                if (removal.IsErrOrNull() is { } removalError)
-                    return removalError;
-
-                prepared =
-                    removal.Extract(error => throw new InvalidOperationException(error))
-                    .ToDictionary(entry => DeclQualifiedName.FromString(entry.Key), entry => entry.Value);
-            }
         }
 
         var program =
