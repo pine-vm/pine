@@ -2521,7 +2521,7 @@ wordsHelper currentWordStart currentWords offset chars =
         else
             Pine_builtin.concat
                 [ currentWords
-                , [ String currentWordChars ]
+                , [ fromList currentWordChars ]
                 ]
 
     else
@@ -2556,7 +2556,7 @@ wordsHelper currentWordStart currentWords offset chars =
             else
                 wordsHelper
                     (Pine_builtin.int_add [ offset, 1 ])
-                    (Pine_builtin.concat [ currentWords, [ String currentWordChars ] ])
+                    (Pine_builtin.concat [ currentWords, [ fromList currentWordChars ] ])
                     (Pine_builtin.int_add [ offset, 1 ])
                     chars
 
