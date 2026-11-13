@@ -1332,9 +1332,9 @@ public class ValueEncodingBinaryDeterministicTests
                     return
                         expression == allowedExpression
                         ?
-                        Result<string, PineValue>.ok(env)
+                        ValueResult<string, PineValue>.ok(env)
                         :
-                        Result<string, PineValue>.err("Function is not whitelisted.");
+                        ValueResult<string, PineValue>.err("Function is not whitelisted.");
                 });
 
         var rejection =
@@ -1398,7 +1398,7 @@ public class ValueEncodingBinaryDeterministicTests
                 environment
                 :
                 null,
-                evaluate: (_, _) => Result<string, PineValue>.err("Eval rejected."));
+                evaluate: (_, _) => ValueResult<string, PineValue>.err("Eval rejected."));
 
         result.Should().Be(
             Result<DecodeError, PineValue>.err(
@@ -1415,6 +1415,19 @@ public class ValueEncodingBinaryDeterministicTests
 
         DecodeRootExpectingErr(encoded).Should().Be(
             new DecodeError.EvalRejected(0, expression, environment, "No evaluation delegate was provided."));
+    }
+
+    [Fact]
+    public void Decode_rejects_uninitialized_eval_result()
+    {
+        var encoded = EncodeEval(EncodeToBytes(PineValue.EmptyBlob), EncodeToBytes(PineValue.EmptyList));
+
+        Action decode =
+            () => ValueEncodingBinaryDeterministic.DecodeRoot(
+                encoded,
+                evaluate: (_, _) => default);
+
+        decode.Should().Throw<InvalidOperationException>();
     }
 
     [Fact]
@@ -1561,7 +1574,7 @@ public class ValueEncodingBinaryDeterministicTests
         IReadOnlyDictionary<int, FrozenSet<PineValue.BlobValue>>? blobInstancesToReuse = null,
         IReadOnlyDictionary<int, FrozenSet<PineValue.ListValue>>? listInstancesToReuse = null,
         Func<ReadOnlyMemory<byte>, PineValue?>? resolveExternalReference = null,
-        Func<PineValue, PineValue, Result<string, PineValue>>? evaluate = null)
+        Func<PineValue, PineValue, ValueResult<string, PineValue>>? evaluate = null)
     {
         var decodeResult =
             ValueEncodingBinaryDeterministic.DecodeRoot(

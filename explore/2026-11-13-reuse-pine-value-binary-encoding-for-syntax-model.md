@@ -107,3 +107,54 @@ Response from Copilot follows:
 > **Bottom line:** allocation-neutral reuse for Pine is achievable. Equivalent efficiency to the dedicated syntax codec is not established, and the proposed Eval envelope introduces concrete costs that should be measured before committing to it.
 > 
 > *Source inspection only; no prototype or throughput measurements were performed.*
+
+
+> About the eval overhead specifically.
+> Reduce the heap allocation for result by switching to a ValueResult type, following the .NET pattern of ValueTask, ValueTuple.
+> 
+> Also explain, how could we further reduce overhead for the eval decoding?
+
+
+> ## Follow-up: Reducing Eval decoding overhead
+> 
+> The Eval callback now returns `ValueResult<string, PineValue>`, a readonly
+> struct with a discriminator and typed success/error payloads. This removes the
+> per-Eval `Result.Ok` or `Result.Err` wrapper allocation without boxing payloads.
+> An uninitialized result throws rather than silently becoming a success or a
+> rejection. The outer `DecodeRoot` still returns the existing `Result` once per
+> decode; the wire format, evaluation order, rejection details and completed-Eval
+> reference reuse are unchanged.
+> 
+> Further opportunities, not implemented in this change:
+> 
+> 1. **Remove the two-element Eval array.** Keep the decoded expression directly
+>    in the pending Eval frame; when the environment completes, pass it directly
+>    to the callback. Lists still need their own element storage.
+> 2. **Store pending frames as structs in an explicit stack.** This removes the
+>    per-Eval/per-list frame object, but the stack's backing storage still allocates
+>    or grows. Preserve iterative decoding for deeply nested inputs. Mutating a
+>    struct returned by `Stack<T>.Peek` only changes a copy, so use explicit
+>    write-back or indexed/ref access to the actual frame storage. Clear popped
+>    reference fields to avoid retaining completed trees.
+> 3. **Avoid materializing a Pine list for constructor arguments.** In the
+>    proposed generic syntax decoder, an inline environment list can instead
+>    produce its argument array directly, or feed a fixed-arity constructor
+>    accumulator. Reuse final child-array storage where its element type permits.
+>    The environment's address remains referenceable: skipping its representation
+>    needs a restricted profile or equivalent lazy materialization. A general
+>    evaluator may retain or return the environment, so blindly pooling its array
+>    or exposing only a borrowed span would change the contract.
+> 4. **Resolve constructors to reusable handles.** For the syntax profile, resolve
+>    whitelisted expression hashes to stable constructor identifiers and dispatch
+>    directly instead of constructing/interpreting expression Pine values.
+>    Earlier constructor references can use internal references. Keep this policy
+>    explicit: the general callbacks need not be pure or return stable instances.
+> 5. **Do not memoize arbitrary Eval calls by their arguments.** Distinct Eval
+>    entries must still invoke the callback even if their arguments are equal;
+>    only internal references to a completed Eval reuse its result. A separate
+>    pure-constructor profile can impose stronger guarantees.
+> 
+> These changes target result, frame, argument-array and dispatch overhead
+> separately. They do not remove decoded-node allocations, the reference table,
+> the Eval wire envelope or the need to benchmark total allocated bytes and CPU
+> time. Structs avoid wrapper objects but can increase copying and stack storage.

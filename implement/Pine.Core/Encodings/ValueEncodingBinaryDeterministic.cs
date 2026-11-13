@@ -214,6 +214,7 @@ public static partial class ValueEncodingBinaryDeterministic
     /// <param name="evaluate">
     /// Optional delegate for entries tagged with <see cref="TagEval"/>. It receives the already resolved
     /// encoded expression value and environment value and returns the resulting value or a rejection reason.
+    /// Its value-type result avoids allocating a result wrapper for each Eval.
     /// Each Eval entry invokes the delegate once, after both arguments have been decoded.
     /// Internal references to a completed Eval reuse its result without invoking the delegate again.
     /// When this delegate is not given, every Eval is rejected.
@@ -227,7 +228,7 @@ public static partial class ValueEncodingBinaryDeterministic
         IReadOnlyDictionary<int, FrozenSet<PineValue.BlobValue>>? blobInstancesToReuse = null,
         IReadOnlyDictionary<int, FrozenSet<PineValue.ListValue>>? listInstancesToReuse = null,
         Func<ReadOnlyMemory<byte>, PineValue?>? resolveExternalReference = null,
-        Func<PineValue, PineValue, Result<string, PineValue>>? evaluate = null)
+        Func<PineValue, PineValue, ValueResult<string, PineValue>>? evaluate = null)
     {
         var decoded = new Dictionary<long, PineValue>();
 
@@ -442,26 +443,18 @@ public static partial class ValueEncodingBinaryDeterministic
 
                         var evaluationResult = evaluate(encodedExpression, environment);
 
-                        switch (evaluationResult)
+                        if (evaluationResult.IsErr)
                         {
-                            case Result<string, PineValue>.Ok ok:
-                                completedValue = ok.Value;
-                                decoded[parent.StartAddress] = completedValue;
-                                break;
-
-                            case Result<string, PineValue>.Err err:
-                                return
-                                    new DecodeError.EvalRejected(
-                                        Offset: parent.StartAddress,
-                                        EncodedExpression: encodedExpression,
-                                        Environment: environment,
-                                        Reason: err.Value);
-
-                            default:
-                                throw new NotImplementedException(
-                                    "DecodeRoot does not handle evaluation result variant: " +
-                                    evaluationResult.GetType().Name);
+                            return
+                                new DecodeError.EvalRejected(
+                                    Offset: parent.StartAddress,
+                                    EncodedExpression: encodedExpression,
+                                    Environment: environment,
+                                    Reason: evaluationResult.Error);
                         }
+
+                        completedValue = evaluationResult.Value;
+                        decoded[parent.StartAddress] = completedValue;
 
                         break;
 
