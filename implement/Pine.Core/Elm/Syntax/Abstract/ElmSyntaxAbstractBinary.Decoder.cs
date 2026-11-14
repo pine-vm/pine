@@ -335,7 +335,7 @@ public static partial class ElmSyntaxAbstractBinary
                     4 => new Pattern.CharPattern(_reader.Int32(), ReadValue()),
                     5 => new Pattern.StringPattern(_reader.String(), ReadValue()),
                     6 => new Pattern.IntPattern(_reader.Integer(), ReadValue()),
-                    7 => new Pattern.FloatPattern(BitConverter.Int64BitsToDouble(_reader.Int64())),
+                    7 => new Pattern.FloatPattern(_reader.Integer(), _reader.Integer()),
                     8 => new Pattern.TuplePattern(ReadPatterns()),
                     9 => new Pattern.RecordPattern(ReadPatternFields()),
                     10 => new Pattern.UnConsPattern(ReadPattern(), ReadPattern()),

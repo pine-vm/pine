@@ -380,13 +380,13 @@ public static class FromFullSyntaxModel
             new Pattern.StringPattern(stringPattern.Value),
 
             FullTypes.Pattern.IntPattern intPattern =>
-            new Pattern.IntPattern(intPattern.Value),
+            new Pattern.IntPattern(Abstract.ConvertFromConcrete.ParseIntegerLiteral(intPattern.LiteralText)),
 
             FullTypes.Pattern.HexPattern hexPattern =>
-            new Pattern.HexPattern(hexPattern.Value),
+            new Pattern.HexPattern(Abstract.ConvertFromConcrete.ParseIntegerLiteral(hexPattern.LiteralText)),
 
             FullTypes.Pattern.FloatPattern floatPattern =>
-            new Pattern.FloatPattern(floatPattern.Value),
+            new Pattern.FloatPattern(floatPattern.LiteralText),
 
             FullTypes.Pattern.TuplePattern tuplePattern =>
             new Pattern.TuplePattern(
@@ -685,15 +685,11 @@ public static class FromFullSyntaxModel
         // Check for hexadecimal format: "0x..." or "-0x..."
         if (literalText.StartsWith("0x") || literalText.StartsWith("-0x"))
         {
-            // Parse hex value
-            var isNegative = literalText.StartsWith("-");
-            var hexPart = isNegative ? literalText[3..] : literalText[2..];
-            var value = long.Parse(hexPart, System.Globalization.NumberStyles.HexNumber);
-            return new Expression.Hex(isNegative ? -value : value);
+            return new Expression.Hex(Abstract.ConvertFromConcrete.ParseIntegerLiteral(literalText));
         }
 
         // Decimal integer
-        var decValue = long.Parse(literalText);
+        var decValue = Abstract.ConvertFromConcrete.ParseIntegerLiteral(literalText);
         return new Expression.Integer(decValue);
     }
 

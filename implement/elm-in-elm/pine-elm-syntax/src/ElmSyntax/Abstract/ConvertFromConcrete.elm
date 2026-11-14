@@ -183,14 +183,14 @@ fromPattern concrete =
         ConcretePattern.StringPattern value ->
             AbstractPattern.StringPattern value
 
-        ConcretePattern.IntPattern value ->
-            AbstractPattern.IntPattern value
+        ConcretePattern.IntPattern literalText ->
+            AbstractPattern.IntPattern (parseIntegerLiteral literalText)
 
-        ConcretePattern.HexPattern value ->
-            AbstractPattern.IntPattern value
+        ConcretePattern.HexPattern literalText ->
+            AbstractPattern.IntPattern (parseIntegerLiteral literalText)
 
-        ConcretePattern.FloatPattern value ->
-            AbstractPattern.FloatPattern value
+        ConcretePattern.FloatPattern literalText ->
+            AbstractPattern.FloatPattern (parseFloatLiteral literalText)
 
         ConcretePattern.TuplePattern elements ->
             AbstractPattern.TuplePattern

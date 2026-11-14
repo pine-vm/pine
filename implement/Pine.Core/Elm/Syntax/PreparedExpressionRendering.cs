@@ -49,8 +49,13 @@ public static class PreparedExpressionRendering
 
         if (elmValue is ElmValue.ElmFloat number)
         {
-            var text = ConvertToConcrete.FloatLiteralText(number.Numerator, number.Denominator);
-            return (text, text.StartsWith('-'));
+            if (ConvertToConcrete.TryFloatLiteralText(number.Numerator, number.Denominator, out var text))
+                return (text, text.StartsWith('-'));
+
+            return
+                (ConvertToConcrete.IntegerLiteralText(number.Numerator) + " / " +
+                ConvertToConcrete.IntegerLiteralText(number.Denominator),
+                true);
         }
 
         return (defaultText, needsParens || defaultText.StartsWith('-'));
@@ -236,7 +241,9 @@ public static class PreparedExpressionRendering
                 Pattern.CharPattern character => (Rendering.RenderCharLiteral(character.Value), false),
                 Pattern.StringPattern str => (Rendering.RenderStringLiteral(str.Value), false),
                 Pattern.IntPattern integer => (integer.Value.ToString(), false),
-                Pattern.FloatPattern number => (Rendering.FormatFloatForElm(number.Value), false),
+
+                Pattern.FloatPattern number =>
+                (ConvertToConcrete.FloatLiteralText(number.Numerator, number.Denominator), false),
 
                 Pattern.TuplePattern tuple =>
                 ("(" + string.Join(", ", tuple.Elements.Select(item => RenderPattern(item))) + ")", false),

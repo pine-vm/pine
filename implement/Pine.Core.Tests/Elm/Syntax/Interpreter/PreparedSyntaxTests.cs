@@ -14,6 +14,7 @@ using System.Numerics;
 using Xunit;
 
 using AbstractDeclaration = Pine.Core.Elm.Syntax.Abstract.Declaration;
+using AbstractExpression = Pine.Core.Elm.Syntax.Abstract.Expression;
 using AbstractJson = Pine.Core.Elm.Syntax.Abstract.ElmSyntaxAbstractJson;
 using AbstractModule = Pine.Core.Elm.Syntax.Abstract.Module;
 using ConvertFromAbstractConcrete = Pine.Core.Elm.Syntax.Abstract.ConvertFromConcrete;
@@ -115,6 +116,58 @@ public class PreparedSyntaxTests
 
     private static string BuildLegacyPreparedJson(string moduleText) =>
         AbstractJson.ToJsonString(new LegacyPreparedJson(BuildLegacyDeclarations(moduleText)));
+
+    [Theory]
+    [InlineData("9007199254740993.0", "1")]
+    [InlineData("9007199254740992.0", "0")]
+    [InlineData("1e-1001", "2")]
+    [InlineData("0.0", "0")]
+    [InlineData("1e400", "3")]
+    public void Float_pattern_dispatch_and_nested_matching_preserve_exact_values(string literal, string expected)
+    {
+        static AbstractExpression.IntegerLiteral Integer(int value) => new(value, Int(value));
+
+        static AbstractDeclaration Function(string name, bool nested)
+        {
+            string[] literals = ["9007199254740993.0", "1e-1001", "1e400"];
+            var cases = new List<Case>();
+
+            for (var index = 0; index < literals.Length; index++)
+            {
+                var value = FloatLiteralConversion.ToElmFloat(literals[index]);
+                Pattern pattern = new Pattern.FloatPattern(value.Numerator, value.Denominator);
+
+                if (nested)
+                    pattern = new Pattern.AsPattern(pattern, "matched");
+
+                cases.Add(new(pattern, Integer(index + 1)));
+            }
+
+            cases.Add(new(new Pattern.AllPattern(), Integer(0)));
+
+            return
+                new AbstractDeclaration.FunctionDeclaration(
+                    new(
+                        null,
+                        new(
+                            name,
+                            [new Pattern.VarPattern("number")],
+                            new AbstractExpression.CaseExpression(
+                                AbstractExpression.Identifier.Create([], "number"),
+                                cases))));
+        }
+
+        var prepared =
+            new ElmInterpreter.Prepared(
+                new Dictionary<DeclQualifiedName, AbstractDeclaration>
+                {
+                    [Name("Test", "classify")] = Function("classify", nested: false),
+                    [Name("Test", "classifyNested")] = Function("classifyNested", nested: true)
+                });
+
+        Evaluate(prepared, "Test.classify " + literal).Should().Be(expected);
+        Evaluate(prepared, "Test.classifyNested " + literal).Should().Be(expected);
+    }
 
     [Fact]
     public void Prepare_modules_uses_value_literals_and_case_dispatch_segments()

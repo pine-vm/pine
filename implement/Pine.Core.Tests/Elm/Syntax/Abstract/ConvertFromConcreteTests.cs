@@ -291,7 +291,7 @@ public class ConvertFromConcreteTests
     public void Hex_pattern_is_normalized_to_int_pattern()
     {
         var converted =
-            ConvertFromConcrete.FromPattern(new ConcreteSyntax.Pattern.HexPattern(0xFF));
+            ConvertFromConcrete.FromPattern(new ConcreteSyntax.Pattern.HexPattern("0xFF"));
 
         var intPattern = converted.Should().BeOfType<Pattern.IntPattern>().Subject;
 
@@ -299,11 +299,35 @@ public class ConvertFromConcreteTests
         intPattern.ValueAsPineValue.Should().Be(IntegerEncoding.EncodeSignedInteger(255));
     }
 
+    [Theory]
+    [InlineData("100", "100", "1")]
+    [InlineData("1e2", "100", "1")]
+    [InlineData("9007199254740993.0", "9007199254740993", "1")]
+    [InlineData("-0.123456789012345678901", "-123456789012345678901", "1000000000000000000000")]
+    public void Float_patterns_preserve_exact_rational_values(
+        string literal, string numerator, string denominator)
+    {
+        var converted =
+            ConvertFromConcrete.FromPattern(new ConcreteSyntax.Pattern.FloatPattern(literal));
+
+        converted.Should().Be(
+            new Pattern.FloatPattern(BigInteger.Parse(numerator), BigInteger.Parse(denominator)));
+
+        var location = new ConcreteSyntax.Location(1, 1);
+
+        var node =
+            new ConcreteSyntax.Node<ConcreteSyntax.Pattern>(
+                new ConcreteSyntax.Range(location, new(1, literal.Length + 1)),
+                new ConcreteSyntax.Pattern.FloatPattern(literal));
+
+        ConcreteSyntax.Rendering.RenderPattern(node).Should().Be(literal);
+    }
+
     [Fact]
     public void Int_pattern_holds_precomputed_pine_value()
     {
         var converted =
-            ConvertFromConcrete.FromPattern(new ConcreteSyntax.Pattern.IntPattern(42));
+            ConvertFromConcrete.FromPattern(new ConcreteSyntax.Pattern.IntPattern("42"));
 
         var intPattern = converted.Should().BeOfType<Pattern.IntPattern>().Subject;
 

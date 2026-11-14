@@ -5,6 +5,8 @@ using Xunit;
 
 namespace Pine.Core.Tests.Elm.Syntax;
 
+using ConcreteSyntax = Core.Elm.Syntax.Concrete;
+
 /// <summary>
 /// Tests covering the requirements documented in <c>explore/2026-06-07-elm-format.md</c>:
 /// the <c>elm-format</c> subcommand preserves the varied representations of characters in
@@ -129,6 +131,50 @@ public class ElmFormatPreservesLiteralsTests
         var formatted = Format(moduleText);
 
         formatted.Should().Be(moduleText);
+    }
+
+    [Theory]
+    [InlineData("100")]
+    [InlineData("000100")]
+    [InlineData("1e2")]
+    [InlineData("100.00")]
+    [InlineData("1E+02")]
+    [InlineData("9007199254740993.0")]
+    [InlineData("1e400")]
+    [InlineData("1e-1001")]
+    [InlineData("92233720368547758081234567890")]
+    public void Preserves_original_representation_of_synthesized_float_patterns(string literal)
+    {
+        var file =
+            ElmSyntaxParser.ParseModuleText("module Test exposing (..)\n\n\ntest number =\n    1\n")
+            .Extract(error => throw new Exception(error.ToString()));
+
+        var declaration = (ConcreteSyntax.Declaration.FunctionDeclaration)file.Declarations[0].Value;
+        var implementation = declaration.Function.Declaration.Value;
+
+        implementation =
+            implementation with
+            {
+                Arguments =
+                [
+                implementation.Arguments[0] with { Value = new ConcreteSyntax.Pattern.FloatPattern(literal) }
+                ]
+            };
+
+        var function =
+            declaration.Function with
+            {
+                Declaration = declaration.Function.Declaration with { Value = implementation }
+            };
+
+        file =
+            file with
+            {
+                Declarations = [file.Declarations[0] with { Value = declaration with { Function = function } }]
+            };
+
+        Core.Elm.Syntax.Avh4Format.FormatToString(file).Should().Be(
+            "module Test exposing (..)\n\n\ntest " + literal + " =\n    1\n");
     }
 
     [Fact]

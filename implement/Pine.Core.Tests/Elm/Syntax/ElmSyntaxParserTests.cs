@@ -379,6 +379,29 @@ public class ElmSyntaxParserTests
     }
 
     [Theory]
+    [InlineData("100", "100")]
+    [InlineData("000100", "100")]
+    [InlineData("92233720368547758081234567890", "92233720368547758081234567890")]
+    [InlineData("0xffffffffffffffff", "18446744073709551615")]
+    [InlineData("0x0000ABCDEF0123456789ABCDEF", "207698809136909011942886895")]
+    public void Integer_patterns_preserve_spelling_and_arbitrary_precision(string source, string expected)
+    {
+        var expression =
+            ElmSyntaxParser.ParseExpression("case number of\n    " + source + " ->\n        1")
+            .Extract(error => throw new System.Exception(error));
+
+        var caseExpression = expression.Should().BeOfType<ExpressionSyntax.CaseExpression>().Subject;
+        var pattern = caseExpression.CaseBlock.Cases[0].Pattern;
+
+        Core.Elm.Syntax.Concrete.Rendering.RenderPattern(pattern).Should().Be(source);
+
+        var converted = Core.Elm.Syntax.Abstract.ConvertFromConcrete.FromPattern(pattern.Value);
+
+        converted.Should().Be(
+            new Core.Elm.Syntax.Abstract.Pattern.IntPattern(System.Numerics.BigInteger.Parse(expected)));
+    }
+
+    [Theory]
     [InlineData("\n")]
     [InlineData("\r\n")]
     public void Comment_tokenization_preserves_nested_text_and_code_point_locations(string newline)

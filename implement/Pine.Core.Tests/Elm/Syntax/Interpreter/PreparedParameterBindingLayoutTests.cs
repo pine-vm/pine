@@ -225,7 +225,7 @@ public class PreparedParameterBindingLayoutTests
                     new Pattern.CharPattern('a'),
                     new Pattern.StringPattern("text"),
                     new Pattern.IntPattern(1),
-                    new Pattern.FloatPattern(1.5),
+                    new Pattern.FloatPattern(3, 2),
                     new Pattern.NamedPattern(
                         new QualifiedNameRef([], "True"),
                         [new Pattern.VarPattern("ignoredTrue")]),

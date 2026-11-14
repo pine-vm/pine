@@ -1050,7 +1050,7 @@ public static class FromCanonicalSyntax
                     return new Pattern.IntPattern(integer.Value);
 
                 case AST.Pattern.FloatPattern floating:
-                    return new Pattern.FloatPattern(floating.Value);
+                    return new Pattern.FloatPattern(floating.Numerator, floating.Denominator);
 
                 default:
                     throw new NotImplementedException(

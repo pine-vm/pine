@@ -53,6 +53,8 @@ public class PreparedExpressionRenderingTests
         yield return [new AbstractExpr.FloatLiteral(314, 100), "3.14"];
         yield return [new AbstractExpr.FloatLiteral(-3, 2), "-1.5"];
         yield return [new AbstractExpr.FloatLiteral(1, 1), "1.0"];
+        yield return [new AbstractExpr.FloatLiteral(1, 3), "1 / 3"];
+        yield return [new AbstractExpr.FloatLiteral(-1, 3), "-1 / 3"];
 
         yield return [
             new AbstractExpr.FloatLiteral(
@@ -78,6 +80,10 @@ public class PreparedExpressionRenderingTests
         yield return [new AbstractExpr.Application(Identifier("mapItem"), []), "mapItem"];
         yield return [new AbstractExpr.Application(Identifier("f"), [Integer(1), Identifier("x")]), "f 1 x"];
         yield return [new AbstractExpr.Application(Identifier("f"), [Integer(-7)]), "f (-7)"];
+
+        yield return [
+            new AbstractExpr.Application(Identifier("f"), [new AbstractExpr.FloatLiteral(1, 3)]),
+            "f (1 / 3)"];
 
         yield return [
             new AbstractExpr.Application(Identifier("f"),
@@ -299,8 +305,8 @@ public class PreparedExpressionRenderingTests
                 new Pattern.UnitPattern(),
                 new Pattern.CharPattern('c'),
                 new Pattern.StringPattern("s"),
-                new Pattern.FloatPattern(1.5),
-                new Pattern.FloatPattern(1),
+                new Pattern.FloatPattern(3, 2),
+                new Pattern.FloatPattern(1, 1),
                 new Pattern.RecordPattern(
                     [(FieldName: "a", FieldNameValue: StringEncoding.ValueFromString("a"))]),
                 new Pattern.UnConsPattern(new Pattern.VarPattern("head"), new Pattern.VarPattern("tail")),

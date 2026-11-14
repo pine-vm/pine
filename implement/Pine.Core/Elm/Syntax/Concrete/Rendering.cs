@@ -1458,15 +1458,15 @@ public class Rendering
                 break;
 
             case Pattern.IntPattern intPattern:
-                context.Append(intPattern.Value.ToString());
+                context.Append(intPattern.LiteralText);
                 break;
 
             case Pattern.HexPattern hexPattern:
-                context.Append(RenderHexPattern(hexPattern.Value));
+                context.Append(hexPattern.LiteralText);
                 break;
 
             case Pattern.FloatPattern floatPattern:
-                context.Append(FormatFloatForElm(floatPattern.Value));
+                context.Append(floatPattern.LiteralText);
                 break;
 
             case Pattern.TuplePattern tuplePattern:
@@ -1721,10 +1721,13 @@ public class Rendering
     /// Formats a hexadecimal pattern with padding to match avh4/elm-format behavior.
     /// Pads to lengths of 2, 4, 8, or multiples of 8 (e.g., 8, 16, 32...).
     /// </summary>
-    internal static string RenderHexPattern(long value)
+    internal static string RenderHexPattern(System.Numerics.BigInteger value)
     {
+        if (value.Sign < 0)
+            return "-" + RenderHexPattern(-value);
+
         // Convert to hex string (uppercase)
-        var hex = value.ToString("X");
+        var hex = value.ToString("X", System.Globalization.CultureInfo.InvariantCulture).TrimStart('0');
 
         // Determine target length: 2, 4, 8, 16, 32, etc.
         // Matches avh4/elm-format padding behavior
@@ -1748,33 +1751,5 @@ public class Rendering
         var paddedHex = hex.PadLeft(targetLength, '0');
 
         return "0x" + paddedHex;
-    }
-
-    internal static string FormatFloatForElm(double value)
-    {
-        // Use "R" (round-trip) format which produces the shortest representation
-        // that parses back to the same value
-        var str = value.ToString("R", System.Globalization.CultureInfo.InvariantCulture);
-
-        if (str.Contains('E') || str.Contains('e'))
-        {
-            // Convert scientific notation to fixed-point decimal
-            // The format "F17" uses fixed-point with up to 17 digits
-            str = value.ToString("F17", System.Globalization.CultureInfo.InvariantCulture).TrimEnd('0');
-
-            // Make sure we don't end with just a decimal point
-            if (str.EndsWith('.'))
-            {
-                str += "0";
-            }
-        }
-
-        // Elm requires at least one digit after the decimal point
-        if (!str.Contains('.'))
-        {
-            str += ".0";
-        }
-
-        return str;
     }
 }

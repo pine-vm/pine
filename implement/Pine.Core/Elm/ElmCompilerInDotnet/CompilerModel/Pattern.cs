@@ -93,11 +93,11 @@ public abstract record Pattern
     }
 
     /// <summary>Floating pattern retained for explicit unsupported-pattern diagnostics.</summary>
-    public sealed record FloatPattern(double Value) : Pattern
+    public sealed record FloatPattern(BigInteger Numerator, BigInteger Denominator) : Pattern
     {
         /// <inheritdoc/>
         public override int GetHashCode() =>
-            StructuralHash.GetOrCompute(ref _cachedHashCode, typeof(FloatPattern), Value);
+            StructuralHash.GetOrCompute(ref _cachedHashCode, typeof(FloatPattern), Numerator, Denominator);
     }
 
     /// <summary>Matches a tuple.</summary>

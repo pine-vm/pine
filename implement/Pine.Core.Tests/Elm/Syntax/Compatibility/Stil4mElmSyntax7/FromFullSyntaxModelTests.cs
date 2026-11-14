@@ -12,6 +12,95 @@ namespace Pine.Core.Tests.Elm.Syntax.Compatibility.Stil4mElmSyntax7;
 
 public class FromFullSyntaxModelTests
 {
+    [Theory]
+    [InlineData("92233720368547758081234567890")]
+    [InlineData("-92233720368547758081234567890")]
+    [InlineData("0xffffffffffffffff")]
+    [InlineData("0xABCDEF0123456789ABCDEF")]
+    [InlineData("-0xABCDEF0123456789ABCDEF")]
+    public void Integer_conversions_preserve_arbitrary_precision(string literal)
+    {
+        var expected = Core.Elm.Syntax.Abstract.ConvertFromConcrete.ParseIntegerLiteral(literal);
+
+        var converted = FromFullSyntaxModel.Convert(new FullTypes.Expression.IntegerLiteral(literal));
+
+        var roundTripped =
+            ToFullSyntaxModel.Convert(converted).Should().BeOfType<FullTypes.Expression.IntegerLiteral>().Subject;
+
+        Core.Elm.Syntax.Abstract.ConvertFromConcrete.ParseIntegerLiteral(roundTripped.LiteralText)
+            .Should().Be(expected);
+
+        var pattern =
+            literal.Contains('x')
+            ?
+            (FullTypes.Pattern)new FullTypes.Pattern.HexPattern(literal)
+            :
+            new FullTypes.Pattern.IntPattern(literal);
+
+        var convertedPattern = FromFullSyntaxModel.Convert(pattern);
+        var roundTrippedPattern = ToFullSyntaxModel.Convert(convertedPattern);
+
+        Core.Elm.Syntax.Abstract.ConvertFromConcrete.FromPattern(roundTrippedPattern)
+            .Should().Be(new Core.Elm.Syntax.Abstract.Pattern.IntPattern(expected));
+    }
+
+    [Theory]
+    [InlineData("100")]
+    [InlineData("1e2")]
+    [InlineData("9007199254740993.0")]
+    [InlineData("1e-1001")]
+    public void Float_pattern_conversions_are_lossless(string literal)
+    {
+        var pattern = new FullTypes.Pattern.FloatPattern(literal);
+        var converted = FromFullSyntaxModel.Convert(pattern);
+
+        ToFullSyntaxModel.Convert(converted).Should().Be(pattern);
+    }
+
+    [Fact]
+    public void Float_pattern_is_encoded_with_its_numeric_value()
+    {
+        var file =
+            ElmSyntaxParser.ParseModuleText("module Test exposing (..)\n\nvalue number =\n    1\n")
+            .Extract(error => throw new System.Exception(error.ToString()));
+
+        var legacy = FromFullSyntaxModel.Convert(file);
+
+        var declaration =
+            (Core.Elm.Syntax.Compatibility.Stil4mElmSyntax7.Declaration.FunctionDeclaration)
+            legacy.Declarations[0].Value;
+
+        var implementation = declaration.Function.Declaration.Value;
+
+        implementation =
+            implementation with
+            {
+                Arguments =
+                [
+                    implementation.Arguments[0] with
+                    {
+                        Value = new Core.Elm.Syntax.Compatibility.Stil4mElmSyntax7.Pattern.FloatPattern("0.125")
+                    }
+                ]
+            };
+
+        var function =
+            declaration.Function with
+            {
+                Declaration = declaration.Function.Declaration with { Value = implementation }
+            };
+
+        legacy =
+            legacy with
+            {
+                Declarations = [legacy.Declarations[0] with { Value = declaration with { Function = function } }]
+            };
+
+        var encoded = EncodeAsElmValue.EncodeFile(legacy);
+
+        Core.Elm.ElmValue.RenderAsElmExpression(encoded).expressionString.Should().Contain("FloatPattern 0.125");
+    }
+
     /// <summary>
     /// Creates a SeparatedSyntaxList with the given items and separator locations.
     /// </summary>

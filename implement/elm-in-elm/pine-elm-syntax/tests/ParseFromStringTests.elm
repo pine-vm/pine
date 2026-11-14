@@ -35,6 +35,8 @@ suite =
             expressionVariantSuite
         , Test.describe "nested patterns and expression boundaries"
             nestedPatternAndBoundarySuite
+        , Test.describe "numeric pattern literal text"
+            numericPatternLiteralSuite
         , Test.describe "parseExpression_err"
             expressionErrSuite
         , Test.describe "parseDeclarationOrExpression_ok"
@@ -1376,6 +1378,55 @@ expressionVariantSuite =
                                         Expect.fail ("Expected nested expression to parse, but got Err: " ++ err)
                        ]
            )
+
+
+numericPatternLiteralSuite : List Test
+numericPatternLiteralSuite =
+    List.map
+        (\( literal, expected ) ->
+            Test.test ("preserves " ++ literal) <|
+                \_ ->
+                    case
+                        ElmSyntax.Concrete.Parser.FromString.parseExpression
+                            ("case number of\n    " ++ literal ++ " -> 1")
+                    of
+                        Ok (Expression.CaseExpression caseBlock) ->
+                            Expect.equal [ expected ]
+                                (List.map (.pattern >> Node.value) caseBlock.cases)
+
+                        Ok _ ->
+                            Expect.fail "Expected a case expression."
+
+                        Err error ->
+                            Expect.fail error
+        )
+        [ ( "100", Pattern.IntPattern "100" )
+        , ( "000100", Pattern.IntPattern "000100" )
+        , ( "92233720368547758081234567890", Pattern.IntPattern "92233720368547758081234567890" )
+        , ( "0x0000ABCDEF0123456789ABCDEF", Pattern.HexPattern "0x0000ABCDEF0123456789ABCDEF" )
+        , ( "0xffffffffffffffff", Pattern.HexPattern "0xffffffffffffffff" )
+        , ( "100.00", Pattern.FloatPattern "100.00" )
+        , ( "1e2", Pattern.FloatPattern "1e2" )
+        , ( "1E+02", Pattern.FloatPattern "1E+02" )
+        , ( "9007199254740993.0", Pattern.FloatPattern "9007199254740993.0" )
+        , ( "1e400", Pattern.FloatPattern "1e400" )
+        , ( "1e-1001", Pattern.FloatPattern "1e-1001" )
+        ]
+        ++ List.map
+            (\literal ->
+                Test.test ("rejects incomplete literal " ++ literal) <|
+                    \_ ->
+                        case
+                            ElmSyntax.Concrete.Parser.FromString.parseExpression
+                                ("case number of\n    " ++ literal ++ " -> 1")
+                        of
+                            Err _ ->
+                                Expect.pass
+
+                            Ok _ ->
+                                Expect.fail "Expected an invalid numeric pattern to be rejected."
+            )
+            [ "0x", "1e", "1e+" ]
 
 
 nestedPatternAndBoundarySuite : List Test

@@ -39,17 +39,17 @@ import ElmSyntax.Concrete.SeparatedSyntaxList exposing (SeparatedSyntaxList)
 
        /// <summary>Pattern matching a decimal integer literal.</summary>
        public sealed record IntPattern(
-           long Value)
+           string LiteralText)
            : Pattern;
 
        /// <summary>Pattern matching a hexadecimal integer literal.</summary>
        public sealed record HexPattern(
-           long Value)
+           string LiteralText)
            : Pattern;
 
        /// <summary>Pattern matching a floating-point literal.</summary>
        public sealed record FloatPattern(
-           float Value)
+           string LiteralText)
            : Pattern;
 
        /// <summary>Pattern matching a tuple.</summary>
@@ -124,15 +124,18 @@ import ElmSyntax.Concrete.SeparatedSyntaxList exposing (SeparatedSyntaxList)
 -}
 
 
+{-| Numeric patterns retain the original literal text, just like numeric expressions.
+This preserves precision and spellings such as `100`, `100.00`, and `1e2`.
+-}
 type Pattern
     = AllPattern
     | VarPattern String
     | UnitPattern
     | CharPattern Int
     | StringPattern String
-    | IntPattern Int
-    | HexPattern Int
-    | FloatPattern Float
+    | IntPattern String
+    | HexPattern String
+    | FloatPattern String
     | TuplePattern (SeparatedSyntaxList (Node Pattern))
     | RecordPattern (SeparatedSyntaxList (Node String))
     | UnConsPattern (Node Pattern) Location (Node Pattern)

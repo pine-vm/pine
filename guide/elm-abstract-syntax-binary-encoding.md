@@ -44,15 +44,16 @@ first byte and advance the enclosing reader by `BytesRead`. The standalone
 `DecodeExpression`, `DecodeDeclaration`, and `DecodeDeclarations` helpers also
 report their consumed extent. A new encoder/decoder starts an independent scope.
 
-## Syntax wire format, version 1
+## Syntax wire format, version 2
 
-Each session begins with the four bytes `45 41 53 01` (`EAS`, version 1).
+Each session begins with the four bytes `45 41 53 02` (`EAS`, version 2).
 There is no padding. Integers and lengths are big-endian. Collection and UTF-8
 byte lengths are nonnegative signed 32-bit integers. Strings use strict UTF-8.
 Arbitrary-precision integers are a byte length followed by minimal signed,
-big-endian two's-complement bytes (zero occupies one byte). Floating-point
-patterns store their IEEE 754 bits as 64 bits; float expressions store their
-integer numerator and denominator separately.
+big-endian two's-complement bytes (zero occupies one byte). Float patterns and
+expressions both store their arbitrary-precision integer numerator and denominator
+separately. Version 1, which stored float patterns as IEEE 754 bits, is rejected;
+persisted syntax must be regenerated.
 
 Each node starts with a one-byte tag. Fields follow their model-constructor
 order, except that a function's optional signature starts with byte `0` (absent)

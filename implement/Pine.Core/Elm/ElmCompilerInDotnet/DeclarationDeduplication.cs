@@ -393,8 +393,11 @@ public static class DeclarationDeduplication
                     break;
 
                 case Pattern.FloatPattern literal:
-                    _builder.Append("float(").Append(literal.Value.ToString("R", CultureInfo.InvariantCulture)).Append(
-                        ')');
+                    _builder.Append("float(")
+                        .Append(literal.Numerator.ToString(CultureInfo.InvariantCulture))
+                        .Append('/')
+                        .Append(literal.Denominator.ToString(CultureInfo.InvariantCulture))
+                        .Append(')');
 
                     break;
 

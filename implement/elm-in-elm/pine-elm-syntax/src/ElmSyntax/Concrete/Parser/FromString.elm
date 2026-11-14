@@ -17,7 +17,6 @@ import ElmSyntax.Concrete.Parser.StringParsing as StringParsing
         , MultilineCommentRunEnd(..)
         , concatenateChunksRev
         , findLiteralRunEnd
-        , hexStringToInt
         , isDigit
         , isFloatLiteral
         , isIdentifierChar
@@ -6124,28 +6123,21 @@ parseNumberPattern firstCharacter state =
             }
     in
     if String.startsWith "0x" literal then
-        case hexStringToInt (String.dropLeft 2 literal) of
-            Just value ->
-                Ok ( Node range (Pattern.HexPattern value), remaining )
+        if String.length literal > 2 then
+            Ok ( Node range (Pattern.HexPattern literal), remaining )
 
-            Nothing ->
-                Err ("Invalid hexadecimal pattern '" ++ literal ++ "'.")
+        else
+            Err ("Invalid hexadecimal pattern '" ++ literal ++ "'.")
 
     else if String.contains "." literal || String.contains "e" literal || String.contains "E" literal then
-        case String.toFloat literal of
-            Just value ->
-                Ok ( Node range (Pattern.FloatPattern value), remaining )
+        if isDigit (String.right 1 literal) then
+            Ok ( Node range (Pattern.FloatPattern literal), remaining )
 
-            Nothing ->
-                Err ("Invalid float pattern '" ++ literal ++ "'.")
+        else
+            Err ("Invalid float pattern '" ++ literal ++ "'.")
 
     else
-        case String.toInt literal of
-            Just value ->
-                Ok ( Node range (Pattern.IntPattern value), remaining )
-
-            Nothing ->
-                Err ("Invalid integer pattern '" ++ literal ++ "'.")
+        Ok ( Node range (Pattern.IntPattern literal), remaining )
 
 
 parseTuplePattern : Int -> ParserState -> Result String ( Node Pattern.Pattern, ParserState )

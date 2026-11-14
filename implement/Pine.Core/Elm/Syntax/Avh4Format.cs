@@ -7324,13 +7324,13 @@ public class Avh4Format
                     }
 
                 case Pattern.IntPattern intPattern:
-                    return FormatSimplePattern(pattern, intPattern.Value.ToString().Length, startLoc, context);
+                    return FormatSimplePattern(pattern, intPattern.LiteralText.Length, startLoc, context);
 
                 case Pattern.HexPattern hexPattern:
                     return
                         FormatSimplePattern(
                             pattern,
-                            Rendering.RenderHexPattern(hexPattern.Value).Length,
+                            hexPattern.LiteralText.Length,
                             startLoc,
                             context);
 
@@ -7338,7 +7338,7 @@ public class Avh4Format
                     return
                         FormatSimplePattern(
                             pattern,
-                            Rendering.FormatFloatForElm(floatPattern.Value).Length,
+                            floatPattern.LiteralText.Length,
                             startLoc,
                             context);
 
