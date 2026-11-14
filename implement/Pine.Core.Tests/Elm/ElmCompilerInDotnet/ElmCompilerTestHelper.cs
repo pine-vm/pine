@@ -25,6 +25,29 @@ namespace Pine.Core.Tests.Elm.ElmCompilerInDotnet;
 public class ElmCompilerTestHelper
 {
     /// <summary>
+    /// Identifies the structured parser's open-position error helper and escaped error-message
+    /// accessors, using caller-owned source bindings rather than generated artifact hashes.
+    /// </summary>
+    public static bool IsParserErrorRecordAccess(CompilationPipelineStageResults pipeline, Opportunity opportunity)
+    {
+        if (opportunity.Category is not OpportunityCategory.RecordAccess)
+            return false;
+
+        static bool IsErrorField(DeclQualifiedName name, string field) =>
+            name.Namespaces.SequenceEqual(["ElmSyntax", "Concrete", "Parser", "FromString"]) &&
+            ((name.DeclName is "failure" && field is "row" or "column") ||
+            (name.DeclName is "parseFile" or "parseExpression" or "parseDeclarationOrExpression" &&
+            field is "message"));
+
+        return
+            IsErrorField(opportunity.ContainingDecl, opportunity.Description) ||
+            pipeline.SourceFunctionIds.Any(
+                entry =>
+                IsErrorField(entry.Key, opportunity.Description) &&
+                entry.Value.SourceDeclaration.Equals(opportunity.ContainingDecl));
+    }
+
+    /// <summary>
     /// Preserves value-oriented test fixtures by explicitly selecting source declarations
     /// and executing their zero-parameter exports after compilation.
     /// </summary>

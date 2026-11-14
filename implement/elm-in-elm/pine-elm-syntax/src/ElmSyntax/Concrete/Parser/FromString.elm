@@ -43,6 +43,32 @@ import ElmSyntax.Concrete.SeparatedSyntaxList as SeparatedSyntaxList
 import ElmSyntax.Concrete.TypeAnnotation as TypeAnnotation
 
 
+type alias ParseError =
+    { message : String
+    , region : Range
+    }
+
+
+failure : { a | row : Int, column : Int } -> String -> Result ParseError b
+failure position message =
+    Err { message = message, region = { start = { row = position.row, column = position.column }, end = { row = position.row, column = position.column } } }
+
+
+parseFile : String -> Result String File.File
+parseFile source =
+    parseFileStructured source |> Result.mapError .message
+
+
+parseExpression : String -> Result String Expression.Expression
+parseExpression source =
+    parseExpressionStructured source |> Result.mapError .message
+
+
+parseDeclarationOrExpression : String -> Result String DeclarationOrExpression
+parseDeclarationOrExpression source =
+    parseDeclarationOrExpressionStructured source |> Result.mapError .message
+
+
 {-| The complete state threaded through every recursive parsing function: the original source
 string, the current offset into that string, the row and column matching that offset, and the
 comments collected so far.
@@ -72,8 +98,8 @@ type alias ParserState =
     }
 
 
-parseExpression : String -> Result String Expression.Expression
-parseExpression input =
+parseExpressionStructured : String -> Result ParseError Expression.Expression
+parseExpressionStructured input =
     finishParseExpression
         (parseExpressionNodeAt
             0
@@ -88,8 +114,8 @@ parseExpression input =
 
 
 finishParseExpression :
-    Result String ( Node Expression.Expression, ParserState )
-    -> Result String Expression.Expression
+    Result ParseError ( Node Expression.Expression, ParserState )
+    -> Result ParseError Expression.Expression
 finishParseExpression expressionResult =
     case expressionResult of
         Err error ->
@@ -102,7 +128,7 @@ finishParseExpression expressionResult =
 finishParseExpressionAtEnd :
     Node Expression.Expression
     -> ParserState
-    -> Result String Expression.Expression
+    -> Result ParseError Expression.Expression
 finishParseExpressionAtEnd expressionNode stateAfterTrivia =
     case String.left 1 (String.dropLeft stateAfterTrivia.offset stateAfterTrivia.source) of
         "" ->
@@ -111,15 +137,15 @@ finishParseExpressionAtEnd expressionNode stateAfterTrivia =
                     Ok expression
 
         _ ->
-            Err
+            failure stateAfterTrivia
                 ("Unexpected token '"
                     ++ snippetAt stateAfterTrivia
                     ++ "' after parsing expression."
                 )
 
 
-parseFile : String -> Result String File.File
-parseFile input =
+parseFileStructured : String -> Result ParseError File.File
+parseFileStructured input =
     case
         parseModuleDefinition
             { source = input
@@ -144,7 +170,7 @@ holding on to an earlier stage's result while parsing the following stages would
 earlier parse once per mention. Passing the result on as an argument evaluates each stage once.
 
 -}
-parseFileImports : Node Module.Module -> ParserState -> Result String File.File
+parseFileImports : Node Module.Module -> ParserState -> Result ParseError File.File
 parseFileImports moduleDefinition state =
     case parseImports [] state of
         Err error ->
@@ -158,7 +184,7 @@ parseFileBody :
     Node Module.Module
     -> List (Node Import.Import)
     -> ParserState
-    -> Result String File.File
+    -> Result ParseError File.File
 parseFileBody moduleDefinition imports state =
     case parseFileDeclarations [] [] (lastImportEndRow imports Nothing) state of
         Err error ->
@@ -174,7 +200,7 @@ finishFile :
     -> List (Node Declaration.Declaration)
     -> List (Node String)
     -> ParserState
-    -> Result String File.File
+    -> Result ParseError File.File
 finishFile moduleDefinition imports declarations documentationComments finalState =
     Ok
         { moduleDefinition = moduleDefinition
@@ -198,8 +224,8 @@ lastImportEndRow imports latest =
             lastImportEndRow rest (Just importRange.end.row)
 
 
-parseDeclarationOrExpression : String -> Result String DeclarationOrExpression
-parseDeclarationOrExpression input =
+parseDeclarationOrExpressionStructured : String -> Result ParseError DeclarationOrExpression
+parseDeclarationOrExpressionStructured input =
     let
         initialState =
             { source = input, offset = 0, row = 1, column = 1, commentsRev = [] }
@@ -212,7 +238,7 @@ parseDeclarationOrExpression input =
             if isIdentifierStart first && startsWithDeclarationKeyword input stateAtFirst.offset then
                 case parseDeclaration stateAtFirst of
                     Err error ->
-                        Err ("Failed to parse declaration or expression: " ++ error)
+                        Err { error | message = "Failed to parse declaration or expression: " ++ error.message }
 
                     Ok ( declaration, afterDeclaration ) ->
                         let
@@ -224,7 +250,7 @@ parseDeclarationOrExpression input =
                                 Ok (DeclarationOrExpression.Declaration declaration)
 
                             _ ->
-                                Err
+                                failure stateAfterTrivia
                                     ("Unexpected token '"
                                         ++ snippetAt stateAfterTrivia
                                         ++ "' after parsing declaration."
@@ -251,11 +277,11 @@ parseDeclarationOrExpression input =
                 parseAsExpressionFallback stateAtFirst
 
 
-parseAsExpressionFallback : ParserState -> Result String DeclarationOrExpression
+parseAsExpressionFallback : ParserState -> Result ParseError DeclarationOrExpression
 parseAsExpressionFallback state =
     case parseExpressionNodeAt 0 0 state of
         Err error ->
-            Err ("Failed to parse declaration or expression: " ++ error)
+            Err { error | message = "Failed to parse declaration or expression: " ++ error.message }
 
         Ok ( Node _ expression, stateAfterExpression ) ->
             let
@@ -267,7 +293,7 @@ parseAsExpressionFallback state =
                     Ok (DeclarationOrExpression.Expression expression)
 
                 _ ->
-                    Err
+                    failure stateAfterTrivia
                         ("Unexpected token '"
                             ++ snippetAt stateAfterTrivia
                             ++ "' after parsing expression."
@@ -412,12 +438,12 @@ containsTopLevelEqual source offset delimiterDepth =
 -- MODULE DEFINITION
 
 
-parseModuleDefinition : ParserState -> Result String ( Node Module.Module, ParserState )
+parseModuleDefinition : ParserState -> Result ParseError ( Node Module.Module, ParserState )
 parseModuleDefinition state =
     parseModuleDefinitionAt (skipTrivia state)
 
 
-parseModuleDefinitionAt : ParserState -> Result String ( Node Module.Module, ParserState )
+parseModuleDefinitionAt : ParserState -> Result ParseError ( Node Module.Module, ParserState )
 parseModuleDefinitionAt stateAtFirst =
     case String.left 1 (String.dropLeft stateAtFirst.offset stateAtFirst.source) of
         first ->
@@ -436,19 +462,19 @@ parseModuleDefinitionAt stateAtFirst =
                 parseNormalModule stateAtFirst
 
 
-parseNormalModule : ParserState -> Result String ( Node Module.Module, ParserState )
+parseNormalModule : ParserState -> Result ParseError ( Node Module.Module, ParserState )
 parseNormalModule state =
     finishDefaultModuleOnKeyword NormalDefaultModule (consumeKeyword "module" 6 state)
 
 
-parsePortModule : ParserState -> Result String ( Node Module.Module, ParserState )
+parsePortModule : ParserState -> Result ParseError ( Node Module.Module, ParserState )
 parsePortModule state =
     parsePortModuleOnKeyword (consumeKeyword "port" 4 state)
 
 
 parsePortModuleOnKeyword :
-    Result String ( Location, ParserState )
-    -> Result String ( Node Module.Module, ParserState )
+    Result ParseError ( Location, ParserState )
+    -> Result ParseError ( Node Module.Module, ParserState )
 parsePortModuleOnKeyword portKeywordResult =
     case portKeywordResult of
         Err error ->
@@ -462,8 +488,8 @@ parsePortModuleOnKeyword portKeywordResult =
 
 parsePortModuleOnModuleKeyword :
     Location
-    -> Result String ( Location, ParserState )
-    -> Result String ( Node Module.Module, ParserState )
+    -> Result ParseError ( Location, ParserState )
+    -> Result ParseError ( Node Module.Module, ParserState )
 parsePortModuleOnModuleKeyword portTokenLocation moduleKeywordResult =
     case moduleKeywordResult of
         Err error ->
@@ -480,8 +506,8 @@ type DefaultModuleKind
 
 finishDefaultModuleOnKeyword :
     DefaultModuleKind
-    -> Result String ( Location, ParserState )
-    -> Result String ( Node Module.Module, ParserState )
+    -> Result ParseError ( Location, ParserState )
+    -> Result ParseError ( Node Module.Module, ParserState )
 finishDefaultModuleOnKeyword moduleKind keywordResult =
     case keywordResult of
         Err error ->
@@ -495,7 +521,7 @@ finishDefaultModule :
     DefaultModuleKind
     -> Location
     -> ParserState
-    -> Result String ( Node Module.Module, ParserState )
+    -> Result ParseError ( Node Module.Module, ParserState )
 finishDefaultModule moduleKind startLocation state =
     finishDefaultModuleExposing moduleKind startLocation (parseModuleName state)
 
@@ -503,8 +529,8 @@ finishDefaultModule moduleKind startLocation state =
 finishDefaultModuleExposing :
     DefaultModuleKind
     -> Location
-    -> Result String ( Node Module.ModuleName, ParserState )
-    -> Result String ( Node Module.Module, ParserState )
+    -> Result ParseError ( Node Module.ModuleName, ParserState )
+    -> Result ParseError ( Node Module.Module, ParserState )
 finishDefaultModuleExposing moduleKind startLocation moduleNameResult =
     case moduleNameResult of
         Err error ->
@@ -522,8 +548,8 @@ finishDefaultModuleOnExposing :
     DefaultModuleKind
     -> Location
     -> Node Module.ModuleName
-    -> Result String ( Node Exposing.Exposing, ParserState )
-    -> Result String ( Node Module.Module, ParserState )
+    -> Result ParseError ( Node Exposing.Exposing, ParserState )
+    -> Result ParseError ( Node Module.Module, ParserState )
 finishDefaultModuleOnExposing moduleKind startLocation moduleName exposingResult =
     case exposingResult of
         Err error ->
@@ -539,7 +565,7 @@ finishDefaultModuleNode :
     -> Node Module.ModuleName
     -> Node Exposing.Exposing
     -> ParserState
-    -> Result String ( Node Module.Module, ParserState )
+    -> Result ParseError ( Node Module.Module, ParserState )
 finishDefaultModuleNode moduleKind startLocation moduleName exposingList remaining =
     let
         (Node exposingRange _) =
@@ -568,7 +594,7 @@ finishDefaultModuleNode moduleKind startLocation moduleName exposingList remaini
         )
 
 
-parseEffectModule : ParserState -> Result String ( Node Module.Module, ParserState )
+parseEffectModule : ParserState -> Result ParseError ( Node Module.Module, ParserState )
 parseEffectModule state =
     case consumeKeyword "effect" 6 state of
         Err error ->
@@ -617,7 +643,7 @@ parseEffectModule state =
 
 parseEffectWhere :
     ParserState
-    -> Result String ( Maybe (Node String), Maybe (Node String), ParserState )
+    -> Result ParseError ( Maybe (Node String), Maybe (Node String), ParserState )
 parseEffectWhere state =
     parseEffectWhereAt state (skipTrivia state)
 
@@ -625,7 +651,7 @@ parseEffectWhere state =
 parseEffectWhereAt :
     ParserState
     -> ParserState
-    -> Result String ( Maybe (Node String), Maybe (Node String), ParserState )
+    -> Result ParseError ( Maybe (Node String), Maybe (Node String), ParserState )
 parseEffectWhereAt state stateAtWhere =
     case String.left 1 (String.dropLeft stateAtWhere.offset stateAtWhere.source) of
         first ->
@@ -657,7 +683,7 @@ parseEffectWhereAt state stateAtWhere =
                                     }
 
                             _ ->
-                                Err ("Expected '{', but found '" ++ snippetAt stateAtOpenBrace ++ "'.")
+                                failure stateAtOpenBrace ("Expected '{', but found '" ++ snippetAt stateAtOpenBrace ++ "'.")
 
             else
                 Ok ( Nothing, Nothing, state )
@@ -667,7 +693,7 @@ parseEffectWhereFields :
     Maybe (Node String)
     -> Maybe (Node String)
     -> ParserState
-    -> Result String ( Maybe (Node String), Maybe (Node String), ParserState )
+    -> Result ParseError ( Maybe (Node String), Maybe (Node String), ParserState )
 parseEffectWhereFields command subscription state =
     parseEffectWhereFieldsAt command subscription (skipTrivia state)
 
@@ -676,7 +702,7 @@ parseEffectWhereFieldsAt :
     Maybe (Node String)
     -> Maybe (Node String)
     -> ParserState
-    -> Result String ( Maybe (Node String), Maybe (Node String), ParserState )
+    -> Result ParseError ( Maybe (Node String), Maybe (Node String), ParserState )
 parseEffectWhereFieldsAt command subscription stateAtField =
     case String.left 1 (String.dropLeft stateAtField.offset stateAtField.source) of
         "}" ->
@@ -769,10 +795,10 @@ parseEffectWhereFieldsAt command subscription stateAtField =
                                         parseEffectWhereFields nextCommand nextSubscription afterValue
 
                     _ ->
-                        Err ("Expected '=', but found '" ++ snippetAt stateAtEquals ++ "'.")
+                        failure stateAtEquals ("Expected '=', but found '" ++ snippetAt stateAtEquals ++ "'.")
 
             else
-                Err
+                failure stateAtField
                     ("Expected an effect module field or '}', but found '"
                         ++ snippetAt stateAtField
                         ++ "'."
@@ -786,7 +812,7 @@ parseEffectWhereFieldsAt command subscription stateAtField =
 parseImports :
     List (Node Import.Import)
     -> ParserState
-    -> Result String ( List (Node Import.Import), ParserState )
+    -> Result ParseError ( List (Node Import.Import), ParserState )
 parseImports importsRev state =
     parseImportsAt importsRev state (skipTrivia state)
 
@@ -795,7 +821,7 @@ parseImportsAt :
     List (Node Import.Import)
     -> ParserState
     -> ParserState
-    -> Result String ( List (Node Import.Import), ParserState )
+    -> Result ParseError ( List (Node Import.Import), ParserState )
 parseImportsAt importsRev state stateAtImport =
     case String.left 1 (String.dropLeft stateAtImport.offset stateAtImport.source) of
         first ->
@@ -813,8 +839,8 @@ parseImportsAt importsRev state stateAtImport =
 
 parseImportsOnImport :
     List (Node Import.Import)
-    -> Result String ( Node Import.Import, ParserState )
-    -> Result String ( List (Node Import.Import), ParserState )
+    -> Result ParseError ( Node Import.Import, ParserState )
+    -> Result ParseError ( List (Node Import.Import), ParserState )
 parseImportsOnImport importsRev importResult =
     case importResult of
         Err error ->
@@ -824,14 +850,14 @@ parseImportsOnImport importsRev importResult =
             parseImports (importNode :: importsRev) remaining
 
 
-parseImport : ParserState -> Result String ( Node Import.Import, ParserState )
+parseImport : ParserState -> Result ParseError ( Node Import.Import, ParserState )
 parseImport state =
     parseImportOnKeyword (consumeKeyword "import" 6 state)
 
 
 parseImportOnKeyword :
-    Result String ( Location, ParserState )
-    -> Result String ( Node Import.Import, ParserState )
+    Result ParseError ( Location, ParserState )
+    -> Result ParseError ( Node Import.Import, ParserState )
 parseImportOnKeyword keywordResult =
     case keywordResult of
         Err error ->
@@ -843,8 +869,8 @@ parseImportOnKeyword keywordResult =
 
 parseImportOnModuleName :
     Location
-    -> Result String ( Node Module.ModuleName, ParserState )
-    -> Result String ( Node Import.Import, ParserState )
+    -> Result ParseError ( Node Module.ModuleName, ParserState )
+    -> Result ParseError ( Node Import.Import, ParserState )
 parseImportOnModuleName importTokenLocation moduleNameResult =
     case moduleNameResult of
         Err error ->
@@ -857,8 +883,8 @@ parseImportOnModuleName importTokenLocation moduleNameResult =
 parseImportOnAlias :
     Location
     -> Node Module.ModuleName
-    -> Result String ( Maybe ( Location, Node Module.ModuleName ), ParserState )
-    -> Result String ( Node Import.Import, ParserState )
+    -> Result ParseError ( Maybe ( Location, Node Module.ModuleName ), ParserState )
+    -> Result ParseError ( Node Import.Import, ParserState )
 parseImportOnAlias importTokenLocation moduleName aliasResult =
     case aliasResult of
         Err error ->
@@ -876,8 +902,8 @@ parseImportOnExposing :
     Location
     -> Node Module.ModuleName
     -> Maybe ( Location, Node Module.ModuleName )
-    -> Result String ( Maybe ( Location, Node Exposing.Exposing ), ParserState )
-    -> Result String ( Node Import.Import, ParserState )
+    -> Result ParseError ( Maybe ( Location, Node Exposing.Exposing ), ParserState )
+    -> Result ParseError ( Node Import.Import, ParserState )
 parseImportOnExposing importTokenLocation moduleName moduleAlias exposingResult =
     case exposingResult of
         Err error ->
@@ -923,7 +949,7 @@ importEndLocation moduleName moduleAlias exposingList =
 
 parseImportAlias :
     ParserState
-    -> Result String ( Maybe ( Location, Node Module.ModuleName ), ParserState )
+    -> Result ParseError ( Maybe ( Location, Node Module.ModuleName ), ParserState )
 parseImportAlias state =
     parseImportAliasAt state (skipTrivia state)
 
@@ -931,7 +957,7 @@ parseImportAlias state =
 parseImportAliasAt :
     ParserState
     -> ParserState
-    -> Result String ( Maybe ( Location, Node Module.ModuleName ), ParserState )
+    -> Result ParseError ( Maybe ( Location, Node Module.ModuleName ), ParserState )
 parseImportAliasAt state stateAtAs =
     case String.left 1 (String.dropLeft stateAtAs.offset stateAtAs.source) of
         first ->
@@ -984,7 +1010,7 @@ parseImportAliasAt state stateAtAs =
                                 )
 
                         else
-                            Err
+                            failure stateAtAlias
                                 ("Expected module alias, but found '"
                                     ++ snippetAt stateAtAlias
                                     ++ "'."
@@ -996,7 +1022,7 @@ parseImportAliasAt state stateAtAs =
 
 parseOptionalExposing :
     ParserState
-    -> Result String ( Maybe ( Location, Node Exposing.Exposing ), ParserState )
+    -> Result ParseError ( Maybe ( Location, Node Exposing.Exposing ), ParserState )
 parseOptionalExposing state =
     parseOptionalExposingAt state (skipTrivia state)
 
@@ -1004,7 +1030,7 @@ parseOptionalExposing state =
 parseOptionalExposingAt :
     ParserState
     -> ParserState
-    -> Result String ( Maybe ( Location, Node Exposing.Exposing ), ParserState )
+    -> Result ParseError ( Maybe ( Location, Node Exposing.Exposing ), ParserState )
 parseOptionalExposingAt state stateAtExposing =
     case String.left 1 (String.dropLeft stateAtExposing.offset stateAtExposing.source) of
         first ->
@@ -1031,12 +1057,12 @@ parseOptionalExposingAt state stateAtExposing =
                 Ok ( Nothing, state )
 
 
-parseModuleName : ParserState -> Result String ( Node Module.ModuleName, ParserState )
+parseModuleName : ParserState -> Result ParseError ( Node Module.ModuleName, ParserState )
 parseModuleName state =
     parseModuleNameAt (skipTrivia state)
 
 
-parseModuleNameAt : ParserState -> Result String ( Node Module.ModuleName, ParserState )
+parseModuleNameAt : ParserState -> Result ParseError ( Node Module.ModuleName, ParserState )
 parseModuleNameAt stateAtName =
     case String.left 1 (String.dropLeft stateAtName.offset stateAtName.source) of
         first ->
@@ -1046,13 +1072,13 @@ parseModuleNameAt stateAtName =
                     (skipToIdentifierEnd stateAtName.source (stateAtName.offset + 1))
 
             else
-                Err ("Expected module name, but found '" ++ snippetAt stateAtName ++ "'.")
+                failure stateAtName ("Expected module name, but found '" ++ snippetAt stateAtName ++ "'.")
 
 
 parseModuleNameFromEnd :
     ParserState
     -> Int
-    -> Result String ( Node Module.ModuleName, ParserState )
+    -> Result ParseError ( Node Module.ModuleName, ParserState )
 parseModuleNameFromEnd stateAtName nameEnd =
     parseModuleNameRest
         { row = stateAtName.row, column = stateAtName.column }
@@ -1073,7 +1099,7 @@ parseModuleNameRest :
     -> Int
     -> List String
     -> ParserState
-    -> Result String ( Node Module.ModuleName, ParserState )
+    -> Result ParseError ( Node Module.ModuleName, ParserState )
 parseModuleNameRest start endRow endColumn partsRev state =
     parseModuleNameRestAt start endRow endColumn partsRev state state
 
@@ -1085,7 +1111,7 @@ parseModuleNameRestAt :
     -> List String
     -> ParserState
     -> ParserState
-    -> Result String ( Node Module.ModuleName, ParserState )
+    -> Result ParseError ( Node Module.ModuleName, ParserState )
 parseModuleNameRestAt start endRow endColumn partsRev state stateAtDot =
     if isDotToken stateAtDot.source stateAtDot.offset then
         parseModuleNamePartAt
@@ -1111,7 +1137,7 @@ parseModuleNamePartAt :
     Location
     -> List String
     -> ParserState
-    -> Result String ( Node Module.ModuleName, ParserState )
+    -> Result ParseError ( Node Module.ModuleName, ParserState )
 parseModuleNamePartAt start partsRev stateAtPart =
     case String.left 1 (String.dropLeft stateAtPart.offset stateAtPart.source) of
         first ->
@@ -1123,7 +1149,7 @@ parseModuleNamePartAt start partsRev stateAtPart =
                     (skipToIdentifierEnd stateAtPart.source (stateAtPart.offset + 1))
 
             else
-                Err ("Expected module name part, but found '" ++ snippetAt stateAtPart ++ "'.")
+                failure stateAtPart ("Expected module name part, but found '" ++ snippetAt stateAtPart ++ "'.")
 
 
 parseModuleNamePartFromEnd :
@@ -1131,7 +1157,7 @@ parseModuleNamePartFromEnd :
     -> List String
     -> ParserState
     -> Int
-    -> Result String ( Node Module.ModuleName, ParserState )
+    -> Result ParseError ( Node Module.ModuleName, ParserState )
 parseModuleNamePartFromEnd start partsRev stateAtPart partEnd =
     parseModuleNameRest
         start
@@ -1146,14 +1172,14 @@ parseModuleNamePartFromEnd start partsRev stateAtPart partEnd =
         }
 
 
-parseExposing : ParserState -> Result String ( Node Exposing.Exposing, ParserState )
+parseExposing : ParserState -> Result ParseError ( Node Exposing.Exposing, ParserState )
 parseExposing state =
     parseExposingOnKeyword (consumeKeyword "exposing" 8 state)
 
 
 parseExposingOnKeyword :
-    Result String ( Location, ParserState )
-    -> Result String ( Node Exposing.Exposing, ParserState )
+    Result ParseError ( Location, ParserState )
+    -> Result ParseError ( Node Exposing.Exposing, ParserState )
 parseExposingOnKeyword keywordResult =
     case keywordResult of
         Err error ->
@@ -1182,7 +1208,7 @@ parseExposingOnKeyword keywordResult =
                         (skipTrivia afterOpenParen)
 
                 _ ->
-                    Err ("Expected '(', but found '" ++ snippetAt stateAtOpenParen ++ "'.")
+                    failure stateAtOpenParen ("Expected '(', but found '" ++ snippetAt stateAtOpenParen ++ "'.")
 
 
 parseExposingListAt :
@@ -1190,7 +1216,7 @@ parseExposingListAt :
     -> Location
     -> ParserState
     -> ParserState
-    -> Result String ( Node Exposing.Exposing, ParserState )
+    -> Result ParseError ( Node Exposing.Exposing, ParserState )
 parseExposingListAt exposingTokenLocation openParenLocation afterOpenParen stateAtFirst =
     case String.left 2 (String.dropLeft stateAtFirst.offset stateAtFirst.source) of
         ".." ->
@@ -1229,7 +1255,7 @@ parseExposingListAt exposingTokenLocation openParenLocation afterOpenParen state
                         )
 
                 _ ->
-                    Err ("Expected ')', but found '" ++ snippetAt stateAtCloseParen ++ "'.")
+                    failure stateAtCloseParen ("Expected ')', but found '" ++ snippetAt stateAtCloseParen ++ "'.")
 
         _ ->
             parseExplicitExposing
@@ -1246,7 +1272,7 @@ parseExplicitExposing :
     -> Maybe (Node Exposing.TopLevelExpose)
     -> List ( Location, Node Exposing.TopLevelExpose )
     -> ParserState
-    -> Result String ( Node Exposing.Exposing, ParserState )
+    -> Result ParseError ( Node Exposing.Exposing, ParserState )
 parseExplicitExposing exposingTokenLocation openParenLocation first restRev state =
     parseExplicitExposingAt exposingTokenLocation openParenLocation first restRev (skipTrivia state)
 
@@ -1257,7 +1283,7 @@ parseExplicitExposingAt :
     -> Maybe (Node Exposing.TopLevelExpose)
     -> List ( Location, Node Exposing.TopLevelExpose )
     -> ParserState
-    -> Result String ( Node Exposing.Exposing, ParserState )
+    -> Result ParseError ( Node Exposing.Exposing, ParserState )
 parseExplicitExposingAt exposingTokenLocation openParenLocation first restRev stateAtToken =
     case String.left 1 (String.dropLeft stateAtToken.offset stateAtToken.source) of
         ")" ->
@@ -1315,15 +1341,15 @@ parseExplicitExposingAt exposingTokenLocation openParenLocation first restRev st
                             )
 
                     else
-                        Err "Expected ',' before exposing list item."
+                        failure stateAtToken "Expected ',' before exposing list item."
 
 
 parseExplicitExposingOnFirst :
     Location
     -> Location
     -> List ( Location, Node Exposing.TopLevelExpose )
-    -> Result String ( Node Exposing.TopLevelExpose, ParserState )
-    -> Result String ( Node Exposing.Exposing, ParserState )
+    -> Result ParseError ( Node Exposing.TopLevelExpose, ParserState )
+    -> Result ParseError ( Node Exposing.Exposing, ParserState )
 parseExplicitExposingOnFirst exposingTokenLocation openParenLocation restRev exposeResult =
     case exposeResult of
         Err error ->
@@ -1344,8 +1370,8 @@ parseExplicitExposingOnFurther :
     -> Maybe (Node Exposing.TopLevelExpose)
     -> List ( Location, Node Exposing.TopLevelExpose )
     -> Location
-    -> Result String ( Node Exposing.TopLevelExpose, ParserState )
-    -> Result String ( Node Exposing.Exposing, ParserState )
+    -> Result ParseError ( Node Exposing.TopLevelExpose, ParserState )
+    -> Result ParseError ( Node Exposing.Exposing, ParserState )
 parseExplicitExposingOnFurther exposingTokenLocation openParenLocation first restRev separatorLocation exposeResult =
     case exposeResult of
         Err error ->
@@ -1360,12 +1386,12 @@ parseExplicitExposingOnFurther exposingTokenLocation openParenLocation first res
                 afterExpose
 
 
-parseTopLevelExpose : ParserState -> Result String ( Node Exposing.TopLevelExpose, ParserState )
+parseTopLevelExpose : ParserState -> Result ParseError ( Node Exposing.TopLevelExpose, ParserState )
 parseTopLevelExpose state =
     parseTopLevelExposeAt (skipTrivia state)
 
 
-parseTopLevelExposeAt : ParserState -> Result String ( Node Exposing.TopLevelExpose, ParserState )
+parseTopLevelExposeAt : ParserState -> Result ParseError ( Node Exposing.TopLevelExpose, ParserState )
 parseTopLevelExposeAt stateAtToken =
     case String.left 1 (String.dropLeft stateAtToken.offset stateAtToken.source) of
         "(" ->
@@ -1383,7 +1409,7 @@ parseTopLevelExposeAt stateAtToken =
                     operatorTokenLength stateAtOperator.source stateAtOperator.offset
             in
             if operatorLength == 0 then
-                Err "Expected an operator followed by ')' in exposing list."
+                failure stateAtOperator "Expected an operator followed by ')' in exposing list."
 
             else
                 let
@@ -1414,7 +1440,7 @@ parseTopLevelExposeAt stateAtToken =
                         )
 
                 else
-                    Err "Expected an operator followed by ')' in exposing list."
+                    failure stateAtClose "Expected an operator followed by ')' in exposing list."
 
         first ->
             if isIdentifierStart first then
@@ -1455,7 +1481,7 @@ parseTopLevelExposeAt stateAtToken =
                         )
 
             else
-                Err ("Unexpected token '" ++ snippetAt stateAtToken ++ "' in exposing list.")
+                failure stateAtToken ("Unexpected token '" ++ snippetAt stateAtToken ++ "' in exposing list.")
 
 
 parseUpperExpose :
@@ -1464,7 +1490,7 @@ parseUpperExpose :
     -> Int
     -> String
     -> ParserState
-    -> Result String ( Node Exposing.TopLevelExpose, ParserState )
+    -> Result ParseError ( Node Exposing.TopLevelExpose, ParserState )
 parseUpperExpose nameStart nameEndRow nameEndColumn name state =
     parseUpperExposeAt nameStart nameEndRow nameEndColumn name state (skipTrivia state)
 
@@ -1476,7 +1502,7 @@ parseUpperExposeAt :
     -> String
     -> ParserState
     -> ParserState
-    -> Result String ( Node Exposing.TopLevelExpose, ParserState )
+    -> Result ParseError ( Node Exposing.TopLevelExpose, ParserState )
 parseUpperExposeAt nameStart nameEndRow nameEndColumn name state stateAtOpen =
     if String.left 1 (String.dropLeft stateAtOpen.offset stateAtOpen.source) == "(" then
         let
@@ -1546,10 +1572,10 @@ parseUpperExposeAt nameStart nameEndRow nameEndColumn name state stateAtOpen =
                                 )
 
                         _ ->
-                            Err ("Expected ')', but found '" ++ snippetAt stateAtCloseParen ++ "'.")
+                            failure stateAtCloseParen ("Expected ')', but found '" ++ snippetAt stateAtCloseParen ++ "'.")
 
                 else
-                    Err "Expected '..' or ')' after exposed type name."
+                    failure stateAtInner "Expected '..' or ')' after exposed type name."
 
     else
         Ok
@@ -1569,7 +1595,7 @@ parseFileDeclarations :
     -> List (Node String)
     -> Maybe Int
     -> ParserState
-    -> Result String ( List (Node Declaration.Declaration), List (Node String), ParserState )
+    -> Result ParseError ( List (Node Declaration.Declaration), List (Node String), ParserState )
 parseFileDeclarations declarationsRev documentationCommentsRev previousRangeEndRow state =
     parseFileDeclarationsAt declarationsRev documentationCommentsRev previousRangeEndRow state (skipTrivia state)
 
@@ -1580,7 +1606,7 @@ parseFileDeclarationsAt :
     -> Maybe Int
     -> ParserState
     -> ParserState
-    -> Result String ( List (Node Declaration.Declaration), List (Node String), ParserState )
+    -> Result ParseError ( List (Node Declaration.Declaration), List (Node String), ParserState )
 parseFileDeclarationsAt declarationsRev documentationCommentsRev previousRangeEndRow state stateAtDeclaration =
     case String.left 1 (String.dropLeft stateAtDeclaration.offset stateAtDeclaration.source) of
         "" ->
@@ -1592,7 +1618,7 @@ parseFileDeclarationsAt declarationsRev documentationCommentsRev previousRangeEn
 
         _ ->
             if stateAtDeclaration.column /= 1 then
-                Err
+                failure stateAtDeclaration
                     ("Unexpected token '"
                         ++ snippetAt stateAtDeclaration
                         ++ "' after parsing "
@@ -1619,8 +1645,8 @@ parseFileDeclarationsOnDeclaration :
     List (Node Declaration.Declaration)
     -> List (Node String)
     -> Maybe (Node String)
-    -> Result String ( Declaration.Declaration, ParserState )
-    -> Result String ( List (Node Declaration.Declaration), List (Node String), ParserState )
+    -> Result ParseError ( Declaration.Declaration, ParserState )
+    -> Result ParseError ( List (Node Declaration.Declaration), List (Node String), ParserState )
 parseFileDeclarationsOnDeclaration declarationsRev documentationCommentsRev documentation declarationResult =
     case declarationResult of
         Err error ->
@@ -1649,7 +1675,7 @@ parseFileDeclarationsWithDocumentation :
     -> List (Node String)
     -> Declaration.Declaration
     -> ParserState
-    -> Result String ( List (Node Declaration.Declaration), List (Node String), ParserState )
+    -> Result ParseError ( List (Node Declaration.Declaration), List (Node String), ParserState )
 parseFileDeclarationsWithDocumentation declarationsRev documentationCommentsRev declaration remaining =
     parseFileDeclarationsWithRange
         declarationsRev
@@ -1665,7 +1691,7 @@ parseFileDeclarationsWithRange :
     -> Declaration.Declaration
     -> Range
     -> ParserState
-    -> Result String ( List (Node Declaration.Declaration), List (Node String), ParserState )
+    -> Result ParseError ( List (Node Declaration.Declaration), List (Node String), ParserState )
 parseFileDeclarationsWithRange declarationsRev documentationCommentsRev declaration declarationRange remaining =
     parseFileDeclarations
         (Node declarationRange declaration :: declarationsRev)
@@ -1909,12 +1935,12 @@ locationBefore left right =
 -- DECLARATIONS
 
 
-parseDeclaration : ParserState -> Result String ( Declaration.Declaration, ParserState )
+parseDeclaration : ParserState -> Result ParseError ( Declaration.Declaration, ParserState )
 parseDeclaration state =
     parseDeclarationAt (skipTrivia state)
 
 
-parseDeclarationAt : ParserState -> Result String ( Declaration.Declaration, ParserState )
+parseDeclarationAt : ParserState -> Result ParseError ( Declaration.Declaration, ParserState )
 parseDeclarationAt stateAtDeclaration =
     case String.left 1 (String.dropLeft stateAtDeclaration.offset stateAtDeclaration.source) of
         first ->
@@ -1936,7 +1962,7 @@ parseDeclarationAt stateAtDeclaration =
                 parseFunctionDeclaration stateAtDeclaration
 
 
-parseInfixDeclaration : ParserState -> Result String ( Declaration.Declaration, ParserState )
+parseInfixDeclaration : ParserState -> Result ParseError ( Declaration.Declaration, ParserState )
 parseInfixDeclaration state =
     case consumeKeyword "infix" 5 state of
         Err error ->
@@ -1950,7 +1976,7 @@ parseInfixDeclaration state =
             case String.left 1 (String.dropLeft stateAtDirection.offset stateAtDirection.source) of
                 directionFirst ->
                     if not (isIdentifierStart directionFirst) then
-                        Err
+                        failure stateAtDirection
                             ("Expected infix direction, but found '"
                                 ++ snippetAt stateAtDirection
                                 ++ "'."
@@ -1979,7 +2005,7 @@ parseInfixDeclaration state =
                         in
                         case parseInfixDirection directionLexeme of
                             Nothing ->
-                                Err ("Infix direction is not a valid value: " ++ directionLexeme)
+                                failure stateAtDirection ("Infix direction is not a valid value: " ++ directionLexeme)
 
                             Just direction ->
                                 parseInfixDeclarationFromDirection
@@ -1992,7 +2018,7 @@ parseInfixDeclarationFromDirection :
     Location
     -> Node Infix.InfixDirection
     -> ParserState
-    -> Result String ( Declaration.Declaration, ParserState )
+    -> Result ParseError ( Declaration.Declaration, ParserState )
 parseInfixDeclarationFromDirection infixTokenLocation direction state =
     parseInfixDeclarationFromDirectionAt infixTokenLocation direction (skipTrivia state)
 
@@ -2001,12 +2027,12 @@ parseInfixDeclarationFromDirectionAt :
     Location
     -> Node Infix.InfixDirection
     -> ParserState
-    -> Result String ( Declaration.Declaration, ParserState )
+    -> Result ParseError ( Declaration.Declaration, ParserState )
 parseInfixDeclarationFromDirectionAt infixTokenLocation direction stateAtPrecedence =
     case String.left 1 (String.dropLeft stateAtPrecedence.offset stateAtPrecedence.source) of
         precedenceFirst ->
             if not (isDigit precedenceFirst) then
-                Err
+                failure stateAtPrecedence
                     ("Expected infix precedence, but found '"
                         ++ snippetAt stateAtPrecedence
                         ++ "'."
@@ -2035,7 +2061,7 @@ parseInfixDeclarationFromDirectionAt infixTokenLocation direction stateAtPrecede
                 in
                 case String.toInt precedenceLexeme of
                     Nothing ->
-                        Err ("Infix precedence is not a number: " ++ precedenceLexeme)
+                        failure stateAtPrecedence ("Infix precedence is not a number: " ++ precedenceLexeme)
 
                     Just precedence ->
                         let
@@ -2061,7 +2087,7 @@ parseInfixDeclarationFromDirectionAt infixTokenLocation direction stateAtPrecede
                                         operatorTokenLength stateAtOperator.source stateAtOperator.offset
                                 in
                                 if operatorLength == 0 then
-                                    Err
+                                    failure stateAtOperator
                                         ("Expected operator symbol, but found '"
                                             ++ snippetAt stateAtOperator
                                             ++ "'."
@@ -2115,7 +2141,7 @@ parseInfixDeclarationFromDirectionAt infixTokenLocation direction stateAtPrecede
                                                     case String.left 1 (String.dropLeft stateAtFunction.offset stateAtFunction.source) of
                                                         functionFirst ->
                                                             if not (isIdentifierStart functionFirst) then
-                                                                Err
+                                                                failure stateAtFunction
                                                                     ("Expected function name, but found '"
                                                                         ++ snippetAt stateAtFunction
                                                                         ++ "'."
@@ -2157,13 +2183,13 @@ parseInfixDeclarationFromDirectionAt infixTokenLocation direction stateAtPrecede
                                                                     )
 
                                                 _ ->
-                                                    Err ("Expected '=', but found '" ++ snippetAt stateAtEquals ++ "'.")
+                                                    failure stateAtEquals ("Expected '=', but found '" ++ snippetAt stateAtEquals ++ "'.")
 
                                         _ ->
-                                            Err ("Expected ')', but found '" ++ snippetAt stateAtCloseParen ++ "'.")
+                                            failure stateAtCloseParen ("Expected ')', but found '" ++ snippetAt stateAtCloseParen ++ "'.")
 
                             _ ->
-                                Err ("Expected '(', but found '" ++ snippetAt stateAtOpenParen ++ "'.")
+                                failure stateAtOpenParen ("Expected '(', but found '" ++ snippetAt stateAtOpenParen ++ "'.")
 
 
 parseInfixDirection : String -> Maybe Infix.InfixDirection
@@ -2182,7 +2208,7 @@ parseInfixDirection s =
             Nothing
 
 
-parseTypeDeclaration : ParserState -> Result String ( Declaration.Declaration, ParserState )
+parseTypeDeclaration : ParserState -> Result ParseError ( Declaration.Declaration, ParserState )
 parseTypeDeclaration state =
     case consumeKeyword "type" 4 state of
         Err error ->
@@ -2210,7 +2236,7 @@ parseTypeDeclaration state =
 parseAliasDeclaration :
     Location
     -> ParserState
-    -> Result String ( Declaration.Declaration, ParserState )
+    -> Result ParseError ( Declaration.Declaration, ParserState )
 parseAliasDeclaration typeTokenLocation state =
     case consumeKeyword "alias" 5 state of
         Err error ->
@@ -2224,7 +2250,7 @@ parseAliasDeclaration typeTokenLocation state =
             case String.left 1 (String.dropLeft stateAtName.offset stateAtName.source) of
                 first ->
                     if not (isIdentifierStart first) then
-                        Err "Expected type alias name."
+                        failure stateAtName "Expected type alias name."
 
                     else
                         let
@@ -2285,13 +2311,13 @@ parseAliasDeclaration typeTokenLocation state =
                                             )
 
                             _ ->
-                                Err ("Expected '=', but found '" ++ snippetAt stateAtEquals ++ "'.")
+                                failure stateAtEquals ("Expected '=', but found '" ++ snippetAt stateAtEquals ++ "'.")
 
 
 parseChoiceTypeDeclaration :
     Location
     -> ParserState
-    -> Result String ( Declaration.Declaration, ParserState )
+    -> Result ParseError ( Declaration.Declaration, ParserState )
 parseChoiceTypeDeclaration typeTokenLocation state =
     parseChoiceTypeDeclarationAt typeTokenLocation (skipTrivia state)
 
@@ -2299,12 +2325,12 @@ parseChoiceTypeDeclaration typeTokenLocation state =
 parseChoiceTypeDeclarationAt :
     Location
     -> ParserState
-    -> Result String ( Declaration.Declaration, ParserState )
+    -> Result ParseError ( Declaration.Declaration, ParserState )
 parseChoiceTypeDeclarationAt typeTokenLocation stateAtName =
     case String.left 1 (String.dropLeft stateAtName.offset stateAtName.source) of
         first ->
             if not (isIdentifierStart first) then
-                Err "Expected type name."
+                failure stateAtName "Expected type name."
 
             else
                 let
@@ -2368,24 +2394,24 @@ parseChoiceTypeDeclarationAt typeTokenLocation stateAtName =
                                             )
 
                     _ ->
-                        Err ("Expected '=', but found '" ++ snippetAt stateAtEquals ++ "'.")
+                        failure stateAtEquals ("Expected '=', but found '" ++ snippetAt stateAtEquals ++ "'.")
 
 
 parseChoiceTypeConstructor :
     ParserState
-    -> Result String ( Node Declaration.ValueConstructor, ParserState )
+    -> Result ParseError ( Node Declaration.ValueConstructor, ParserState )
 parseChoiceTypeConstructor state =
     parseChoiceTypeConstructorAt (skipTrivia state)
 
 
 parseChoiceTypeConstructorAt :
     ParserState
-    -> Result String ( Node Declaration.ValueConstructor, ParserState )
+    -> Result ParseError ( Node Declaration.ValueConstructor, ParserState )
 parseChoiceTypeConstructorAt stateAtName =
     case String.left 1 (String.dropLeft stateAtName.offset stateAtName.source) of
         first ->
             if not (isIdentifierStart first) then
-                Err
+                failure stateAtName
                     ("Expected constructor name, but found '"
                         ++ snippetAt stateAtName
                         ++ "'."
@@ -2441,7 +2467,7 @@ parseMoreChoiceConstructors :
     Node Declaration.ValueConstructor
     -> List ( Location, Node Declaration.ValueConstructor )
     -> ParserState
-    -> Result String ( SeparatedSyntaxList.SeparatedSyntaxList (Node Declaration.ValueConstructor), ParserState )
+    -> Result ParseError ( SeparatedSyntaxList.SeparatedSyntaxList (Node Declaration.ValueConstructor), ParserState )
 parseMoreChoiceConstructors firstConstructor restRev state =
     parseMoreChoiceConstructorsAt firstConstructor restRev state (skipTrivia state)
 
@@ -2451,7 +2477,7 @@ parseMoreChoiceConstructorsAt :
     -> List ( Location, Node Declaration.ValueConstructor )
     -> ParserState
     -> ParserState
-    -> Result String ( SeparatedSyntaxList.SeparatedSyntaxList (Node Declaration.ValueConstructor), ParserState )
+    -> Result ParseError ( SeparatedSyntaxList.SeparatedSyntaxList (Node Declaration.ValueConstructor), ParserState )
 parseMoreChoiceConstructorsAt firstConstructor restRev state stateAtPipe =
     if isPipeToken stateAtPipe.source stateAtPipe.offset then
         let
@@ -2487,7 +2513,7 @@ parseChoiceTypeConstructorArgs :
     Int
     -> List (Node TypeAnnotation.TypeAnnotation)
     -> ParserState
-    -> Result String ( List (Node TypeAnnotation.TypeAnnotation), ParserState )
+    -> Result ParseError ( List (Node TypeAnnotation.TypeAnnotation), ParserState )
 parseChoiceTypeConstructorArgs constructorColumn argumentsRev state =
     parseChoiceTypeConstructorArgsAt constructorColumn argumentsRev state (skipTrivia state)
 
@@ -2497,7 +2523,7 @@ parseChoiceTypeConstructorArgsAt :
     -> List (Node TypeAnnotation.TypeAnnotation)
     -> ParserState
     -> ParserState
-    -> Result String ( List (Node TypeAnnotation.TypeAnnotation), ParserState )
+    -> Result ParseError ( List (Node TypeAnnotation.TypeAnnotation), ParserState )
 parseChoiceTypeConstructorArgsAt constructorColumn argumentsRev state stateAtArgument =
     if
         stateAtArgument.column
@@ -2558,7 +2584,7 @@ collectTypeGenericsAt state genericsRev stateAtGeneric =
                 ( List.reverse genericsRev, state )
 
 
-parsePortDeclaration : ParserState -> Result String ( Declaration.Declaration, ParserState )
+parsePortDeclaration : ParserState -> Result ParseError ( Declaration.Declaration, ParserState )
 parsePortDeclaration state =
     case consumeKeyword "port" 4 state of
         Err error ->
@@ -2572,7 +2598,7 @@ parsePortDeclaration state =
             case String.left 1 (String.dropLeft stateAtName.offset stateAtName.source) of
                 first ->
                     if not (isIdentifierStart first) then
-                        Err "Expected port name."
+                        failure stateAtName "Expected port name."
 
                     else
                         let
@@ -2625,20 +2651,20 @@ parsePortDeclaration state =
                                             )
 
                             _ ->
-                                Err ("Expected ':', but found '" ++ snippetAt stateAtColon ++ "'.")
+                                failure stateAtColon ("Expected ':', but found '" ++ snippetAt stateAtColon ++ "'.")
 
 
-parseFunctionDeclaration : ParserState -> Result String ( Declaration.Declaration, ParserState )
+parseFunctionDeclaration : ParserState -> Result ParseError ( Declaration.Declaration, ParserState )
 parseFunctionDeclaration state =
     parseFunctionDeclarationAt (skipTrivia state)
 
 
-parseFunctionDeclarationAt : ParserState -> Result String ( Declaration.Declaration, ParserState )
+parseFunctionDeclarationAt : ParserState -> Result ParseError ( Declaration.Declaration, ParserState )
 parseFunctionDeclarationAt stateAtName =
     case String.left 1 (String.dropLeft stateAtName.offset stateAtName.source) of
         first ->
             if not (isIdentifierStart first) then
-                Err ("Expected function name, but found '" ++ snippetAt stateAtName ++ "'.")
+                failure stateAtName ("Expected function name, but found '" ++ snippetAt stateAtName ++ "'.")
 
             else
                 parseFunctionDeclarationWithName
@@ -2649,7 +2675,7 @@ parseFunctionDeclarationAt stateAtName =
 parseFunctionDeclarationWithName :
     ParserState
     -> Int
-    -> Result String ( Declaration.Declaration, ParserState )
+    -> Result ParseError ( Declaration.Declaration, ParserState )
 parseFunctionDeclarationWithName stateAtName nameEnd =
     parseFunctionDeclarationAfterName
         { start = { row = stateAtName.row, column = stateAtName.column }
@@ -2668,7 +2694,7 @@ parseFunctionDeclarationAfterName :
     Range
     -> String
     -> ParserState
-    -> Result String ( Declaration.Declaration, ParserState )
+    -> Result ParseError ( Declaration.Declaration, ParserState )
 parseFunctionDeclarationAfterName nameRange name afterName =
     parseFunctionDeclarationAtColon nameRange name afterName (skipTrivia afterName)
 
@@ -2678,7 +2704,7 @@ parseFunctionDeclarationAtColon :
     -> String
     -> ParserState
     -> ParserState
-    -> Result String ( Declaration.Declaration, ParserState )
+    -> Result ParseError ( Declaration.Declaration, ParserState )
 parseFunctionDeclarationAtColon nameRange name afterName stateAtColon =
     if isColonToken stateAtColon.source stateAtColon.offset then
         parseFunctionDeclarationOnSignature
@@ -2703,8 +2729,8 @@ parseFunctionDeclarationOnSignature :
     Range
     -> String
     -> Location
-    -> Result String ( Node TypeAnnotation.TypeAnnotation, ParserState )
-    -> Result String ( Declaration.Declaration, ParserState )
+    -> Result ParseError ( Node TypeAnnotation.TypeAnnotation, ParserState )
+    -> Result ParseError ( Declaration.Declaration, ParserState )
 parseFunctionDeclarationOnSignature nameRange name colonLocation signatureResult =
     case signatureResult of
         Err error ->
@@ -2725,12 +2751,12 @@ parseFunctionDeclarationAtSecondName :
     -> Location
     -> Node TypeAnnotation.TypeAnnotation
     -> ParserState
-    -> Result String ( Declaration.Declaration, ParserState )
+    -> Result ParseError ( Declaration.Declaration, ParserState )
 parseFunctionDeclarationAtSecondName nameRange name colonLocation signatureTypeNode stateAtSecondName =
     case String.left 1 (String.dropLeft stateAtSecondName.offset stateAtSecondName.source) of
         secondFirst ->
             if not (isIdentifierStart secondFirst) then
-                Err
+                failure stateAtSecondName
                     ("Expected function name after signature, but found '"
                         ++ snippetAt stateAtSecondName
                         ++ "'."
@@ -2753,7 +2779,7 @@ parseFunctionDeclarationWithSecondName :
     -> Node TypeAnnotation.TypeAnnotation
     -> ParserState
     -> Int
-    -> Result String ( Declaration.Declaration, ParserState )
+    -> Result ParseError ( Declaration.Declaration, ParserState )
 parseFunctionDeclarationWithSecondName nameRange name colonLocation signatureTypeNode stateAtSecondName secondNameEnd =
     let
         secondName =
@@ -2763,7 +2789,7 @@ parseFunctionDeclarationWithSecondName nameRange name colonLocation signatureTyp
             signatureTypeNode
     in
     if secondName /= name then
-        Err
+        failure stateAtSecondName
             ("Function name does not match signature: "
                 ++ secondName
                 ++ " != "
@@ -2802,7 +2828,7 @@ finishFunctionDeclaration :
     -> String
     -> Maybe (Node Expression.Signature)
     -> ParserState
-    -> Result String ( Declaration.Declaration, ParserState )
+    -> Result ParseError ( Declaration.Declaration, ParserState )
 finishFunctionDeclaration declarationStart implementationNameRange implementationName maybeSignature state =
     finishFunctionDeclarationOnArguments
         declarationStart
@@ -2817,8 +2843,8 @@ finishFunctionDeclarationOnArguments :
     -> Range
     -> String
     -> Maybe (Node Expression.Signature)
-    -> Result String ( List (Node Pattern.Pattern), ParserState )
-    -> Result String ( Declaration.Declaration, ParserState )
+    -> Result ParseError ( List (Node Pattern.Pattern), ParserState )
+    -> Result ParseError ( Declaration.Declaration, ParserState )
 finishFunctionDeclarationOnArguments declarationStart implementationNameRange implementationName maybeSignature argumentsResult =
     case argumentsResult of
         Err error ->
@@ -2849,7 +2875,7 @@ finishFunctionDeclarationOnArguments declarationStart implementationNameRange im
                         )
 
                 _ ->
-                    Err ("Expected '=', but found '" ++ snippetAt stateAtEquals ++ "'.")
+                    failure stateAtEquals ("Expected '=', but found '" ++ snippetAt stateAtEquals ++ "'.")
 
 
 finishFunctionDeclarationOnBody :
@@ -2858,8 +2884,8 @@ finishFunctionDeclarationOnBody :
     -> Maybe (Node Expression.Signature)
     -> List (Node Pattern.Pattern)
     -> Location
-    -> Result String ( Node Expression.Expression, ParserState )
-    -> Result String ( Declaration.Declaration, ParserState )
+    -> Result ParseError ( Node Expression.Expression, ParserState )
+    -> Result ParseError ( Declaration.Declaration, ParserState )
 finishFunctionDeclarationOnBody implementationNameRange implementationName maybeSignature arguments equalsTokenLocation bodyResult =
     case bodyResult of
         Err error ->
@@ -2889,7 +2915,7 @@ collectFunctionArguments :
     Int
     -> List (Node Pattern.Pattern)
     -> ParserState
-    -> Result String ( List (Node Pattern.Pattern), ParserState )
+    -> Result ParseError ( List (Node Pattern.Pattern), ParserState )
 collectFunctionArguments indentMin argumentsRev state =
     collectFunctionArgumentsAt indentMin argumentsRev state (skipTrivia state)
 
@@ -2899,7 +2925,7 @@ collectFunctionArgumentsAt :
     -> List (Node Pattern.Pattern)
     -> ParserState
     -> ParserState
-    -> Result String ( List (Node Pattern.Pattern), ParserState )
+    -> Result ParseError ( List (Node Pattern.Pattern), ParserState )
 collectFunctionArgumentsAt indentMin argumentsRev state stateAtArgument =
     if canStartArgumentPatternAt stateAtArgument.source stateAtArgument.offset then
         collectFunctionArgumentsOnArgument
@@ -2914,8 +2940,8 @@ collectFunctionArgumentsAt indentMin argumentsRev state stateAtArgument =
 collectFunctionArgumentsOnArgument :
     Int
     -> List (Node Pattern.Pattern)
-    -> Result String ( Node Pattern.Pattern, ParserState )
-    -> Result String ( List (Node Pattern.Pattern), ParserState )
+    -> Result ParseError ( Node Pattern.Pattern, ParserState )
+    -> Result ParseError ( List (Node Pattern.Pattern), ParserState )
 collectFunctionArgumentsOnArgument indentMin argumentsRev argumentResult =
     case argumentResult of
         Err error ->
@@ -2932,14 +2958,14 @@ collectFunctionArgumentsOnArgument indentMin argumentsRev argumentResult =
 parseTypeAnnotation :
     Int
     -> ParserState
-    -> Result String ( Node TypeAnnotation.TypeAnnotation, ParserState )
+    -> Result ParseError ( Node TypeAnnotation.TypeAnnotation, ParserState )
 parseTypeAnnotation indentMin state =
     parseTypeAnnotationOnParam (parseTypeAnnotationFunctionParam indentMin state)
 
 
 parseTypeAnnotationOnParam :
-    Result String ( Node TypeAnnotation.TypeAnnotation, ParserState )
-    -> Result String ( Node TypeAnnotation.TypeAnnotation, ParserState )
+    Result ParseError ( Node TypeAnnotation.TypeAnnotation, ParserState )
+    -> Result ParseError ( Node TypeAnnotation.TypeAnnotation, ParserState )
 parseTypeAnnotationOnParam paramResult =
     case paramResult of
         Err error ->
@@ -2953,7 +2979,7 @@ parseTypeAnnotationAtArrow :
     Node TypeAnnotation.TypeAnnotation
     -> ParserState
     -> ParserState
-    -> Result String ( Node TypeAnnotation.TypeAnnotation, ParserState )
+    -> Result ParseError ( Node TypeAnnotation.TypeAnnotation, ParserState )
 parseTypeAnnotationAtArrow paramTypeNode afterParamType stateAtArrow =
     if String.left 2 (String.dropLeft stateAtArrow.offset stateAtArrow.source) == "->" then
         parseTypeAnnotationOnReturn
@@ -2983,8 +3009,8 @@ typeAnnotationStartColumn typeAnnotationNode =
 parseTypeAnnotationOnReturn :
     Node TypeAnnotation.TypeAnnotation
     -> Location
-    -> Result String ( Node TypeAnnotation.TypeAnnotation, ParserState )
-    -> Result String ( Node TypeAnnotation.TypeAnnotation, ParserState )
+    -> Result ParseError ( Node TypeAnnotation.TypeAnnotation, ParserState )
+    -> Result ParseError ( Node TypeAnnotation.TypeAnnotation, ParserState )
 parseTypeAnnotationOnReturn paramTypeNode arrowLocation returnResult =
     case returnResult of
         Err error ->
@@ -2999,7 +3025,7 @@ finishFunctionTypeAnnotation :
     -> Location
     -> Node TypeAnnotation.TypeAnnotation
     -> ParserState
-    -> Result String ( Node TypeAnnotation.TypeAnnotation, ParserState )
+    -> Result ParseError ( Node TypeAnnotation.TypeAnnotation, ParserState )
 finishFunctionTypeAnnotation paramTypeNode arrowLocation returnTypeNode afterReturn =
     let
         (Node paramTypeRange _) =
@@ -3025,15 +3051,15 @@ finishFunctionTypeAnnotation paramTypeNode arrowLocation returnTypeNode afterRet
 parseTypeAnnotationFunctionParam :
     Int
     -> ParserState
-    -> Result String ( Node TypeAnnotation.TypeAnnotation, ParserState )
+    -> Result ParseError ( Node TypeAnnotation.TypeAnnotation, ParserState )
 parseTypeAnnotationFunctionParam indentMin state =
     parseTypeAnnotationOnTypedArg indentMin (parseTypeAnnotationTypedArg indentMin state)
 
 
 parseTypeAnnotationOnTypedArg :
     Int
-    -> Result String ( Node TypeAnnotation.TypeAnnotation, ParserState )
-    -> Result String ( Node TypeAnnotation.TypeAnnotation, ParserState )
+    -> Result ParseError ( Node TypeAnnotation.TypeAnnotation, ParserState )
+    -> Result ParseError ( Node TypeAnnotation.TypeAnnotation, ParserState )
 parseTypeAnnotationOnTypedArg indentMin typedArgResult =
     case typedArgResult of
         Err error ->
@@ -3059,7 +3085,7 @@ collectTypeApplicationArgs :
     -> Node TypeAnnotation.TypeAnnotation
     -> List (Node TypeAnnotation.TypeAnnotation)
     -> ParserState
-    -> Result String ( Node TypeAnnotation.TypeAnnotation, ParserState )
+    -> Result ParseError ( Node TypeAnnotation.TypeAnnotation, ParserState )
 collectTypeApplicationArgs indentMin typedName lessApp argumentsRev state =
     collectTypeApplicationArgsAt indentMin typedName lessApp argumentsRev state (skipTrivia state)
 
@@ -3071,7 +3097,7 @@ collectTypeApplicationArgsAt :
     -> List (Node TypeAnnotation.TypeAnnotation)
     -> ParserState
     -> ParserState
-    -> Result String ( Node TypeAnnotation.TypeAnnotation, ParserState )
+    -> Result ParseError ( Node TypeAnnotation.TypeAnnotation, ParserState )
 collectTypeApplicationArgsAt indentMin typedName lessApp argumentsRev state stateAtArgument =
     let
         (Node lessAppInitialRange _) =
@@ -3120,7 +3146,7 @@ collectTypeApplicationArgsAt indentMin typedName lessApp argumentsRev state stat
 parseTypeAnnotationTypedArg :
     Int
     -> ParserState
-    -> Result String ( Node TypeAnnotation.TypeAnnotation, ParserState )
+    -> Result ParseError ( Node TypeAnnotation.TypeAnnotation, ParserState )
 parseTypeAnnotationTypedArg indentMin state =
     parseTypeAnnotationTypedArgAt indentMin (skipTrivia state)
 
@@ -3128,7 +3154,7 @@ parseTypeAnnotationTypedArg indentMin state =
 parseTypeAnnotationTypedArgAt :
     Int
     -> ParserState
-    -> Result String ( Node TypeAnnotation.TypeAnnotation, ParserState )
+    -> Result ParseError ( Node TypeAnnotation.TypeAnnotation, ParserState )
 parseTypeAnnotationTypedArgAt indentMin stateAtToken =
     case String.left 1 (String.dropLeft stateAtToken.offset stateAtToken.source) of
         "(" ->
@@ -3192,7 +3218,7 @@ parseTypeAnnotationTypedArgAt indentMin stateAtToken =
                         )
 
             else
-                Err
+                failure stateAtToken
                     ("Unsupported type annotation start: '"
                         ++ snippetAt stateAtToken
                         ++ "'."
@@ -3203,7 +3229,7 @@ parseParenthesizedTypeAnnotation :
     Int
     -> Location
     -> ParserState
-    -> Result String ( Node TypeAnnotation.TypeAnnotation, ParserState )
+    -> Result ParseError ( Node TypeAnnotation.TypeAnnotation, ParserState )
 parseParenthesizedTypeAnnotation indentMin openParenLocation state =
     parseParenthesizedTypeAnnotationAt indentMin openParenLocation (skipTrivia state)
 
@@ -3212,7 +3238,7 @@ parseParenthesizedTypeAnnotationAt :
     Int
     -> Location
     -> ParserState
-    -> Result String ( Node TypeAnnotation.TypeAnnotation, ParserState )
+    -> Result ParseError ( Node TypeAnnotation.TypeAnnotation, ParserState )
 parseParenthesizedTypeAnnotationAt indentMin openParenLocation stateAtToken =
     case String.left 1 (String.dropLeft stateAtToken.offset stateAtToken.source) of
         ")" ->
@@ -3245,7 +3271,7 @@ parseFurtherTypeAnnotations :
     -> Node TypeAnnotation.TypeAnnotation
     -> List ( Location, Node TypeAnnotation.TypeAnnotation )
     -> ParserState
-    -> Result String ( Node TypeAnnotation.TypeAnnotation, ParserState )
+    -> Result ParseError ( Node TypeAnnotation.TypeAnnotation, ParserState )
 parseFurtherTypeAnnotations indentMin openParenLocation first restRev state =
     parseFurtherTypeAnnotationsAt indentMin openParenLocation first restRev (skipTrivia state)
 
@@ -3256,7 +3282,7 @@ parseFurtherTypeAnnotationsAt :
     -> Node TypeAnnotation.TypeAnnotation
     -> List ( Location, Node TypeAnnotation.TypeAnnotation )
     -> ParserState
-    -> Result String ( Node TypeAnnotation.TypeAnnotation, ParserState )
+    -> Result ParseError ( Node TypeAnnotation.TypeAnnotation, ParserState )
 parseFurtherTypeAnnotationsAt indentMin openParenLocation first restRev stateAtToken =
     case String.left 1 (String.dropLeft stateAtToken.offset stateAtToken.source) of
         ")" ->
@@ -3299,7 +3325,7 @@ parseFurtherTypeAnnotationsAt indentMin openParenLocation first restRev stateAtT
                         remaining
 
         _ ->
-            Err
+            failure stateAtToken
                 ("Expected ',' or ')' in type annotation, but found '"
                     ++ snippetAt stateAtToken
                     ++ "'."
@@ -3310,7 +3336,7 @@ parseRecordTypeAnnotation :
     Int
     -> Location
     -> ParserState
-    -> Result String ( Node TypeAnnotation.TypeAnnotation, ParserState )
+    -> Result ParseError ( Node TypeAnnotation.TypeAnnotation, ParserState )
 parseRecordTypeAnnotation indentMin openBraceLocation state =
     parseRecordTypeAnnotationAt indentMin openBraceLocation (skipTrivia state)
 
@@ -3319,7 +3345,7 @@ parseRecordTypeAnnotationAt :
     Int
     -> Location
     -> ParserState
-    -> Result String ( Node TypeAnnotation.TypeAnnotation, ParserState )
+    -> Result ParseError ( Node TypeAnnotation.TypeAnnotation, ParserState )
 parseRecordTypeAnnotationAt indentMin openBraceLocation stateAtToken =
     case String.left 1 (String.dropLeft stateAtToken.offset stateAtToken.source) of
         "}" ->
@@ -3339,7 +3365,7 @@ parseRecordTypeAnnotationAt indentMin openBraceLocation stateAtToken =
 
         first ->
             if not (isIdentifierStart first) then
-                Err
+                failure stateAtToken
                     ("Expected record field name, but found '"
                         ++ snippetAt stateAtToken
                         ++ "'."
@@ -3397,7 +3423,7 @@ parseGenericRecordBody :
     -> Node String
     -> Location
     -> ParserState
-    -> Result String ( Node TypeAnnotation.TypeAnnotation, ParserState )
+    -> Result ParseError ( Node TypeAnnotation.TypeAnnotation, ParserState )
 parseGenericRecordBody indentMin openBraceLocation genericName pipeLocation state =
     let
         nodeRecordDefStart =
@@ -3457,7 +3483,7 @@ finishOrContinueGenericRecord :
     -> Location
     -> List ( Location, Node TypeAnnotation.RecordField )
     -> ParserState
-    -> Result String ( Node TypeAnnotation.TypeAnnotation, ParserState )
+    -> Result ParseError ( Node TypeAnnotation.TypeAnnotation, ParserState )
 finishOrContinueGenericRecord indentMin openBraceLocation genericName pipeLocation nodeRecordDefStart firstField lastEnd restRev state =
     finishOrContinueGenericRecordAt indentMin openBraceLocation genericName pipeLocation nodeRecordDefStart firstField lastEnd restRev (skipTrivia state)
 
@@ -3472,7 +3498,7 @@ finishOrContinueGenericRecordAt :
     -> Location
     -> List ( Location, Node TypeAnnotation.RecordField )
     -> ParserState
-    -> Result String ( Node TypeAnnotation.TypeAnnotation, ParserState )
+    -> Result ParseError ( Node TypeAnnotation.TypeAnnotation, ParserState )
 finishOrContinueGenericRecordAt indentMin openBraceLocation genericName pipeLocation nodeRecordDefStart firstField lastEnd restRev stateAtToken =
     case String.left 1 (String.dropLeft stateAtToken.offset stateAtToken.source) of
         "}" ->
@@ -3524,7 +3550,7 @@ finishOrContinueGenericRecordAt indentMin openBraceLocation genericName pipeLoca
                         afterNext
 
         _ ->
-            Err
+            failure stateAtToken
                 ("Expected ',' or '}' in generic record type annotation, but found '"
                     ++ snippetAt stateAtToken
                     ++ "'."
@@ -3537,7 +3563,7 @@ finishOrContinueRecord :
     -> Node TypeAnnotation.RecordField
     -> List ( Location, Node TypeAnnotation.RecordField )
     -> ParserState
-    -> Result String ( Node TypeAnnotation.TypeAnnotation, ParserState )
+    -> Result ParseError ( Node TypeAnnotation.TypeAnnotation, ParserState )
 finishOrContinueRecord indentMin openBraceLocation firstField restRev state =
     finishOrContinueRecordAt indentMin openBraceLocation firstField restRev (skipTrivia state)
 
@@ -3548,7 +3574,7 @@ finishOrContinueRecordAt :
     -> Node TypeAnnotation.RecordField
     -> List ( Location, Node TypeAnnotation.RecordField )
     -> ParserState
-    -> Result String ( Node TypeAnnotation.TypeAnnotation, ParserState )
+    -> Result ParseError ( Node TypeAnnotation.TypeAnnotation, ParserState )
 finishOrContinueRecordAt indentMin openBraceLocation firstField restRev stateAtToken =
     case String.left 1 (String.dropLeft stateAtToken.offset stateAtToken.source) of
         "}" ->
@@ -3591,7 +3617,7 @@ finishOrContinueRecordAt indentMin openBraceLocation firstField restRev stateAtT
                         afterNext
 
         _ ->
-            Err
+            failure stateAtToken
                 ("Expected ',' or '}' in record type annotation, but found '"
                     ++ snippetAt stateAtToken
                     ++ "'."
@@ -3601,7 +3627,7 @@ finishOrContinueRecordAt indentMin openBraceLocation firstField restRev stateAtT
 parseTypeRecordFieldFromName :
     Int
     -> ParserState
-    -> Result String ( Node TypeAnnotation.RecordField, Location, ParserState )
+    -> Result ParseError ( Node TypeAnnotation.RecordField, Location, ParserState )
 parseTypeRecordFieldFromName indentMin state =
     parseTypeRecordFieldFromNameAt indentMin (skipTrivia state)
 
@@ -3609,12 +3635,12 @@ parseTypeRecordFieldFromName indentMin state =
 parseTypeRecordFieldFromNameAt :
     Int
     -> ParserState
-    -> Result String ( Node TypeAnnotation.RecordField, Location, ParserState )
+    -> Result ParseError ( Node TypeAnnotation.RecordField, Location, ParserState )
 parseTypeRecordFieldFromNameAt indentMin stateAtName =
     case String.left 1 (String.dropLeft stateAtName.offset stateAtName.source) of
         first ->
             if not (isIdentifierStart first) then
-                Err
+                failure stateAtName
                     ("Expected record field name, but found '"
                         ++ snippetAt stateAtName
                         ++ "'."
@@ -3671,7 +3697,7 @@ parseTypeRecordFieldFromNameAt indentMin stateAtName =
                                     )
 
                     _ ->
-                        Err ("Expected ':', but found '" ++ snippetAt stateAtColon ++ "'.")
+                        failure stateAtColon ("Expected ':', but found '" ++ snippetAt stateAtColon ++ "'.")
 
 
 
@@ -3682,7 +3708,7 @@ parseExpressionNodeAt :
     Int
     -> Int
     -> ParserState
-    -> Result String ( Node Expression.Expression, ParserState )
+    -> Result ParseError ( Node Expression.Expression, ParserState )
 parseExpressionNodeAt indentMin minPrecedence state =
     parseOperatorsOnApplication indentMin minPrecedence (parseApplication indentMin state)
 
@@ -3698,8 +3724,8 @@ of the grammar. Matching on a parameter costs two environment lookups instead.
 parseOperatorsOnApplication :
     Int
     -> Int
-    -> Result String ( Node Expression.Expression, ParserState )
-    -> Result String ( Node Expression.Expression, ParserState )
+    -> Result ParseError ( Node Expression.Expression, ParserState )
+    -> Result ParseError ( Node Expression.Expression, ParserState )
 parseOperatorsOnApplication indentMin minPrecedence applicationResult =
     case applicationResult of
         Err error ->
@@ -3714,7 +3740,7 @@ parseOperators :
     -> Int
     -> Node Expression.Expression
     -> ParserState
-    -> Result String ( Node Expression.Expression, ParserState )
+    -> Result ParseError ( Node Expression.Expression, ParserState )
 parseOperators indentMin minPrecedence left state =
     parseOperatorsAt indentMin minPrecedence left state (skipTrivia state)
 
@@ -3725,7 +3751,7 @@ parseOperatorsAt :
     -> Node Expression.Expression
     -> ParserState
     -> ParserState
-    -> Result String ( Node Expression.Expression, ParserState )
+    -> Result ParseError ( Node Expression.Expression, ParserState )
 parseOperatorsAt indentMin minPrecedence left state stateAtOperator =
     parseOperatorsWithLength
         indentMin
@@ -3743,7 +3769,7 @@ parseOperatorsWithLength :
     -> ParserState
     -> ParserState
     -> Int
-    -> Result String ( Node Expression.Expression, ParserState )
+    -> Result ParseError ( Node Expression.Expression, ParserState )
 parseOperatorsWithLength indentMin minPrecedence left state stateAtOperator operatorLength =
     if operatorLength == 0 then
         Ok ( left, state )
@@ -3767,7 +3793,7 @@ parseOperatorsWithLexeme :
     -> ParserState
     -> Int
     -> String
-    -> Result String ( Node Expression.Expression, ParserState )
+    -> Result ParseError ( Node Expression.Expression, ParserState )
 parseOperatorsWithLexeme indentMin minPrecedence left state stateAtOperator operatorLength operatorLexeme =
     parseOperatorsWithPrecedence
         indentMin
@@ -3789,7 +3815,7 @@ parseOperatorsWithPrecedence :
     -> Int
     -> String
     -> Int
-    -> Result String ( Node Expression.Expression, ParserState )
+    -> Result ParseError ( Node Expression.Expression, ParserState )
 parseOperatorsWithPrecedence indentMin minPrecedence left state stateAtOperator operatorLength operatorLexeme precedence =
     if precedence < 0 || precedence < minPrecedence then
         Ok ( left, state )
@@ -3815,7 +3841,7 @@ parseOperatorsWithDirection :
     -> String
     -> Int
     -> Infix.InfixDirection
-    -> Result String ( Node Expression.Expression, ParserState )
+    -> Result ParseError ( Node Expression.Expression, ParserState )
 parseOperatorsWithDirection indentMin minPrecedence left stateAtOperator operatorLength operatorLexeme precedence direction =
     parseOperatorsOnRight
         indentMin
@@ -3855,8 +3881,8 @@ parseOperatorsOnRight :
     -> Node Expression.Expression
     -> Node String
     -> Infix.InfixDirection
-    -> Result String ( Node Expression.Expression, ParserState )
-    -> Result String ( Node Expression.Expression, ParserState )
+    -> Result ParseError ( Node Expression.Expression, ParserState )
+    -> Result ParseError ( Node Expression.Expression, ParserState )
 parseOperatorsOnRight indentMin minPrecedence left operatorNode direction rightResult =
     case rightResult of
         Err error ->
@@ -3899,15 +3925,15 @@ operatorApplicationNode left operatorNode direction rightNode =
 parseApplication :
     Int
     -> ParserState
-    -> Result String ( Node Expression.Expression, ParserState )
+    -> Result ParseError ( Node Expression.Expression, ParserState )
 parseApplication indentMin state =
     parseApplicationArgumentsOnFunction indentMin (parseBasicExpression indentMin state)
 
 
 parseApplicationArgumentsOnFunction :
     Int
-    -> Result String ( Node Expression.Expression, ParserState )
-    -> Result String ( Node Expression.Expression, ParserState )
+    -> Result ParseError ( Node Expression.Expression, ParserState )
+    -> Result ParseError ( Node Expression.Expression, ParserState )
 parseApplicationArgumentsOnFunction indentMin functionResult =
     case functionResult of
         Err error ->
@@ -3922,7 +3948,7 @@ parseApplicationArguments :
     -> Node Expression.Expression
     -> List (Node Expression.Expression)
     -> ParserState
-    -> Result String ( Node Expression.Expression, ParserState )
+    -> Result ParseError ( Node Expression.Expression, ParserState )
 parseApplicationArguments indentMin function argumentsRev state =
     parseApplicationArgumentsAt indentMin function argumentsRev state (skipTrivia state)
 
@@ -3933,7 +3959,7 @@ parseApplicationArgumentsAt :
     -> List (Node Expression.Expression)
     -> ParserState
     -> ParserState
-    -> Result String ( Node Expression.Expression, ParserState )
+    -> Result ParseError ( Node Expression.Expression, ParserState )
 parseApplicationArgumentsAt indentMin function argumentsRev state stateAtArgument =
     if
         stateAtArgument.column
@@ -3970,8 +3996,8 @@ parseApplicationArgumentsOnArgument :
     Int
     -> Node Expression.Expression
     -> List (Node Expression.Expression)
-    -> Result String ( Node Expression.Expression, ParserState )
-    -> Result String ( Node Expression.Expression, ParserState )
+    -> Result ParseError ( Node Expression.Expression, ParserState )
+    -> Result ParseError ( Node Expression.Expression, ParserState )
 parseApplicationArgumentsOnArgument indentMin function argumentsRev argumentResult =
     case argumentResult of
         Err error ->
@@ -3984,15 +4010,15 @@ parseApplicationArgumentsOnArgument indentMin function argumentsRev argumentResu
 parseBasicExpression :
     Int
     -> ParserState
-    -> Result String ( Node Expression.Expression, ParserState )
+    -> Result ParseError ( Node Expression.Expression, ParserState )
 parseBasicExpression indentMin state =
     parseRecordAccessesOnAtomic indentMin (parseAtomicExpression indentMin state)
 
 
 parseRecordAccessesOnAtomic :
     Int
-    -> Result String ( Node Expression.Expression, ParserState )
-    -> Result String ( Node Expression.Expression, ParserState )
+    -> Result ParseError ( Node Expression.Expression, ParserState )
+    -> Result ParseError ( Node Expression.Expression, ParserState )
 parseRecordAccessesOnAtomic indentMin atomicResult =
     case atomicResult of
         Err error ->
@@ -4010,7 +4036,7 @@ parseRecordAccesses :
     Int
     -> Node Expression.Expression
     -> ParserState
-    -> Result String ( Node Expression.Expression, ParserState )
+    -> Result ParseError ( Node Expression.Expression, ParserState )
 parseRecordAccesses indentMin record state =
     if String.left 1 (String.dropLeft state.offset state.source) == "." then
         case String.left 1 (String.dropLeft (state.offset + 1) state.source) of
@@ -4062,7 +4088,7 @@ parseRecordAccesses indentMin record state =
 parseAtomicExpression :
     Int
     -> ParserState
-    -> Result String ( Node Expression.Expression, ParserState )
+    -> Result ParseError ( Node Expression.Expression, ParserState )
 parseAtomicExpression indentMin state =
     parseAtomicExpressionAt indentMin (skipTrivia state)
 
@@ -4070,7 +4096,7 @@ parseAtomicExpression indentMin state =
 parseAtomicExpressionAt :
     Int
     -> ParserState
-    -> Result String ( Node Expression.Expression, ParserState )
+    -> Result ParseError ( Node Expression.Expression, ParserState )
 parseAtomicExpressionAt indentMin stateAtToken =
     case String.left 1 (String.dropLeft stateAtToken.offset stateAtToken.source) of
         "\"" ->
@@ -4098,11 +4124,11 @@ parseAtomicExpressionAt indentMin stateAtToken =
         "-" ->
             case String.left 1 (String.dropLeft (stateAtToken.offset + 1) stateAtToken.source) of
                 ">" ->
-                    Err "Failed to parse expression: Unexpected token '->'."
+                    failure stateAtToken "Failed to parse expression: Unexpected token '->'."
 
                 _ ->
                     if minusIsOperatorAt stateAtToken.source stateAtToken.offset then
-                        Err "Failed to parse expression: Unexpected token '-'."
+                        failure stateAtToken "Failed to parse expression: Unexpected token '-'."
 
                     else
                         parseNegation indentMin stateAtToken
@@ -4110,11 +4136,11 @@ parseAtomicExpressionAt indentMin stateAtToken =
         "." ->
             case String.left 1 (String.dropLeft (stateAtToken.offset + 1) stateAtToken.source) of
                 "." ->
-                    Err "Failed to parse expression: Unexpected token '..'."
+                    failure stateAtToken "Failed to parse expression: Unexpected token '..'."
 
                 next ->
                     if isOperatorChar next then
-                        Err ("Failed to parse expression: Unexpected token '" ++ snippetAt stateAtToken ++ "'.")
+                        failure stateAtToken ("Failed to parse expression: Unexpected token '" ++ snippetAt stateAtToken ++ "'.")
 
                     else
                         parseRecordAccessFunction stateAtToken
@@ -4133,13 +4159,13 @@ parseAtomicExpressionAt indentMin stateAtToken =
                     (skipToIdentifierEnd stateAtToken.source (stateAtToken.offset + 1))
 
             else
-                Err ("Failed to parse expression: Unexpected token '" ++ snippetAt stateAtToken ++ "'.")
+                failure stateAtToken ("Failed to parse expression: Unexpected token '" ++ snippetAt stateAtToken ++ "'.")
 
 
 parseNumberExpressionAt :
     ParserState
     -> Int
-    -> Result String ( Node Expression.Expression, ParserState )
+    -> Result ParseError ( Node Expression.Expression, ParserState )
 parseNumberExpressionAt stateAtToken literalEnd =
     Ok
         ( Node
@@ -4161,7 +4187,7 @@ parseNameExpressionAt :
     -> ParserState
     -> String
     -> Int
-    -> Result String ( Node Expression.Expression, ParserState )
+    -> Result ParseError ( Node Expression.Expression, ParserState )
 parseNameExpressionAt indentMin stateAtToken first nameEnd =
     case String.left (nameEnd - stateAtToken.offset) (String.dropLeft stateAtToken.offset stateAtToken.source) of
         "let" ->
@@ -4195,7 +4221,7 @@ parseNameExpressionAt indentMin stateAtToken first nameEnd =
 
 finishQualifiedNameExpression :
     ( Node ( List String, String ), ParserState )
-    -> Result String ( Node Expression.Expression, ParserState )
+    -> Result ParseError ( Node Expression.Expression, ParserState )
 finishQualifiedNameExpression qualifiedNameResult =
     case qualifiedNameResult of
         ( Node qualifiedRange ( moduleNames, qualifiedName ), remaining ) ->
@@ -4208,7 +4234,7 @@ finishQualifiedNameExpression qualifiedNameResult =
 parseNegation :
     Int
     -> ParserState
-    -> Result String ( Node Expression.Expression, ParserState )
+    -> Result ParseError ( Node Expression.Expression, ParserState )
 parseNegation indentMin state =
     case
         parseBasicExpression
@@ -4234,7 +4260,7 @@ parseNegation indentMin state =
                 )
 
 
-parseRecordAccessFunction : ParserState -> Result String ( Node Expression.Expression, ParserState )
+parseRecordAccessFunction : ParserState -> Result ParseError ( Node Expression.Expression, ParserState )
 parseRecordAccessFunction state =
     let
         stateAtField =
@@ -4272,14 +4298,14 @@ parseRecordAccessFunction state =
                     )
 
             else
-                Err
+                failure stateAtField
                     ("Expected a record field name after '.', but found '"
                         ++ snippetAt stateAtField
                         ++ "'."
                     )
 
 
-parseStringExpression : ParserState -> Result String ( Node Expression.Expression, ParserState )
+parseStringExpression : ParserState -> Result ParseError ( Node Expression.Expression, ParserState )
 parseStringExpression state =
     parseStringExpressionOnLiteral
         state
@@ -4298,8 +4324,8 @@ parseStringExpression state =
 
 parseStringExpressionOnLiteral :
     ParserState
-    -> Result String ConsumedLiteral
-    -> Result String ( Node Expression.Expression, ParserState )
+    -> Result ParseError ConsumedLiteral
+    -> Result ParseError ( Node Expression.Expression, ParserState )
 parseStringExpressionOnLiteral state literalResult =
     case literalResult of
         Err error ->
@@ -4312,7 +4338,7 @@ parseStringExpressionOnLiteral state literalResult =
 finishStringExpression :
     ParserState
     -> ConsumedLiteral
-    -> Result String ( Node Expression.Expression, ParserState )
+    -> Result ParseError ( Node Expression.Expression, ParserState )
 finishStringExpression state consumed =
     Ok
         ( Node
@@ -4329,7 +4355,7 @@ finishStringExpression state consumed =
         )
 
 
-parseTripleQuotedStringExpression : ParserState -> Result String ( Node Expression.Expression, ParserState )
+parseTripleQuotedStringExpression : ParserState -> Result ParseError ( Node Expression.Expression, ParserState )
 parseTripleQuotedStringExpression state =
     parseTripleQuotedStringExpressionOnLiteral
         state
@@ -4348,8 +4374,8 @@ parseTripleQuotedStringExpression state =
 
 parseTripleQuotedStringExpressionOnLiteral :
     ParserState
-    -> Result String ConsumedLiteral
-    -> Result String ( Node Expression.Expression, ParserState )
+    -> Result ParseError ConsumedLiteral
+    -> Result ParseError ( Node Expression.Expression, ParserState )
 parseTripleQuotedStringExpressionOnLiteral state literalResult =
     case literalResult of
         Err error ->
@@ -4362,7 +4388,7 @@ parseTripleQuotedStringExpressionOnLiteral state literalResult =
 finishTripleQuotedStringExpression :
     ParserState
     -> ConsumedLiteral
-    -> Result String ( Node Expression.Expression, ParserState )
+    -> Result ParseError ( Node Expression.Expression, ParserState )
 finishTripleQuotedStringExpression state consumed =
     Ok
         ( Node
@@ -4382,7 +4408,7 @@ finishTripleQuotedStringExpression state consumed =
         )
 
 
-parseCharExpression : ParserState -> Result String ( Node Expression.Expression, ParserState )
+parseCharExpression : ParserState -> Result ParseError ( Node Expression.Expression, ParserState )
 parseCharExpression state =
     parseCharExpressionOnLiteral
         state
@@ -4401,8 +4427,8 @@ parseCharExpression state =
 
 parseCharExpressionOnLiteral :
     ParserState
-    -> Result String ConsumedLiteral
-    -> Result String ( Node Expression.Expression, ParserState )
+    -> Result ParseError ConsumedLiteral
+    -> Result ParseError ( Node Expression.Expression, ParserState )
 parseCharExpressionOnLiteral state literalResult =
     case literalResult of
         Err error ->
@@ -4415,7 +4441,7 @@ parseCharExpressionOnLiteral state literalResult =
 finishCharExpression :
     ParserState
     -> ConsumedLiteral
-    -> Result String ( Node Expression.Expression, ParserState )
+    -> Result ParseError ( Node Expression.Expression, ParserState )
 finishCharExpression state consumed =
     case String.toList consumed.decoded of
         [ char ] ->
@@ -4434,7 +4460,7 @@ finishCharExpression state consumed =
                 )
 
         _ ->
-            Err ("Invalid character literal '" ++ consumed.decoded ++ "'.")
+            failure state ("Invalid character literal '" ++ consumed.decoded ++ "'.")
 
 
 parseQualifiedNameNode : String -> Int -> ParserState -> ( Node ( List String, String ), ParserState )
@@ -4526,7 +4552,7 @@ finishQualifiedName start moduleNamesRev currentName endRow endColumn state =
     )
 
 
-parseList : Int -> ParserState -> Result String ( Node Expression.Expression, ParserState )
+parseList : Int -> ParserState -> Result ParseError ( Node Expression.Expression, ParserState )
 parseList indentMin state =
     let
         stateAtToken =
@@ -4579,7 +4605,7 @@ parseFurtherListElements :
     Int
     -> ParserState
     -> List ( Location, Node Expression.Expression )
-    -> Result String ( List ( Location, Node Expression.Expression ), ParserState )
+    -> Result ParseError ( List ( Location, Node Expression.Expression ), ParserState )
 parseFurtherListElements indentMin state furtherRev =
     parseFurtherListElementsAt indentMin state furtherRev (skipTrivia state)
 
@@ -4589,7 +4615,7 @@ parseFurtherListElementsAt :
     -> ParserState
     -> List ( Location, Node Expression.Expression )
     -> ParserState
-    -> Result String ( List ( Location, Node Expression.Expression ), ParserState )
+    -> Result ParseError ( List ( Location, Node Expression.Expression ), ParserState )
 parseFurtherListElementsAt indentMin state furtherRev stateAtToken =
     case String.left 1 (String.dropLeft stateAtToken.offset stateAtToken.source) of
         "]" ->
@@ -4625,7 +4651,7 @@ parseFurtherListElementsAt indentMin state furtherRev stateAtToken =
                         (( { row = stateAtToken.row, column = stateAtToken.column }, expression ) :: furtherRev)
 
         _ ->
-            Err
+            failure stateAtToken
                 ("Expected ',' or a closing delimiter, but found '"
                     ++ snippetAt stateAtToken
                     ++ "'."
@@ -4635,7 +4661,7 @@ parseFurtherListElementsAt indentMin state furtherRev stateAtToken =
 parseParenthesizedOrTuple :
     Int
     -> ParserState
-    -> Result String ( Node Expression.Expression, ParserState )
+    -> Result ParseError ( Node Expression.Expression, ParserState )
 parseParenthesizedOrTuple indentMin state =
     let
         stateAtToken =
@@ -4707,7 +4733,7 @@ parseNonEmptyParenthesized :
     Int
     -> ParserState
     -> ParserState
-    -> Result String ( Node Expression.Expression, ParserState )
+    -> Result ParseError ( Node Expression.Expression, ParserState )
 parseNonEmptyParenthesized indentMin openState state =
     case parseExpressionNodeAt indentMin 0 state of
         Err error ->
@@ -4743,7 +4769,7 @@ parseFurtherTupleElements :
     Int
     -> ParserState
     -> List ( Location, Node Expression.Expression )
-    -> Result String ( List ( Location, Node Expression.Expression ), ParserState )
+    -> Result ParseError ( List ( Location, Node Expression.Expression ), ParserState )
 parseFurtherTupleElements indentMin state furtherRev =
     parseFurtherTupleElementsAt indentMin state furtherRev (skipTrivia state)
 
@@ -4753,7 +4779,7 @@ parseFurtherTupleElementsAt :
     -> ParserState
     -> List ( Location, Node Expression.Expression )
     -> ParserState
-    -> Result String ( List ( Location, Node Expression.Expression ), ParserState )
+    -> Result ParseError ( List ( Location, Node Expression.Expression ), ParserState )
 parseFurtherTupleElementsAt indentMin state furtherRev stateAtToken =
     case String.left 1 (String.dropLeft stateAtToken.offset stateAtToken.source) of
         ")" ->
@@ -4789,14 +4815,14 @@ parseFurtherTupleElementsAt indentMin state furtherRev stateAtToken =
                         (( { row = stateAtToken.row, column = stateAtToken.column }, expression ) :: furtherRev)
 
         _ ->
-            Err
+            failure stateAtToken
                 ("Expected ',' or a closing delimiter, but found '"
                     ++ snippetAt stateAtToken
                     ++ "'."
                 )
 
 
-parseIfBlock : Int -> ParserState -> Result String ( Node Expression.Expression, ParserState )
+parseIfBlock : Int -> ParserState -> Result ParseError ( Node Expression.Expression, ParserState )
 parseIfBlock indentMin state =
     let
         ifTokenLocation =
@@ -4855,7 +4881,7 @@ parseIfBlock indentMin state =
                                                 )
 
 
-parseLambda : Int -> ParserState -> Result String ( Node Expression.Expression, ParserState )
+parseLambda : Int -> ParserState -> Result ParseError ( Node Expression.Expression, ParserState )
 parseLambda indentMin state =
     case
         parseLambdaArguments
@@ -4874,7 +4900,7 @@ parseLambda indentMin state =
         Ok ( arguments, arrowLocation, afterArrow ) ->
             case arguments of
                 [] ->
-                    Err "Expected at least one argument in lambda expression."
+                    failure arrowLocation "Expected at least one argument in lambda expression."
 
                 _ ->
                     case parseExpressionNodeAt indentMin 0 afterArrow of
@@ -4902,7 +4928,7 @@ parseLambdaArguments :
     Int
     -> ParserState
     -> List (Node Pattern.Pattern)
-    -> Result String ( List (Node Pattern.Pattern), Location, ParserState )
+    -> Result ParseError ( List (Node Pattern.Pattern), Location, ParserState )
 parseLambdaArguments indentMin state argumentsRev =
     parseLambdaArgumentsAt indentMin state argumentsRev (skipTrivia state)
 
@@ -4912,7 +4938,7 @@ parseLambdaArgumentsAt :
     -> ParserState
     -> List (Node Pattern.Pattern)
     -> ParserState
-    -> Result String ( List (Node Pattern.Pattern), Location, ParserState )
+    -> Result ParseError ( List (Node Pattern.Pattern), Location, ParserState )
 parseLambdaArgumentsAt indentMin state argumentsRev stateAtToken =
     if String.left 2 (String.dropLeft stateAtToken.offset stateAtToken.source) == "->" then
         Ok
@@ -4935,7 +4961,7 @@ parseLambdaArgumentsAt indentMin state argumentsRev stateAtToken =
                 parseLambdaArguments indentMin remaining (argument :: argumentsRev)
 
 
-parseLetBlock : Int -> ParserState -> Result String ( Node Expression.Expression, ParserState )
+parseLetBlock : Int -> ParserState -> Result ParseError ( Node Expression.Expression, ParserState )
 parseLetBlock indentMin state =
     case
         parseLetDeclarations
@@ -4954,7 +4980,7 @@ parseLetBlock indentMin state =
         Ok ( declarations, inTokenLocation, afterIn ) ->
             case declarations of
                 [] ->
-                    Err "Expected at least one declaration in let expression."
+                    failure inTokenLocation "Expected at least one declaration in let expression."
 
                 _ ->
                     case parseExpressionNodeAt indentMin 0 afterIn of
@@ -4982,7 +5008,7 @@ parseLetDeclarations :
     Int
     -> ParserState
     -> List (Node Expression.LetDeclaration)
-    -> Result String ( List (Node Expression.LetDeclaration), Location, ParserState )
+    -> Result ParseError ( List (Node Expression.LetDeclaration), Location, ParserState )
 parseLetDeclarations indentMin state declarationsRev =
     parseLetDeclarationsAt indentMin state declarationsRev (skipTrivia state)
 
@@ -4992,7 +5018,7 @@ parseLetDeclarationsAt :
     -> ParserState
     -> List (Node Expression.LetDeclaration)
     -> ParserState
-    -> Result String ( List (Node Expression.LetDeclaration), Location, ParserState )
+    -> Result ParseError ( List (Node Expression.LetDeclaration), Location, ParserState )
 parseLetDeclarationsAt indentMin state declarationsRev stateAtToken =
     case String.left 1 (String.dropLeft stateAtToken.offset stateAtToken.source) of
         first ->
@@ -5014,7 +5040,7 @@ parseLetDeclarationsAt indentMin state declarationsRev stateAtToken =
                     )
 
             else if stateAtToken.column <= indentMin then
-                Err
+                failure stateAtToken
                     ("Expected 'in' in let expression, but found '"
                         ++ snippetAt stateAtToken
                         ++ "'."
@@ -5032,7 +5058,7 @@ parseLetDeclarationsAt indentMin state declarationsRev stateAtToken =
 parseLetDeclaration :
     Int
     -> ParserState
-    -> Result String ( Node Expression.LetDeclaration, ParserState )
+    -> Result ParseError ( Node Expression.LetDeclaration, ParserState )
 parseLetDeclaration declarationIndent state =
     parseLetDeclarationAt declarationIndent (skipTrivia state)
 
@@ -5040,7 +5066,7 @@ parseLetDeclaration declarationIndent state =
 parseLetDeclarationAt :
     Int
     -> ParserState
-    -> Result String ( Node Expression.LetDeclaration, ParserState )
+    -> Result ParseError ( Node Expression.LetDeclaration, ParserState )
 parseLetDeclarationAt declarationIndent stateAtToken =
     case String.left 1 (String.dropLeft stateAtToken.offset stateAtToken.source) of
         first ->
@@ -5093,7 +5119,7 @@ parseLetDeclarationAt declarationIndent stateAtToken =
                             case String.left 1 (String.dropLeft stateAtImplementationName.offset stateAtImplementationName.source) of
                                 implementationFirst ->
                                     if not (isIdentifierStart implementationFirst) then
-                                        Err
+                                        failure stateAtImplementationName
                                             ("Expected function name after signature, but found '"
                                                 ++ snippetAt stateAtImplementationName
                                                 ++ "'."
@@ -5113,7 +5139,7 @@ parseLetDeclarationAt declarationIndent stateAtToken =
                                                     (String.dropLeft stateAtImplementationName.offset stateAtImplementationName.source)
                                         in
                                         if implementationName /= name then
-                                            Err
+                                            failure stateAtImplementationName
                                                 ("Function name does not match signature: "
                                                     ++ implementationName
                                                     ++ " != "
@@ -5190,7 +5216,7 @@ parseLetDeclarationAt declarationIndent stateAtToken =
                                             )
 
                             _ ->
-                                Err ("Expected '=', but found '" ++ snippetAt stateAtEquals ++ "'.")
+                                failure stateAtEquals ("Expected '=', but found '" ++ snippetAt stateAtEquals ++ "'.")
 
 
 finishLetFunctionDeclaration :
@@ -5200,7 +5226,7 @@ finishLetFunctionDeclaration :
     -> String
     -> Maybe (Node Expression.Signature)
     -> ParserState
-    -> Result String ( Node Expression.LetDeclaration, ParserState )
+    -> Result ParseError ( Node Expression.LetDeclaration, ParserState )
 finishLetFunctionDeclaration declarationIndent declarationStart implementationNameRange implementationName maybeSignature state =
     case parsePatternsUntilEqual declarationIndent state [] of
         Err error ->
@@ -5236,7 +5262,7 @@ parsePatternsUntilEqual :
     Int
     -> ParserState
     -> List (Node Pattern.Pattern)
-    -> Result String ( List (Node Pattern.Pattern), Location, ParserState )
+    -> Result ParseError ( List (Node Pattern.Pattern), Location, ParserState )
 parsePatternsUntilEqual indentMin state patternsRev =
     parsePatternsUntilEqualAt indentMin state patternsRev (skipTrivia state)
 
@@ -5246,7 +5272,7 @@ parsePatternsUntilEqualAt :
     -> ParserState
     -> List (Node Pattern.Pattern)
     -> ParserState
-    -> Result String ( List (Node Pattern.Pattern), Location, ParserState )
+    -> Result ParseError ( List (Node Pattern.Pattern), Location, ParserState )
 parsePatternsUntilEqualAt indentMin state patternsRev stateAtToken =
     if isEqualsToken stateAtToken.source stateAtToken.offset then
         Ok
@@ -5269,7 +5295,7 @@ parsePatternsUntilEqualAt indentMin state patternsRev stateAtToken =
                 parsePatternsUntilEqual indentMin remaining (pattern :: patternsRev)
 
 
-parseCaseBlock : Int -> ParserState -> Result String ( Node Expression.Expression, ParserState )
+parseCaseBlock : Int -> ParserState -> Result ParseError ( Node Expression.Expression, ParserState )
 parseCaseBlock indentMin state =
     let
         caseTokenLocation =
@@ -5312,7 +5338,7 @@ parseCaseBlock indentMin state =
                         Ok ( branchesRev, remaining ) ->
                             case branchesRev of
                                 [] ->
-                                    Err "Expected at least one case branch after 'of'."
+                                    failure stateAtFirstBranch "Expected at least one case branch after 'of'."
 
                                 lastBranch :: _ ->
                                     let
@@ -5340,7 +5366,7 @@ parseCaseBranches :
     -> Int
     -> ParserState
     -> List Expression.Case
-    -> Result String ( List Expression.Case, ParserState )
+    -> Result ParseError ( List Expression.Case, ParserState )
 parseCaseBranches lowerBound branchIndent state branchesRev =
     parseCaseBranchesAt lowerBound branchIndent state branchesRev (skipTrivia state)
 
@@ -5351,7 +5377,7 @@ parseCaseBranchesAt :
     -> ParserState
     -> List Expression.Case
     -> ParserState
-    -> Result String ( List Expression.Case, ParserState )
+    -> Result ParseError ( List Expression.Case, ParserState )
 parseCaseBranchesAt lowerBound branchIndent state branchesRev stateAtToken =
     case String.left 1 (String.dropLeft stateAtToken.offset stateAtToken.source) of
         "" ->
@@ -5373,7 +5399,7 @@ parseCaseBranchesAt lowerBound branchIndent state branchesRev stateAtToken =
                         parseCaseBranches lowerBound branchIndent remaining (branch :: branchesRev)
 
 
-parseCaseBranch : Int -> ParserState -> Result String ( Expression.Case, ParserState )
+parseCaseBranch : Int -> ParserState -> Result ParseError ( Expression.Case, ParserState )
 parseCaseBranch branchIndent state =
     case parsePatternNodeAt branchIndent state of
         Err error ->
@@ -5410,10 +5436,10 @@ parseCaseBranch branchIndent state =
                                 )
 
                 _ ->
-                    Err ("Expected '->', but found '" ++ snippetAt stateAtArrow ++ "'.")
+                    failure stateAtArrow ("Expected '->', but found '" ++ snippetAt stateAtArrow ++ "'.")
 
 
-parseRecord : Int -> ParserState -> Result String ( Node Expression.Expression, ParserState )
+parseRecord : Int -> ParserState -> Result ParseError ( Node Expression.Expression, ParserState )
 parseRecord indentMin state =
     let
         stateAtToken =
@@ -5443,7 +5469,7 @@ parseRecord indentMin state =
 
         first ->
             if not (isIdentifierStart first) then
-                Err ("Expected a record field name, but found '" ++ snippetAt stateAtToken ++ "'.")
+                failure stateAtToken ("Expected a record field name, but found '" ++ snippetAt stateAtToken ++ "'.")
 
             else
                 let
@@ -5519,7 +5545,7 @@ parseRecord indentMin state =
 parseRecordUpdateFields :
     Int
     -> ParserState
-    -> Result String ( SeparatedSyntaxList.SeparatedSyntaxList Expression.RecordExprField, ParserState )
+    -> Result ParseError ( SeparatedSyntaxList.SeparatedSyntaxList Expression.RecordExprField, ParserState )
 parseRecordUpdateFields indentMin state =
     parseRecordUpdateFieldsAt indentMin (skipTrivia state)
 
@@ -5527,7 +5553,7 @@ parseRecordUpdateFields indentMin state =
 parseRecordUpdateFieldsAt :
     Int
     -> ParserState
-    -> Result String ( SeparatedSyntaxList.SeparatedSyntaxList Expression.RecordExprField, ParserState )
+    -> Result ParseError ( SeparatedSyntaxList.SeparatedSyntaxList Expression.RecordExprField, ParserState )
 parseRecordUpdateFieldsAt indentMin stateAtToken =
     case String.left 1 (String.dropLeft stateAtToken.offset stateAtToken.source) of
         "}" ->
@@ -5543,7 +5569,7 @@ parseRecordUpdateFieldsAt indentMin stateAtToken =
 
         first ->
             if not (isIdentifierStart first) then
-                Err ("Expected a record field name, but found '" ++ snippetAt stateAtToken ++ "'.")
+                failure stateAtToken ("Expected a record field name, but found '" ++ snippetAt stateAtToken ++ "'.")
 
             else
                 let
@@ -5572,7 +5598,7 @@ parseRecordFieldsWithFirst :
     -> Range
     -> String
     -> ParserState
-    -> Result String ( SeparatedSyntaxList.SeparatedSyntaxList Expression.RecordExprField, ParserState )
+    -> Result ParseError ( SeparatedSyntaxList.SeparatedSyntaxList Expression.RecordExprField, ParserState )
 parseRecordFieldsWithFirst indentMin fieldNameRange fieldName state =
     case parseRecordField indentMin fieldNameRange fieldName state of
         Err error ->
@@ -5595,7 +5621,7 @@ parseRecordField :
     -> Range
     -> String
     -> ParserState
-    -> Result String ( Expression.RecordExprField, ParserState )
+    -> Result ParseError ( Expression.RecordExprField, ParserState )
 parseRecordField indentMin fieldNameRange fieldName state =
     let
         stateAtSeparator =
@@ -5632,14 +5658,14 @@ parseRecordField indentMin fieldNameRange fieldName state =
                     )
 
     else
-        Err ("Expected '=' or ':', but found '" ++ snippetAt stateAtSeparator ++ "'.")
+        failure stateAtSeparator ("Expected '=' or ':', but found '" ++ snippetAt stateAtSeparator ++ "'.")
 
 
 parseFurtherRecordFields :
     Int
     -> ParserState
     -> List ( Location, Expression.RecordExprField )
-    -> Result String ( List ( Location, Expression.RecordExprField ), ParserState )
+    -> Result ParseError ( List ( Location, Expression.RecordExprField ), ParserState )
 parseFurtherRecordFields indentMin state fieldsRev =
     parseFurtherRecordFieldsAt indentMin state fieldsRev (skipTrivia state)
 
@@ -5649,7 +5675,7 @@ parseFurtherRecordFieldsAt :
     -> ParserState
     -> List ( Location, Expression.RecordExprField )
     -> ParserState
-    -> Result String ( List ( Location, Expression.RecordExprField ), ParserState )
+    -> Result ParseError ( List ( Location, Expression.RecordExprField ), ParserState )
 parseFurtherRecordFieldsAt indentMin state fieldsRev stateAtToken =
     case String.left 1 (String.dropLeft stateAtToken.offset stateAtToken.source) of
         "}" ->
@@ -5677,7 +5703,7 @@ parseFurtherRecordFieldsAt indentMin state fieldsRev stateAtToken =
             case String.left 1 (String.dropLeft stateAtFieldName.offset stateAtFieldName.source) of
                 fieldFirst ->
                     if not (isIdentifierStart fieldFirst) then
-                        Err
+                        failure stateAtFieldName
                             ("Expected a record field name, but found '"
                                 ++ snippetAt stateAtFieldName
                                 ++ "'."
@@ -5715,7 +5741,7 @@ parseFurtherRecordFieldsAt indentMin state fieldsRev stateAtToken =
                                     (( { row = stateAtToken.row, column = stateAtToken.column }, field ) :: fieldsRev)
 
         _ ->
-            Err ("Expected ',' or '}', but found '" ++ snippetAt stateAtToken ++ "'.")
+            failure stateAtToken ("Expected ',' or '}', but found '" ++ snippetAt stateAtToken ++ "'.")
 
 
 
@@ -5725,7 +5751,7 @@ parseFurtherRecordFieldsAt indentMin state fieldsRev stateAtToken =
 parsePatternNodeAt :
     Int
     -> ParserState
-    -> Result String ( Node Pattern.Pattern, ParserState )
+    -> Result ParseError ( Node Pattern.Pattern, ParserState )
 parsePatternNodeAt indentMin state =
     case parsePatternAtomic indentMin state of
         Err error ->
@@ -5744,7 +5770,7 @@ parseNamedPatternArguments :
     Int
     -> Node Pattern.Pattern
     -> ParserState
-    -> Result String ( Node Pattern.Pattern, ParserState )
+    -> Result ParseError ( Node Pattern.Pattern, ParserState )
 parseNamedPatternArguments indentMin pattern state =
     let
         (Node _ patternValue) =
@@ -5764,7 +5790,7 @@ parsePatternArguments :
     -> Node Pattern.Pattern
     -> List (Node Pattern.Pattern)
     -> ParserState
-    -> Result String ( Node Pattern.Pattern, ParserState )
+    -> Result ParseError ( Node Pattern.Pattern, ParserState )
 parsePatternArguments indentMin name original argumentsRev state =
     parsePatternArgumentsAt indentMin name original argumentsRev state (skipTrivia state)
 
@@ -5776,7 +5802,7 @@ parsePatternArgumentsAt :
     -> List (Node Pattern.Pattern)
     -> ParserState
     -> ParserState
-    -> Result String ( Node Pattern.Pattern, ParserState )
+    -> Result ParseError ( Node Pattern.Pattern, ParserState )
 parsePatternArgumentsAt indentMin name original argumentsRev state stateAtArgument =
     if
         stateAtArgument.column >= indentMin
@@ -5813,7 +5839,7 @@ parsePatternSuffix :
     Int
     -> Node Pattern.Pattern
     -> ParserState
-    -> Result String ( Node Pattern.Pattern, ParserState )
+    -> Result ParseError ( Node Pattern.Pattern, ParserState )
 parsePatternSuffix indentMin pattern state =
     parsePatternSuffixAt indentMin pattern state (skipTrivia state)
 
@@ -5823,7 +5849,7 @@ parsePatternSuffixAt :
     -> Node Pattern.Pattern
     -> ParserState
     -> ParserState
-    -> Result String ( Node Pattern.Pattern, ParserState )
+    -> Result ParseError ( Node Pattern.Pattern, ParserState )
 parsePatternSuffixAt indentMin pattern state stateAtToken =
     case String.left 1 (String.dropLeft stateAtToken.offset stateAtToken.source) of
         ":" ->
@@ -5916,7 +5942,7 @@ parsePatternSuffixAt indentMin pattern state stateAtToken =
                                 )
 
                         else
-                            Err
+                            failure stateAtName
                                 ("Expected a pattern name after 'as', but found '"
                                     ++ snippetAt stateAtName
                                     ++ "'."
@@ -5929,7 +5955,7 @@ parsePatternSuffixAt indentMin pattern state stateAtToken =
 parsePatternAtomic :
     Int
     -> ParserState
-    -> Result String ( Node Pattern.Pattern, ParserState )
+    -> Result ParseError ( Node Pattern.Pattern, ParserState )
 parsePatternAtomic indentMin state =
     parsePatternAtomicAt indentMin (skipTrivia state)
 
@@ -5937,7 +5963,7 @@ parsePatternAtomic indentMin state =
 parsePatternAtomicAt :
     Int
     -> ParserState
-    -> Result String ( Node Pattern.Pattern, ParserState )
+    -> Result ParseError ( Node Pattern.Pattern, ParserState )
 parsePatternAtomicAt indentMin stateAtToken =
     case String.left 1 (String.dropLeft stateAtToken.offset stateAtToken.source) of
         "\"" ->
@@ -6019,14 +6045,14 @@ parsePatternAtomicAt indentMin stateAtToken =
                         )
 
             else
-                Err ("Expected a pattern, but found '" ++ snippetAt stateAtToken ++ "'.")
+                failure stateAtToken ("Expected a pattern, but found '" ++ snippetAt stateAtToken ++ "'.")
 
 
 parseStringPattern :
     LiteralTermination
     -> Int
     -> ParserState
-    -> Result String ( Node Pattern.Pattern, ParserState )
+    -> Result ParseError ( Node Pattern.Pattern, ParserState )
 parseStringPattern termination openingLength state =
     case
         consumeLiteral
@@ -6059,7 +6085,7 @@ parseStringPattern termination openingLength state =
                 )
 
 
-parseCharPattern : ParserState -> Result String ( Node Pattern.Pattern, ParserState )
+parseCharPattern : ParserState -> Result ParseError ( Node Pattern.Pattern, ParserState )
 parseCharPattern state =
     case
         consumeLiteral
@@ -6094,10 +6120,10 @@ parseCharPattern state =
                         )
 
                 _ ->
-                    Err ("Invalid character pattern '" ++ consumed.decoded ++ "'.")
+                    failure state ("Invalid character pattern '" ++ consumed.decoded ++ "'.")
 
 
-parseNumberPattern : String -> ParserState -> Result String ( Node Pattern.Pattern, ParserState )
+parseNumberPattern : String -> ParserState -> Result ParseError ( Node Pattern.Pattern, ParserState )
 parseNumberPattern firstCharacter state =
     let
         literalEnd =
@@ -6127,20 +6153,20 @@ parseNumberPattern firstCharacter state =
             Ok ( Node range (Pattern.HexPattern literal), remaining )
 
         else
-            Err ("Invalid hexadecimal pattern '" ++ literal ++ "'.")
+            failure state ("Invalid hexadecimal pattern '" ++ literal ++ "'.")
 
     else if String.contains "." literal || String.contains "e" literal || String.contains "E" literal then
         if isDigit (String.right 1 literal) then
             Ok ( Node range (Pattern.FloatPattern literal), remaining )
 
         else
-            Err ("Invalid float pattern '" ++ literal ++ "'.")
+            failure state ("Invalid float pattern '" ++ literal ++ "'.")
 
     else
         Ok ( Node range (Pattern.IntPattern literal), remaining )
 
 
-parseTuplePattern : Int -> ParserState -> Result String ( Node Pattern.Pattern, ParserState )
+parseTuplePattern : Int -> ParserState -> Result ParseError ( Node Pattern.Pattern, ParserState )
 parseTuplePattern indentMin state =
     let
         stateAtToken =
@@ -6203,7 +6229,7 @@ parseFurtherTuplePatterns :
     Int
     -> ParserState
     -> List ( Location, Node Pattern.Pattern )
-    -> Result String ( List ( Location, Node Pattern.Pattern ), ParserState )
+    -> Result ParseError ( List ( Location, Node Pattern.Pattern ), ParserState )
 parseFurtherTuplePatterns indentMin state furtherRev =
     parseFurtherTuplePatternsAt indentMin state furtherRev (skipTrivia state)
 
@@ -6213,7 +6239,7 @@ parseFurtherTuplePatternsAt :
     -> ParserState
     -> List ( Location, Node Pattern.Pattern )
     -> ParserState
-    -> Result String ( List ( Location, Node Pattern.Pattern ), ParserState )
+    -> Result ParseError ( List ( Location, Node Pattern.Pattern ), ParserState )
 parseFurtherTuplePatternsAt indentMin state furtherRev stateAtToken =
     case String.left 1 (String.dropLeft stateAtToken.offset stateAtToken.source) of
         ")" ->
@@ -6248,14 +6274,14 @@ parseFurtherTuplePatternsAt indentMin state furtherRev stateAtToken =
                         (( { row = stateAtToken.row, column = stateAtToken.column }, pattern ) :: furtherRev)
 
         _ ->
-            Err
+            failure stateAtToken
                 ("Expected ',' or a closing delimiter in pattern, but found '"
                     ++ snippetAt stateAtToken
                     ++ "'."
                 )
 
 
-parseListPattern : Int -> ParserState -> Result String ( Node Pattern.Pattern, ParserState )
+parseListPattern : Int -> ParserState -> Result ParseError ( Node Pattern.Pattern, ParserState )
 parseListPattern indentMin state =
     let
         stateAtToken =
@@ -6310,7 +6336,7 @@ parseFurtherListPatterns :
     Int
     -> ParserState
     -> List ( Location, Node Pattern.Pattern )
-    -> Result String ( List ( Location, Node Pattern.Pattern ), ParserState )
+    -> Result ParseError ( List ( Location, Node Pattern.Pattern ), ParserState )
 parseFurtherListPatterns indentMin state furtherRev =
     parseFurtherListPatternsAt indentMin state furtherRev (skipTrivia state)
 
@@ -6320,7 +6346,7 @@ parseFurtherListPatternsAt :
     -> ParserState
     -> List ( Location, Node Pattern.Pattern )
     -> ParserState
-    -> Result String ( List ( Location, Node Pattern.Pattern ), ParserState )
+    -> Result ParseError ( List ( Location, Node Pattern.Pattern ), ParserState )
 parseFurtherListPatternsAt indentMin state furtherRev stateAtToken =
     case String.left 1 (String.dropLeft stateAtToken.offset stateAtToken.source) of
         "]" ->
@@ -6355,14 +6381,14 @@ parseFurtherListPatternsAt indentMin state furtherRev stateAtToken =
                         (( { row = stateAtToken.row, column = stateAtToken.column }, pattern ) :: furtherRev)
 
         _ ->
-            Err
+            failure stateAtToken
                 ("Expected ',' or a closing delimiter in pattern, but found '"
                     ++ snippetAt stateAtToken
                     ++ "'."
                 )
 
 
-parseRecordPattern : ParserState -> Result String ( Node Pattern.Pattern, ParserState )
+parseRecordPattern : ParserState -> Result ParseError ( Node Pattern.Pattern, ParserState )
 parseRecordPattern state =
     case
         parseRecordPatternFields
@@ -6393,7 +6419,7 @@ parseRecordPatternFields :
     ParserState
     -> Maybe (Node String)
     -> List ( Location, Node String )
-    -> Result String ( SeparatedSyntaxList.SeparatedSyntaxList (Node String), ParserState )
+    -> Result ParseError ( SeparatedSyntaxList.SeparatedSyntaxList (Node String), ParserState )
 parseRecordPatternFields state firstField furtherRev =
     parseRecordPatternFieldsAt state firstField furtherRev (skipTrivia state)
 
@@ -6403,7 +6429,7 @@ parseRecordPatternFieldsAt :
     -> Maybe (Node String)
     -> List ( Location, Node String )
     -> ParserState
-    -> Result String ( SeparatedSyntaxList.SeparatedSyntaxList (Node String), ParserState )
+    -> Result ParseError ( SeparatedSyntaxList.SeparatedSyntaxList (Node String), ParserState )
 parseRecordPatternFieldsAt state firstField furtherRev stateAtToken =
     case String.left 1 (String.dropLeft stateAtToken.offset stateAtToken.source) of
         "}" ->
@@ -6458,10 +6484,10 @@ parseRecordPatternFieldsAt state firstField furtherRev stateAtToken =
                             furtherRev
 
                     Just _ ->
-                        Err "Expected ',' before record pattern field."
+                        failure stateAtToken "Expected ',' before record pattern field."
 
             else
-                Err
+                failure stateAtToken
                     ("Expected a record pattern field or '}', but found '"
                         ++ snippetAt stateAtToken
                         ++ "'."
@@ -6472,7 +6498,7 @@ parseRecordPatternFieldsAfterField :
     ParserState
     -> Maybe (Node String)
     -> List ( Location, Node String )
-    -> Result String ( SeparatedSyntaxList.SeparatedSyntaxList (Node String), ParserState )
+    -> Result ParseError ( SeparatedSyntaxList.SeparatedSyntaxList (Node String), ParserState )
 parseRecordPatternFieldsAfterField state firstField furtherRev =
     parseRecordPatternFieldsAfterFieldAt state firstField furtherRev (skipTrivia state)
 
@@ -6482,7 +6508,7 @@ parseRecordPatternFieldsAfterFieldAt :
     -> Maybe (Node String)
     -> List ( Location, Node String )
     -> ParserState
-    -> Result String ( SeparatedSyntaxList.SeparatedSyntaxList (Node String), ParserState )
+    -> Result ParseError ( SeparatedSyntaxList.SeparatedSyntaxList (Node String), ParserState )
 parseRecordPatternFieldsAfterFieldAt state firstField furtherRev stateAtToken =
     if String.left 1 (String.dropLeft stateAtToken.offset stateAtToken.source) == "," then
         let
@@ -6527,7 +6553,7 @@ parseRecordPatternFieldsAfterFieldAt state firstField furtherRev stateAtToken =
                         )
 
                 else
-                    Err
+                    failure stateAtField
                         ("Expected a record pattern field after ',', but found '"
                             ++ snippetAt stateAtField
                             ++ "'."
@@ -6812,12 +6838,12 @@ blockCommentEndOffset source offset depth =
 -- CONSUMING FIXED SYNTAX
 
 
-consumeKeyword : String -> Int -> ParserState -> Result String ( Location, ParserState )
+consumeKeyword : String -> Int -> ParserState -> Result ParseError ( Location, ParserState )
 consumeKeyword keyword keywordLength state =
     consumeKeywordAt keyword keywordLength (skipTrivia state)
 
 
-consumeKeywordAt : String -> Int -> ParserState -> Result String ( Location, ParserState )
+consumeKeywordAt : String -> Int -> ParserState -> Result ParseError ( Location, ParserState )
 consumeKeywordAt keyword keywordLength stateAtKeyword =
     let
         endOffset =
@@ -6841,7 +6867,7 @@ consumeKeywordAt keyword keywordLength stateAtKeyword =
             )
 
     else
-        Err ("Expected '" ++ keyword ++ "', but found '" ++ snippetAt stateAtKeyword ++ "'.")
+        failure stateAtKeyword ("Expected '" ++ keyword ++ "', but found '" ++ snippetAt stateAtKeyword ++ "'.")
 
 
 {-| True when a `.` at the given offset forms a lone dot rather than `..` or a longer operator.
@@ -7382,7 +7408,7 @@ consumeLiteral :
     -> Int
     -> List String
     -> List String
-    -> Result String ConsumedLiteral
+    -> Result ParseError ConsumedLiteral
 consumeLiteral termination source startRow startColumn offset row column decodedChunksRev rawChunksRev =
     let
         ( runEndOffset, boundary ) =
@@ -7415,7 +7441,7 @@ consumeLiteral termination source startRow startColumn offset row column decoded
                 }
 
         LiteralRunUnterminated ->
-            Err ("Unterminated literal at " ++ locationString { row = startRow, column = startColumn } ++ ".")
+            failure { row = startRow, column = startColumn } ("Unterminated literal at " ++ locationString { row = startRow, column = startColumn } ++ ".")
 
         LiteralRunNewlineLF ->
             consumeLiteral termination
@@ -7465,7 +7491,7 @@ consumeLiteral termination source startRow startColumn offset row column decoded
                         rawChunksAfterRun
 
                 "" ->
-                    Err ("Unterminated literal at " ++ locationString { row = startRow, column = startColumn } ++ ".")
+                    failure { row = startRow, column = startColumn } ("Unterminated literal at " ++ locationString { row = startRow, column = startColumn } ++ ".")
 
                 escaped ->
                     let
@@ -7509,7 +7535,7 @@ consumeUnicodeEscape :
     -> Int
     -> List String
     -> List String
-    -> Result String ConsumedLiteral
+    -> Result ParseError ConsumedLiteral
 consumeUnicodeEscape termination source startRow startColumn escapeOffset escapeRow escapeColumn decodedChunksRev rawChunksRev =
     let
         afterPrefixOffset =
@@ -7538,10 +7564,10 @@ consumeUnicodeEscape termination source startRow startColumn escapeOffset escape
                         )
 
                 else
-                    Err ("Invalid unicode escape at " ++ locationString { row = escapeRow, column = escapeColumn } ++ ".")
+                    failure { row = escapeRow, column = escapeColumn } ("Invalid unicode escape at " ++ locationString { row = escapeRow, column = escapeColumn } ++ ".")
 
             Nothing ->
-                Err ("Invalid unicode escape at " ++ locationString { row = escapeRow, column = escapeColumn } ++ ".")
+                failure { row = escapeRow, column = escapeColumn } ("Invalid unicode escape at " ++ locationString { row = escapeRow, column = escapeColumn } ++ ".")
 
     else
         consumeLiteral termination

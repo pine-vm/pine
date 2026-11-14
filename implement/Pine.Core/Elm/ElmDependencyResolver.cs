@@ -788,7 +788,8 @@ public static class ElmDependencyResolver
         }
     }
 
-    internal static void ValidatePackageName(string name)
+    /// <summary>Rejects malformed package references and unsafe archive/cache path components.</summary>
+    public static void ValidatePackageName(string name)
     {
         var segments = name.Split('/');
 

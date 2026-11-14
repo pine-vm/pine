@@ -214,10 +214,10 @@ public class ElmParserExpressionTests
         EvalWorkCountersFormatting.FormatCounts(report).ShouldBeWithDiff(
             """
             InvocationCount: 7
-            BuildListCount: 30
-            BuildListItemCount: 147
+            BuildListCount: 31
+            BuildListItemCount: 150
             LoopIterationCount: 5
-            InstructionCount: 454
+            InstructionCount: 463
             DeferredTemplateValueAllocationCount: 0
             TemplateDirectInvocationCount: 0
             DeferredTemplateValueMaterializationCount: 0
@@ -250,10 +250,10 @@ public class ElmParserExpressionTests
         EvalWorkCountersFormatting.FormatCounts(report).ShouldBeWithDiff(
             """
             InvocationCount: 8
-            BuildListCount: 35
-            BuildListItemCount: 170
+            BuildListCount: 36
+            BuildListItemCount: 173
             LoopIterationCount: 12
-            InstructionCount: 607
+            InstructionCount: 616
             DeferredTemplateValueAllocationCount: 0
             TemplateDirectInvocationCount: 0
             DeferredTemplateValueMaterializationCount: 0
@@ -279,10 +279,10 @@ public class ElmParserExpressionTests
         EvalWorkCountersFormatting.FormatCounts(report.VmCounters).ShouldBeWithDiff(
             """
             InvocationCount: 8
-            BuildListCount: 35
-            BuildListItemCount: 169
+            BuildListCount: 36
+            BuildListItemCount: 172
             LoopIterationCount: 3
-            InstructionCount: 559
+            InstructionCount: 564
             DeferredTemplateValueAllocationCount: 0
             TemplateDirectInvocationCount: 0
             DeferredTemplateValueMaterializationCount: 0
@@ -306,9 +306,9 @@ public class ElmParserExpressionTests
         // optimization opportunities.
         ElmSyntaxInterpreterEvalWorkCountersFormatting.FormatCounts(report.InterpreterCounters).ShouldBeWithDiff(
             """
-            InstructionLoopCount: 2_139
-            DirectFunctionApplicationCount: 327
-            FunctionValueApplicationCount: 0
+            InstructionLoopCount: 2_158
+            DirectFunctionApplicationCount: 331
+            FunctionValueApplicationCount: 1
             PineBuiltinInvocationCount: 141
             """);
     }
@@ -330,10 +330,10 @@ public class ElmParserExpressionTests
         EvalWorkCountersFormatting.FormatCounts(report).ShouldBeWithDiff(
             """
             InvocationCount: 8
-            BuildListCount: 30
-            BuildListItemCount: 155
+            BuildListCount: 31
+            BuildListItemCount: 158
             LoopIterationCount: 0
-            InstructionCount: 397
+            InstructionCount: 406
             DeferredTemplateValueAllocationCount: 0
             TemplateDirectInvocationCount: 0
             DeferredTemplateValueMaterializationCount: 0
@@ -362,10 +362,10 @@ public class ElmParserExpressionTests
         EvalWorkCountersFormatting.FormatCounts(report.VmCounters).ShouldBeWithDiff(
             """
             InvocationCount: 22
-            BuildListCount: 72
-            BuildListItemCount: 343
+            BuildListCount: 73
+            BuildListItemCount: 346
             LoopIterationCount: 1
-            InstructionCount: 845
+            InstructionCount: 854
             DeferredTemplateValueAllocationCount: 0
             TemplateDirectInvocationCount: 0
             DeferredTemplateValueMaterializationCount: 0
@@ -383,9 +383,9 @@ public class ElmParserExpressionTests
         // The independent interpreter measures canonical source, not optimized compiler expressions.
         ElmSyntaxInterpreterEvalWorkCountersFormatting.FormatCounts(report.InterpreterCounters).ShouldBeWithDiff(
             """
-            InstructionLoopCount: 4_044
-            DirectFunctionApplicationCount: 611
-            FunctionValueApplicationCount: 0
+            InstructionLoopCount: 4_063
+            DirectFunctionApplicationCount: 615
+            FunctionValueApplicationCount: 1
             PineBuiltinInvocationCount: 263
             """);
     }
@@ -409,10 +409,10 @@ public class ElmParserExpressionTests
         EvalWorkCountersFormatting.FormatCounts(report).ShouldBeWithDiff(
             """
             InvocationCount: 148
-            BuildListCount: 441
-            BuildListItemCount: 2_089
+            BuildListCount: 442
+            BuildListItemCount: 2_092
             LoopIterationCount: 12
-            InstructionCount: 4_863
+            InstructionCount: 4_872
             DeferredTemplateValueAllocationCount: 0
             TemplateDirectInvocationCount: 0
             DeferredTemplateValueMaterializationCount: 0
@@ -446,10 +446,10 @@ public class ElmParserExpressionTests
         EvalWorkCountersFormatting.FormatCounts(report).ShouldBeWithDiff(
             """
             InvocationCount: 101
-            BuildListCount: 327
-            BuildListItemCount: 1_539
+            BuildListCount: 328
+            BuildListItemCount: 1_542
             LoopIterationCount: 45
-            InstructionCount: 3_849
+            InstructionCount: 3_858
             DeferredTemplateValueAllocationCount: 0
             TemplateDirectInvocationCount: 2
             DeferredTemplateValueMaterializationCount: 0
@@ -484,10 +484,10 @@ public class ElmParserExpressionTests
         EvalWorkCountersFormatting.FormatCounts(report).ShouldBeWithDiff(
             """
             InvocationCount: 568
-            BuildListCount: 1_671
-            BuildListItemCount: 7_909
+            BuildListCount: 1_672
+            BuildListItemCount: 7_912
             LoopIterationCount: 122
-            InstructionCount: 18_733
+            InstructionCount: 18_742
             DeferredTemplateValueAllocationCount: 0
             TemplateDirectInvocationCount: 0
             DeferredTemplateValueMaterializationCount: 0
@@ -529,10 +529,10 @@ public class ElmParserExpressionTests
         EvalWorkCountersFormatting.FormatCounts(report).ShouldBeWithDiff(
             """
             InvocationCount: 628
-            BuildListCount: 1_839
-            BuildListItemCount: 8_693
+            BuildListCount: 1_840
+            BuildListItemCount: 8_696
             LoopIterationCount: 190
-            InstructionCount: 21_045
+            InstructionCount: 21_054
             DeferredTemplateValueAllocationCount: 0
             TemplateDirectInvocationCount: 0
             DeferredTemplateValueMaterializationCount: 0

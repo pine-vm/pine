@@ -1413,20 +1413,30 @@ numericPatternLiteralSuite =
         , ( "1e-1001", Pattern.FloatPattern "1e-1001" )
         ]
         ++ List.map
-            (\literal ->
+            (\( literal, message ) ->
                 Test.test ("rejects incomplete literal " ++ literal) <|
                     \_ ->
                         case
-                            ElmSyntax.Concrete.Parser.FromString.parseExpression
+                            ElmSyntax.Concrete.Parser.FromString.parseExpressionStructured
                                 ("case number of\n    " ++ literal ++ " -> 1")
                         of
-                            Err _ ->
-                                Expect.pass
+                            Err error ->
+                                Expect.equal
+                                    { message = message
+                                    , region =
+                                        { start = { row = 2, column = 5 }
+                                        , end = { row = 2, column = 5 }
+                                        }
+                                    }
+                                    error
 
                             Ok _ ->
                                 Expect.fail "Expected an invalid numeric pattern to be rejected."
             )
-            [ "0x", "1e", "1e+" ]
+            [ ( "0x", "Invalid hexadecimal pattern '0x'." )
+            , ( "1e", "Invalid float pattern '1e'." )
+            , ( "1e+", "Invalid float pattern '1e+'." )
+            ]
 
 
 nestedPatternAndBoundarySuite : List Test

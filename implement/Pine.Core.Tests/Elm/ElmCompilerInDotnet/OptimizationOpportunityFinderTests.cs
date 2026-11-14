@@ -2167,7 +2167,7 @@ public class OptimizationOpportunityFinderTests
     }
 
     [Fact]
-    public void Reports_source_opportunities_and_no_generic_reads_in_compiled_language_service_and_syntax_parser()
+    public void Reports_source_opportunities_and_no_generic_reads_outside_parser_error_helpers()
     {
         var compilerSources = BundledFiles.CompilerSourceContainerFilesDefault.Value;
         var sourceTree = BundledFiles.ElmKernelModulesDefault.Value;
@@ -2213,6 +2213,18 @@ public class OptimizationOpportunityFinderTests
                 opportunity.ContainingDecl.Namespaces.Take(1).SequenceEqual(["ElmSyntax"]))
             .ToImmutableHashSet();
 
+        opportunities
+            .Where(opportunity => opportunity.Category is OpportunityCategory.RecordAccess)
+            .Select(opportunity => (opportunity.ContainingDecl.FullName, opportunity.Description))
+            .Should().BeEquivalentTo(
+            [
+                ("ElmSyntax.Concrete.Parser.FromString.failure", "row"),
+                ("ElmSyntax.Concrete.Parser.FromString.failure", "column"),
+                ("ElmSyntax.Concrete.Parser.FromString.parseFile", "message"),
+                ("ElmSyntax.Concrete.Parser.FromString.parseExpression", "message"),
+                ("ElmSyntax.Concrete.Parser.FromString.parseDeclarationOrExpression", "message"),
+            ]);
+
         var countsByModuleAndCategory =
             opportunities
             .GroupBy(
@@ -2228,6 +2240,7 @@ public class OptimizationOpportunityFinderTests
         var renderedCounts = string.Join("\n", countsByModuleAndCategory);
 
         OptimizationOpportunityFinder.FindGenericRecordAccessOpportunities(pipelineResults.CompilerProgram)
+            .Where(opportunity => !ElmCompilerTestHelper.IsParserErrorRecordAccess(pipelineResults, opportunity))
             .Should().BeEmpty();
 
         renderedCounts.ShouldBeWithDiff(
@@ -2238,11 +2251,13 @@ public class OptimizationOpportunityFinderTests
             ElmSyntax.Abstract.ConvertFromConcrete: RootLevelChoiceTagWrapper: 6
             ElmSyntax.Concrete.Node: HigherOrderParameter_Direct: 2
             ElmSyntax.Concrete.Node: RootLevelChoiceTagWrapper: 8
+            ElmSyntax.Concrete.Parser.FromString: RecordAccess: 5
             ElmSyntax.Concrete.Parser.FromString: BasicsArithmetic: 155
             ElmSyntax.Concrete.Parser.FromString: BasicsCompare: 19
             ElmSyntax.Concrete.Parser.FromString: BasicsEq: 39
             ElmSyntax.Concrete.Parser.FromString: BasicsAppend: 52
-            ElmSyntax.Concrete.Parser.FromString: RootLevelChoiceTagWrapper: 113
+            ElmSyntax.Concrete.Parser.FromString: PartialApplication: 3
+            ElmSyntax.Concrete.Parser.FromString: RootLevelChoiceTagWrapper: 117
             ElmSyntax.Concrete.Parser.StringParsing: BasicsArithmetic: 22
             ElmSyntax.Concrete.Parser.StringParsing: BasicsCompare: 1
             ElmSyntax.Concrete.Parser.StringParsing: BasicsEq: 5

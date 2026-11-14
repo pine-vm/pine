@@ -1,4 +1,3 @@
-using ElmTime.Elm019;
 using Pine.Core;
 using Pine.Core.Addressing;
 using Pine.Core.CodeAnalysis;
@@ -9,6 +8,7 @@ using Pine.Core.Internal;
 using Pine.Core.Json;
 using Pine.Core.PineLanguage;
 using Pine.Elm;
+using Pine.Elm019;
 using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
@@ -74,8 +74,10 @@ namespace ElmTime
             IImmutableDictionary<IReadOnlyList<string>, ReadOnlyMemory<byte>> sourceFiles,
             IReadOnlyList<string> workingDirectoryRelative,
             ElmAppInterfaceConfig interfaceConfig,
-            ElmCompilerCache2024 elmCompilerCache)
+            ElmCompilerCache2024 elmCompilerCache,
+            ElmMakeCompilationCache? elmMakeCompilationCache = null)
         {
+            elmMakeCompilationCache ??= new ElmMakeCompilationCache();
             var clock = System.Diagnostics.Stopwatch.StartNew();
 
             var sourceFilesHash =
@@ -102,7 +104,8 @@ namespace ElmTime
                     workingDirectoryRelative: workingDirectoryRelative,
                     compilationRootFilePath: interfaceConfig.CompilationRootFilePath,
                     interfaceToHostRootModuleName: [.. InterfaceToHostRootModuleName.Split('.')],
-                    elmCompilerCache);
+                    elmCompilerCache,
+                    elmMakeCompilationCache);
 
             (CompilationResult compilationResult, TimeSpan lastUseTime) BuildNextCacheEntry(
                 CompilationResult? previousEntryCompilationResult)
@@ -141,14 +144,16 @@ namespace ElmTime
             IReadOnlyList<string> workingDirectoryRelative,
             IReadOnlyList<string> compilationRootFilePath,
             IReadOnlyList<string> interfaceToHostRootModuleName,
-            ElmCompilerCache2024 elmCompilerCache) =>
+            ElmCompilerCache2024 elmCompilerCache,
+            ElmMakeCompilationCache elmMakeCompilationCache) =>
             AsCompletelyLoweredElmApp(
                 sourceFiles,
                 workingDirectoryRelative: workingDirectoryRelative,
                 compilationRootFilePath: compilationRootFilePath,
                 interfaceToHostRootModuleName,
                 ImmutableStack<StackFrame>.Empty,
-                elmCompilerCache);
+                elmCompilerCache,
+                elmMakeCompilationCache);
 
         private static CompilationResult AsCompletelyLoweredElmApp(
             IImmutableDictionary<IReadOnlyList<string>, ReadOnlyMemory<byte>> sourceFiles,
@@ -156,7 +161,8 @@ namespace ElmTime
             IReadOnlyList<string> compilationRootFilePath,
             IReadOnlyList<string> interfaceToHostRootModuleName,
             IImmutableStack<StackFrame> stack,
-            ElmCompilerCache2024 elmCompilerCache)
+            ElmCompilerCache2024 elmCompilerCache,
+            ElmMakeCompilationCache elmMakeCompilationCache)
         {
             if (10 < stack.Count())
                 throw new Exception("Iteration stack depth > 10");
@@ -239,41 +245,50 @@ namespace ElmTime
                             bool enableDebug,
                             bool enableOptimize)
                         {
-                            var elmMakeCommandAppendix =
-                                new[]
-                                {
-                                    enableDebug ? "--debug" : null,
-                                    enableOptimize ? "--optimize" : null
-                                }.Where(flag => !string.IsNullOrEmpty(flag))
-                                .Aggregate(
-                                    seed: (string?)null,
-                                    (current, next) => current + " " + next);
+                            if (enableDebug && enableOptimize)
+                                return "Elm make cannot combine --debug and --optimize.";
 
-                            var elmMakeResult =
-                                Elm019Binaries.ElmMake(
-                                    elmCodeFiles,
-                                    workingDirectoryRelative: workingDirectoryRelative,
-                                    pathToFileWithElmEntryPoint: pathToFileWithElmEntryPoint,
-                                    outputFileName: "output." + (makeJavascript ? "js" : "html"),
-                                    elmMakeCommandAppendix: elmMakeCommandAppendix);
+                            return
+                                Pine.Elm019.ElmMakeCompiler.CompileWithPackagesAsync(
+                                    FileTree.FromSetOfFilesWithStringPath(elmCodeFiles),
+                                    pathToFileWithElmEntryPoint,
+                                    makeJavascript
+                                    ?
+                                    Pine.Elm019.ElmMakeOutputType.JavaScript
+                                    :
+                                    Pine.Elm019.ElmMakeOutputType.Html,
+                                    enableDebug
+                                    ?
+                                    Pine.Elm019.ElmMakeFlavor.Debug
+                                    :
+                                    enableOptimize
+                                    ?
+                                    Pine.Elm019.ElmMakeFlavor.Optimize
+                                    :
+                                    Pine.Elm019.ElmMakeFlavor.Development,
+                                    compilationCache: elmMakeCompilationCache)
+                                .GetAwaiter().GetResult()
+                                .MapError(
+                                    error => "Failed running Elm-based ElmMake: " +
+                                        (error switch
+                                        {
+                                            ElmMakeError.Diagnostics diagnostics =>
+                                            string.Join(
+                                                "\n",
+                                                diagnostics.Problems.Select(
+                                                    problem =>
+                                                    problem.Kind.Code + ": " + string.Join(", ", problem.Kind.Names) +
+                                                    (problem.Kind.Details is { } details ? "\n" + details : ""))),
 
-                            if (elmMakeResult.IsErrOrNull() is { } err)
-                            {
-                                return "Failed running ElmMake: " + err;
-                            }
+                                            ElmMakeError.Unsupported unsupported => unsupported.ToString(),
+                                            ElmMakeError.Internal failure => failure.ToString(),
 
-                            if (elmMakeResult.IsOkOrNull() is not { } makeOk)
-                            {
-                                throw new NotImplementedException(
-                                    "Unexpected result type: " + elmMakeResult.GetType());
-                            }
-
-                            if (makeOk.ProducedFiles is not FileTree.FileNode blobNode)
-                            {
-                                throw new Exception("Unexpected result type: " + makeOk.ProducedFiles.GetType());
-                            }
-
-                            return blobNode.Bytes;
+                                            _ =>
+                                            throw new NotImplementedException(
+                                                nameof(AsCompletelyLoweredElmApp) + " does not handle error variant: " +
+                                                error.GetType().Name),
+                                        }))
+                                .Map(text => (ReadOnlyMemory<byte>)Encoding.UTF8.GetBytes(text));
                         }
 
                         var newDependencies =
@@ -382,7 +397,8 @@ namespace ElmTime
                                 compilationRootFilePath: compilationRootFilePath,
                                 interfaceToHostRootModuleName: interfaceToHostRootModuleName,
                                 stack: stack.Push(newStackFrame),
-                                elmCompilerCache);
+                                elmCompilerCache,
+                                elmMakeCompilationCache);
                     });
         }
 
