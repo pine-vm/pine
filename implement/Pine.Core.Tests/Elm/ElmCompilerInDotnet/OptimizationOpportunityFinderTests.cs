@@ -2239,7 +2239,7 @@ public class OptimizationOpportunityFinderTests
             ElmSyntax.Concrete.Node: HigherOrderParameter_Direct: 2
             ElmSyntax.Concrete.Node: RootLevelChoiceTagWrapper: 8
             ElmSyntax.Concrete.Parser.FromString: BasicsArithmetic: 155
-            ElmSyntax.Concrete.Parser.FromString: BasicsCompare: 18
+            ElmSyntax.Concrete.Parser.FromString: BasicsCompare: 19
             ElmSyntax.Concrete.Parser.FromString: BasicsEq: 39
             ElmSyntax.Concrete.Parser.FromString: BasicsAppend: 52
             ElmSyntax.Concrete.Parser.FromString: RootLevelChoiceTagWrapper: 113

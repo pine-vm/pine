@@ -373,13 +373,13 @@ public static class ToFullSyntaxModel
             new FullTypes.Pattern.StringPattern(stringPattern.Value),
 
             Pattern.IntPattern intPattern =>
-            new FullTypes.Pattern.IntPattern(intPattern.Value),
+            new FullTypes.Pattern.IntPattern(Abstract.ConvertToConcrete.IntegerLiteralText(intPattern.Value)),
 
             Pattern.HexPattern hexPattern =>
-            new FullTypes.Pattern.HexPattern(hexPattern.Value),
+            new FullTypes.Pattern.HexPattern(FormatHexLiteral(hexPattern.Value)),
 
             Pattern.FloatPattern floatPattern =>
-            new FullTypes.Pattern.FloatPattern(floatPattern.Value),
+            new FullTypes.Pattern.FloatPattern(floatPattern.LiteralText),
 
             Pattern.TuplePattern tuplePattern =>
             new FullTypes.Pattern.TuplePattern(
@@ -449,7 +449,7 @@ public static class ToFullSyntaxModel
             new FullTypes.Expression.CharLiteral(charLiteral.Value),
 
             Expression.Integer integer =>
-            new FullTypes.Expression.IntegerLiteral(integer.Value.ToString()),
+            new FullTypes.Expression.IntegerLiteral(Abstract.ConvertToConcrete.IntegerLiteralText(integer.Value)),
 
             Expression.Hex hex =>
             new FullTypes.Expression.IntegerLiteral(FormatHexLiteral(hex.Value)),
@@ -833,13 +833,6 @@ public static class ToFullSyntaxModel
     /// Formats a hex integer value as a literal string (e.g., "0x49" or "-0x1A").
     /// Uses the same formatting as <see cref="Rendering.RenderHexPattern"/>.
     /// </summary>
-    private static string FormatHexLiteral(long value)
-    {
-        if (value < 0)
-        {
-            return "-" + Rendering.RenderHexPattern(-value);
-        }
-
-        return Rendering.RenderHexPattern(value);
-    }
+    private static string FormatHexLiteral(System.Numerics.BigInteger value) =>
+        Rendering.RenderHexPattern(value);
 }

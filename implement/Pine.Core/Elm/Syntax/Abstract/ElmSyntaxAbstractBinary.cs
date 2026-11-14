@@ -17,7 +17,7 @@ namespace Pine.Core.Elm.Syntax.Abstract;
 /// </summary>
 public static partial class ElmSyntaxAbstractBinary
 {
-    private const int Header = 0x45415301;
+    private const int Header = 0x45415302;
 
     private sealed record Digest(ReadOnlyMemory<byte> Bytes);
 
@@ -544,7 +544,8 @@ public static partial class ElmSyntaxAbstractBinary
 
                 case Pattern.FloatPattern literal:
                     _writer.Byte(7);
-                    _writer.Int64(BitConverter.DoubleToInt64Bits(literal.Value));
+                    _writer.Integer(literal.Numerator);
+                    _writer.Integer(literal.Denominator);
                     break;
 
                 case Pattern.TuplePattern tuple:

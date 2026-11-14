@@ -513,6 +513,11 @@ public class EncodeAsElmValue
                 "HexPattern",
                 [ElmValue.Integer(value.Value)]),
 
+            Pattern.FloatPattern value =>
+            ElmValue.TagInstance(
+                "FloatPattern",
+                [FloatLiteralConversion.ToElmFloat(value.LiteralText)]),
+
             Pattern.NamedPattern name =>
             ElmValue.TagInstance(
                 "NamedPattern",

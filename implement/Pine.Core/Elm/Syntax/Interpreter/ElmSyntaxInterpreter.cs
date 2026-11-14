@@ -3706,7 +3706,7 @@ public partial class ElmSyntaxInterpreter
                     PineValueInProcess.AreEqual(
                         value,
                         ElmValueEncoding.ElmValueAsPineValue(
-                            ElmValue.ElmFloat.Convert(floatPattern.Value)));
+                            ElmValue.ElmFloat.Normalized(floatPattern.Numerator, floatPattern.Denominator)));
 
             case Pattern.TuplePattern tuplePattern:
                 {

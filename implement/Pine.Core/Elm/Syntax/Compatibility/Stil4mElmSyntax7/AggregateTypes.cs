@@ -1,5 +1,6 @@
 using Pine.Core.Elm.Syntax.Concrete;
 using System.Collections.Generic;
+using System.Numerics;
 
 /*
  * Types for modelling parsed concrete syntax, based on
@@ -577,17 +578,18 @@ public abstract record Pattern
 
     /// <summary>Pattern matching a decimal integer literal.</summary>
     public sealed record IntPattern(
-        long Value)
+        BigInteger Value)
         : Pattern;
 
     /// <summary>Pattern matching a hexadecimal integer literal.</summary>
     public sealed record HexPattern(
-        long Value)
+        BigInteger Value)
         : Pattern;
 
     /// <summary>Pattern matching a floating-point literal.</summary>
+    /// <param name="LiteralText">The original literal text, preserved for exact roundtripping.</param>
     public sealed record FloatPattern(
-        float Value)
+        string LiteralText)
         : Pattern;
 
     /// <summary>Pattern matching a tuple.</summary>
@@ -830,12 +832,12 @@ public abstract record Expression
 
     /// <summary>Decimal integer literal expression.</summary>
     public sealed record Integer(
-        long Value)
+        BigInteger Value)
         : Expression;
 
     /// <summary>Hexadecimal integer literal expression.</summary>
     public sealed record Hex(
-        long Value)
+        BigInteger Value)
         : Expression;
 
     /// <summary>Floating-point literal expression.</summary>

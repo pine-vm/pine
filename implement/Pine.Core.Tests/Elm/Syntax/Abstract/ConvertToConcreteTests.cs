@@ -249,6 +249,9 @@ public class ConvertToConcreteTests
     [InlineData("-3.5")]
     [InlineData("2.0e1")]
     [InlineData("1.5e-2")]
+    [InlineData("9007199254740993.0")]
+    [InlineData("1e400")]
+    [InlineData("1e-1001")]
     public void Float_literal_text_round_trips_to_same_rational(string literalText)
     {
         var expected = FloatLiteralConversion.ToElmFloat(literalText);
@@ -259,6 +262,43 @@ public class ConvertToConcreteTests
 
         reparsed.Numerator.Should().Be(expected.Numerator);
         reparsed.Denominator.Should().Be(expected.Denominator);
+    }
+
+    [Theory]
+    [InlineData("9007199254740993.0")]
+    [InlineData("1e400")]
+    [InlineData("1e-1001")]
+    public void Float_patterns_round_trip_without_precision_or_range_limits(string literal)
+    {
+        var value = FloatLiteralConversion.ToElmFloat(literal);
+        var pattern = new AbstractSyntax.Pattern.FloatPattern(value.Numerator, value.Denominator);
+
+        ConvertFromConcrete.FromPattern(ConvertToConcrete.ToPattern(pattern)).Should().Be(pattern);
+    }
+
+    [Fact]
+    public void Large_integer_patterns_round_trip_without_narrowing()
+    {
+        var magnitude = BigInteger.Pow(10, 100);
+
+        foreach (var value in new[] { magnitude, -magnitude })
+        {
+            var pattern = new AbstractSyntax.Pattern.IntPattern(value);
+
+            ConvertFromConcrete.FromPattern(ConvertToConcrete.ToPattern(pattern)).Should().Be(pattern);
+        }
+    }
+
+    [Fact]
+    public void Nonterminating_float_literal_is_rejected_instead_of_approximated()
+    {
+        Action render = () => ConvertToConcrete.FloatLiteralText(1, 3);
+
+        render.Should().Throw<ArgumentException>()
+            .WithMessage("*no exact finite decimal representation*");
+
+        ConvertToConcrete.FloatLiteralText(3, 6).Should().Be("0.5");
+        ConvertToConcrete.FloatLiteralText(1, -2).Should().Be("-0.5");
     }
 
     [Fact]

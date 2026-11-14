@@ -709,8 +709,8 @@ public partial class ElmSyntaxInterpreter
                     Pattern.FloatPattern floating =>
                     Node(
                         "float",
-                        Text(
-                            floating.Value.ToString("R", System.Globalization.CultureInfo.InvariantCulture))),
+                        IntegerEncoding.EncodeSignedInteger(floating.Numerator),
+                        IntegerEncoding.EncodeSignedInteger(floating.Denominator)),
 
                     Pattern.TuplePattern tuple => Node("tuple", List(tuple.Elements.Select(PatternValue))),
 

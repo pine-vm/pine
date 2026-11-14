@@ -30,6 +30,7 @@ suite =
     Test.describe "convert concrete syntax to abstract syntax"
         [ expressionSuite
         , patternSuite
+        , numericPatternSuite
         , typeAnnotationSuite
         , moduleAndImportSuite
         , declarationSuite
@@ -137,9 +138,9 @@ patternSuite =
                     , ConcretePattern.UnitPattern
                     , ConcretePattern.CharPattern 97
                     , ConcretePattern.StringPattern "text"
-                    , ConcretePattern.IntPattern 12
-                    , ConcretePattern.HexPattern 255
-                    , ConcretePattern.FloatPattern 1.5
+                    , ConcretePattern.IntPattern "12"
+                    , ConcretePattern.HexPattern "0xFF"
+                    , ConcretePattern.FloatPattern "1.5"
                     , ConcretePattern.TuplePattern
                         (separated [ node (ConcretePattern.VarPattern "a"), node (ConcretePattern.VarPattern "b") ])
                     , ConcretePattern.RecordPattern (separated [ node "a", node "b" ])
@@ -156,7 +157,7 @@ patternSuite =
                         location
                         (node "whole")
                     , ConcretePattern.ParenthesizedPattern
-                        (node (ConcretePattern.HexPattern 16))
+                        (node (ConcretePattern.HexPattern "0x10"))
                     ]
 
                 expected =
@@ -185,6 +186,51 @@ patternSuite =
                     ]
             in
             Expect.equal expected (List.map Convert.fromPattern concretePatterns)
+
+
+numericPatternSuite : Test
+numericPatternSuite =
+    Test.describe "numeric patterns"
+        [ Test.test "normalizes equivalent float spellings" <|
+            \_ ->
+                Expect.equal
+                    [ AbstractPattern.FloatPattern 100
+                    , AbstractPattern.FloatPattern 100
+                    , AbstractPattern.FloatPattern 100
+                    ]
+                    (List.map
+                        (ConcretePattern.FloatPattern >> Convert.fromPattern)
+                        [ "100", "100.00", "1e2" ]
+                    )
+        , Test.test "preserves integer values beyond machine integer limits" <|
+            \_ ->
+                Expect.equal
+                    [ AbstractPattern.IntPattern 92233720368547758081234567890
+                    , AbstractPattern.IntPattern 18446744073709551615
+                    ]
+                    (List.map Convert.fromPattern
+                        [ ConcretePattern.IntPattern "92233720368547758081234567890"
+                        , ConcretePattern.HexPattern "0xffffffffffffffff"
+                        ]
+                    )
+        , Test.test "preserves float values beyond IEEE 754 precision and range" <|
+            \_ ->
+                Expect.all
+                    [ \_ ->
+                        Expect.notEqual
+                            (Convert.fromPattern (ConcretePattern.FloatPattern "9007199254740992.0"))
+                            (Convert.fromPattern (ConcretePattern.FloatPattern "9007199254740993.0"))
+                    , \_ ->
+                        Expect.notEqual
+                            (AbstractPattern.FloatPattern 0)
+                            (Convert.fromPattern (ConcretePattern.FloatPattern "1e-1001"))
+                    , \_ ->
+                        Expect.equal
+                            (AbstractPattern.FloatPattern 1.0e400)
+                            (Convert.fromPattern (ConcretePattern.FloatPattern "1e400"))
+                    ]
+                    ()
+        ]
 
 
 typeAnnotationSuite : Test

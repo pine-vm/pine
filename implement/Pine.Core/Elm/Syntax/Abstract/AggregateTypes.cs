@@ -857,9 +857,10 @@ public abstract record Pattern
         }
     }
 
-    /// <summary>Pattern matching a floating-point literal.</summary>
+    /// <summary>Pattern matching a floating-point literal, normalized to an exact rational number.</summary>
     public sealed record FloatPattern(
-        double Value)
+        BigInteger Numerator,
+        BigInteger Denominator)
         : Pattern;
 
     /// <summary>Pattern matching a tuple.</summary>

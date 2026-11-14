@@ -66,7 +66,7 @@ public class ModelTests
                 new Model.Pattern.CharPattern(0x1F600),
                 new Model.Pattern.StringPattern("text\n"),
                 new Model.Pattern.IntPattern(BigInteger.One << 100),
-                new Model.Pattern.FloatPattern(1.25),
+                new Model.Pattern.FloatPattern(5, 4),
                 new Model.Pattern.TuplePattern(
                     [new Model.Pattern.VarPattern(Id(0)), new Model.Pattern.VarPattern(Id(1))]),
                 new Model.Pattern.ListPattern([new Model.Pattern.VarPattern(Id(0))]),

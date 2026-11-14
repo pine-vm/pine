@@ -45,7 +45,9 @@ public static class Rendering
             Pattern.CharPattern character => Literal(character.ValueAsPineValue),
             Pattern.StringPattern text => Literal(text.ValueAsPineValue),
             Pattern.IntPattern integer => Literal(integer.ValueAsPineValue),
-            Pattern.FloatPattern floating => floating.Value.ToString(System.Globalization.CultureInfo.InvariantCulture),
+
+            Pattern.FloatPattern floating =>
+            Syntax.Abstract.ConvertToConcrete.FloatLiteralText(floating.Numerator, floating.Denominator),
 
             _ =>
             throw new NotImplementedException($"{nameof(Pattern)} does not handle pattern variant: {pattern.GetType().Name}")

@@ -205,6 +205,7 @@ public class ElmSyntaxConcreteParserPrecompiledLeavesEffectivenessTests
         Apply(vmWithNestedScanner, s_exerciseParseFileFunction.Value, ElmValue.StringInstance(ParsedModuleText))
             .value.Should().Be(ElmValue.TrueValue);
 
+        // Numeric patterns retain literal text, so hexadecimal accumulation is only exercised directly above.
         var reachableLeaves =
             new (string name, PineValue key)[]
             {
@@ -214,7 +215,6 @@ public class ElmSyntaxConcreteParserPrecompiledLeavesEffectivenessTests
                 ("skipToAsciiHexDigitEnd", ElmSyntaxConcreteParserPrecompiledLeaves.SkipToAsciiHexDigitEndLeafKey),
                 ("numberEndDecimal", ElmSyntaxConcreteParserPrecompiledLeaves.NumberEndDecimalLeafKey),
                 ("isFloatLiteralAt", ElmSyntaxConcreteParserPrecompiledLeaves.IsFloatLiteralAtLeafKey),
-                ("convert0OrMoreHexadecimalValue", ElmSyntaxConcreteParserPrecompiledLeaves.Convert0OrMoreHexadecimalValueLeafKey),
                 ("scanUnicodeEscapeDigits", ElmSyntaxConcreteParserPrecompiledLeaves.ScanUnicodeEscapeDigitsLeafKey),
                 ("findLiteralRunEnd", ElmSyntaxConcreteParserPrecompiledLeaves.FindLiteralRunEndLeafKey),
                 ("skipOperatorChars", ElmSyntaxConcreteParserPrecompiledLeaves.SkipOperatorCharsLeafKey),

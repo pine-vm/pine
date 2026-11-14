@@ -257,13 +257,13 @@ public static class ConvertFromConcrete
             new Pattern.StringPattern(stringPattern.Value),
 
             Concrete.Pattern.IntPattern intPattern =>
-            new Pattern.IntPattern(intPattern.Value),
+            new Pattern.IntPattern(ParseIntegerLiteral(intPattern.LiteralText)),
 
             Concrete.Pattern.HexPattern hexPattern =>
-            new Pattern.IntPattern(hexPattern.Value),
+            new Pattern.IntPattern(ParseIntegerLiteral(hexPattern.LiteralText)),
 
             Concrete.Pattern.FloatPattern floatPattern =>
-            new Pattern.FloatPattern(floatPattern.Value),
+            MakeFloatPattern(floatPattern.LiteralText),
 
             Concrete.Pattern.TuplePattern tuplePattern =>
             new Pattern.TuplePattern(
@@ -422,6 +422,13 @@ public static class ConvertFromConcrete
         var elmFloat = FloatLiteralConversion.ToElmFloat(literalText);
 
         return new Expression.FloatLiteral(elmFloat.Numerator, elmFloat.Denominator);
+    }
+
+    private static Pattern.FloatPattern MakeFloatPattern(string literalText)
+    {
+        var elmFloat = FloatLiteralConversion.ToElmFloat(literalText);
+
+        return new Pattern.FloatPattern(elmFloat.Numerator, elmFloat.Denominator);
     }
 
     private static Expression.RecordAccessFunction MakeRecordAccessFunction(string functionName)

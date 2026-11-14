@@ -362,7 +362,7 @@ public class DeclarationDeduplicationFingerprintTests
             new Abstract.Pattern.CharPattern(0x1F600),
             new Abstract.Pattern.StringPattern("a\n\"\\b"),
             new Abstract.Pattern.IntPattern(BigInteger.Pow(10, 100)),
-            new Abstract.Pattern.FloatPattern(1.25),
+            new Abstract.Pattern.FloatPattern(5, 4),
             new Abstract.Pattern.TuplePattern([variable]),
             Abstract.Pattern.RecordPattern.Create(["field"]),
             new Abstract.Pattern.UnConsPattern(variable, new Abstract.Pattern.VarPattern("tail")),

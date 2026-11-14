@@ -470,7 +470,7 @@ public partial class ElmSyntaxInterpreter
             case AbstractPattern.FloatPattern floatPattern:
                 constantValue =
                     ElmValueEncoding.ElmValueAsPineValue(
-                        ElmValue.ElmFloat.Convert(floatPattern.Value));
+                        ElmValue.ElmFloat.Normalized(floatPattern.Numerator, floatPattern.Denominator));
 
                 return true;
 

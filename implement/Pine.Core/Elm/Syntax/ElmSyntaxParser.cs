@@ -4954,11 +4954,12 @@ public class ElmSyntaxParser
                     if (!TryUnwrap(Consume(TokenType.NumberLiteral), out var literalToken, out var literalTokenErr))
                         return literalTokenErr;
 
-                    if (!long.TryParse(
-                        literalToken.Lexeme.AsSpan(2),
+                    if (literalToken.Lexeme.Length <= 2 ||
+                        !System.Numerics.BigInteger.TryParse(
+                        "0" + literalToken.Lexeme[2..],
                         System.Globalization.NumberStyles.HexNumber,
                         System.Globalization.CultureInfo.InvariantCulture,
-                        out var hexValue))
+                        out _))
                     {
                         return
                             new ParseError(
@@ -4968,7 +4969,7 @@ public class ElmSyntaxParser
                     }
 
                     var hexPattern =
-                        new SyntaxTypes.Pattern.HexPattern(hexValue);
+                        new SyntaxTypes.Pattern.HexPattern(literalToken.Lexeme);
 
                     return
                         new Node<SyntaxTypes.Pattern>(
@@ -4976,19 +4977,22 @@ public class ElmSyntaxParser
                             hexPattern);
                 }
 
-                // | IntegerPattern Int
-                if (long.TryParse(start.Lexeme, out var number))
+                if (System.Numerics.BigInteger.TryParse(
+                    start.Lexeme,
+                    System.Globalization.NumberStyles.Integer,
+                    System.Globalization.CultureInfo.InvariantCulture,
+                    out _))
                 {
                     if (!TryUnwrap(Consume(TokenType.NumberLiteral), out var literalToken, out var literalTokenErr))
                         return literalTokenErr;
 
-                    var integerPattern =
-                        new SyntaxTypes.Pattern.IntPattern(number);
+                    var numberPattern =
+                        new SyntaxTypes.Pattern.IntPattern(literalToken.Lexeme);
 
                     return
                         new Node<SyntaxTypes.Pattern>(
                             MakeRange(start.Start, literalToken.End),
-                            integerPattern);
+                            numberPattern);
                 }
             }
 

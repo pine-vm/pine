@@ -80,7 +80,7 @@ public class CompilerModelHashTests
             new Model.Pattern.CharPattern(65),
             new Model.Pattern.StringPattern("text"),
             new Model.Pattern.IntPattern(BigInteger.One << 100),
-            new Model.Pattern.FloatPattern(1.25),
+            new Model.Pattern.FloatPattern(5, 4),
             new Model.Pattern.TuplePattern([Pattern()]),
             new Model.Pattern.ListPattern([Pattern()]),
             new Model.Pattern.UnConsPattern(Pattern(), new Model.Pattern.AllPattern()),

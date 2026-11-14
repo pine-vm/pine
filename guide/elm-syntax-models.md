@@ -18,6 +18,9 @@ The concrete syntax model contains:
 
 Modeling these details enables applications like code formatting to round-trip and preserve aspects of source code as users expect.
 
+Numeric expression and pattern nodes retain their original literal text as strings.
+Decimal, hexadecimal, and scientific spellings (including `100`, `100.00`, and `1e2`) are preserved when rendering and formatting concrete nodes.
+
 For example, the `elm format` subcommand is designed to be consistent with the `elm-format` tool by Aaron VonderHaar. [`avh4/elm-format`](https://github.com/avh4/elm-format) preserves redundant parens, for example, in some expressions and type annotations.
 
 ## Abstract Syntax Model
@@ -42,7 +45,7 @@ Every node implements structural value equality (and a matching `GetHashCode`). 
 Literals are stored in a canonical, already-decoded form, so consumers never have to re-parse source text:
 
 + Integer literals are stored as a `System.Numerics.BigInteger`. Decimal, hexadecimal (`0x...`) and negative renderings all collapse to the same value, and the separate concrete hex/int pattern variants are merged.
-+ Float literals are stored as an exact rational (numerator / denominator `BigInteger` pair), normalizing decimal and scientific (`1.0e3`) renderings.
++ Float literals and float patterns are stored as an exact rational (numerator / denominator `BigInteger` pair), normalizing decimal and scientific (`1.0e3`) renderings.
 + String and char literals are stored with all escape sequences (e.g. `\n`, `\t`, `\\`, `\u{XXXX}`) already decoded into the actual characters.
 
 ### Precomputed `PineValue` instances
@@ -56,6 +59,10 @@ The model is designed for an interpreter that operates over `PineValue`. To avoi
 
 Use `ConvertFromConcrete` to convert syntax nodes from `Pine.Core.Elm.Syntax.Concrete` to `Pine.Core.Elm.Syntax.Abstract`.
 `ConvertToConcrete` converts from `Pine.Core.Elm.Syntax.Abstract` to `Pine.Core.Elm.Syntax.Concrete` while filling the locations and ranges of syntax nodes with zeroes.
+Rational floats are rendered exactly, with no fractional-digit cutoff. Values
+without a finite decimal representation are rejected rather than approximated.
+Prepared-value diagnostics render nonterminating rationals as division expressions
+instead of approximating them as float literals.
 
 The Elm compiler canonicalizes concrete syntax while keeping source ranges available for diagnostics, then converts directly to abstract syntax for optimization and type inference. Compiler passes must not round-trip through the legacy syntax model. Source-oriented features, such as applying inferred annotations, retain the original concrete file for output.
 
@@ -70,3 +77,5 @@ for the storage interface, selection policy, cryptographic addresses and eligibi
 ## Stil4mElmSyntax7
 
 The syntax model in the namespace `Stil4mElmSyntax7` was the first one implemented and originally used in more applications. Later, we split the syntax model into concrete and abstract forms, and since then, `Stil4mElmSyntax7` has only been used for backward compatibility with certain tools.
+Its integer expressions and patterns use `BigInteger`, and its float patterns
+retain literal text, so conversions do not narrow numeric values.

@@ -334,10 +334,10 @@ public static class ConvertToConcrete
             new Concrete.Pattern.StringPattern(stringPattern.Value),
 
             Pattern.IntPattern intPattern =>
-            new Concrete.Pattern.IntPattern((long)intPattern.Value),
+            new Concrete.Pattern.IntPattern(IntegerLiteralText(intPattern.Value)),
 
             Pattern.FloatPattern floatPattern =>
-            new Concrete.Pattern.FloatPattern((float)floatPattern.Value),
+            new Concrete.Pattern.FloatPattern(FloatLiteralText(floatPattern.Numerator, floatPattern.Denominator)),
 
             Pattern.TuplePattern tuplePattern =>
             new Concrete.Pattern.TuplePattern(
@@ -649,34 +649,58 @@ public static class ConvertToConcrete
     /// Elm float literals always originate from finite decimal source text, so after normalization the
     /// denominator divides a power of ten and the value has an exact finite decimal representation.
     /// </remarks>
+    /// <exception cref="System.ArgumentException">
+    /// The denominator is zero or the rational value has no finite decimal representation.
+    /// </exception>
     public static string FloatLiteralText(BigInteger numerator, BigInteger denominator)
+    {
+        if (TryFloatLiteralText(numerator, denominator, out var text))
+            return text;
+
+        throw new System.ArgumentException(
+            "The rational value has no exact finite decimal representation.",
+            nameof(denominator));
+    }
+
+    /// <summary>
+    /// Renders a rational value as an exact decimal float literal, or returns false if its decimal expansion
+    /// does not terminate.
+    /// </summary>
+    /// <exception cref="System.ArgumentException">The denominator is zero.</exception>
+    public static bool TryFloatLiteralText(BigInteger numerator, BigInteger denominator, out string text)
     {
         if (denominator.IsZero)
             throw new System.ArgumentException("Denominator must not be zero", nameof(denominator));
 
         var negative = (numerator.Sign * denominator.Sign) < 0;
 
-        var absNumerator = BigInteger.Abs(numerator);
-        var absDenominator = BigInteger.Abs(denominator);
+        var divisor = BigInteger.GreatestCommonDivisor(numerator, denominator);
+        var absNumerator = BigInteger.Abs(numerator / divisor);
+        var absDenominator = BigInteger.Abs(denominator / divisor);
+        var remainingDenominator = absDenominator;
+        var twos = 0;
+        var fives = 0;
 
-        // Find the smallest power of ten that is a multiple of the denominator, so the fraction can be
-        // expressed exactly as a decimal with that many fractional digits.
-        var fractionalDigits = 0;
-        var powerOfTen = BigInteger.One;
-
-        while (fractionalDigits < 1000 && powerOfTen % absDenominator != BigInteger.Zero)
+        while (remainingDenominator % 2 == 0)
         {
-            fractionalDigits++;
-            powerOfTen *= 10;
+            remainingDenominator /= 2;
+            twos++;
         }
 
-        if (powerOfTen % absDenominator != BigInteger.Zero)
+        while (remainingDenominator % 5 == 0)
         {
-            // The denominator is not of the form 2^a * 5^b; fall back to a double approximation.
-            var approximation = (double)numerator / (double)denominator;
-
-            return approximation.ToString("R", System.Globalization.CultureInfo.InvariantCulture);
+            remainingDenominator /= 5;
+            fives++;
         }
+
+        if (remainingDenominator != BigInteger.One)
+        {
+            text = string.Empty;
+            return false;
+        }
+
+        var fractionalDigits = System.Math.Max(twos, fives);
+        var powerOfTen = BigInteger.Pow(10, fractionalDigits);
 
         var scaled = absNumerator * (powerOfTen / absDenominator);
 
@@ -699,6 +723,7 @@ public static class ConvertToConcrete
             magnitude = integerPart + "." + fractionalPart;
         }
 
-        return negative ? "-" + magnitude : magnitude;
+        text = negative ? "-" + magnitude : magnitude;
+        return true;
     }
 }

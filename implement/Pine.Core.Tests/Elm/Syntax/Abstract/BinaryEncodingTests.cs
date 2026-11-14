@@ -45,7 +45,7 @@ public class BinaryEncodingTests
             new Pattern.CharPattern(0x1f600),
             new Pattern.StringPattern("escaped\n\"text\"\u00e9"),
             new Pattern.IntPattern(-(BigInteger.One << 130)),
-            new Pattern.FloatPattern(-0.0),
+            new Pattern.FloatPattern(-(BigInteger.One << 130), BigInteger.Pow(10, 1001)),
             new Pattern.TuplePattern([new Pattern.VarPattern("x"), new Pattern.AllPattern()]),
             Pattern.RecordPattern.Create(["x", "y"]),
             new Pattern.UnConsPattern(new Pattern.VarPattern("head"), new Pattern.VarPattern("tail")),
@@ -231,7 +231,7 @@ public class BinaryEncodingTests
             0x45,
             0x41,
             0x53,
-            0x01,
+            0x02,
             13,
             0,
             0,
@@ -259,11 +259,11 @@ public class BinaryEncodingTests
 
         byte[][] malformed =
             [
-                [0x45, 0x41, 0x53, 2, 1],
-                [0x45, 0x41, 0x53, 1, 255],
-                [0x45, 0x41, 0x53, 1, 0, 0, 0, 0, 0],
-                [0x45, 0x41, 0x53, 1, 7, 0x7f, 0xff, 0xff, 0xff],
-                [0x45, 0x41, 0x53, 1, 21, 0, 0, 0, 1, 0xff]
+                [0x45, 0x41, 0x53, 1, 1],
+                [0x45, 0x41, 0x53, 2, 255],
+                [0x45, 0x41, 0x53, 2, 0, 0, 0, 0, 0],
+                [0x45, 0x41, 0x53, 2, 7, 0x7f, 0xff, 0xff, 0xff],
+                [0x45, 0x41, 0x53, 2, 21, 0, 0, 0, 1, 0xff]
             ];
 
         foreach (var malformedBytes in malformed)
@@ -276,7 +276,7 @@ public class BinaryEncodingTests
         excessiveNesting[0] = 0x45;
         excessiveNesting[1] = 0x41;
         excessiveNesting[2] = 0x53;
-        excessiveNesting[3] = 1;
+        excessiveNesting[3] = 2;
         excessiveNesting.AsSpan(4, 520).Fill(6);
         excessiveNesting[^1] = 1;
         Action nested = () => ElmSyntaxAbstractBinary.DecodeExpression(excessiveNesting, out _);

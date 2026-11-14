@@ -134,7 +134,7 @@ public class FromCanonicalSyntaxTests
             new AbstractSyntax.Pattern.CharPattern(0x1F600),
             new AbstractSyntax.Pattern.StringPattern("text\n"),
             new AbstractSyntax.Pattern.IntPattern(BigInteger.One << 100),
-            new AbstractSyntax.Pattern.FloatPattern(1.25),
+            new AbstractSyntax.Pattern.FloatPattern(BigInteger.Pow(10, 400) + 1, BigInteger.Pow(10, 1001)),
             new AbstractSyntax.Pattern.TuplePattern(
                 [
                 new AbstractSyntax.Pattern.VarPattern("a"),

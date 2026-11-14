@@ -186,8 +186,9 @@ public class JsonRoundtripTests
         AssertRoundtrip<Pattern>(new Pattern.IntPattern(0));
         AssertRoundtrip<Pattern>(new Pattern.IntPattern(-123));
         AssertRoundtrip<Pattern>(new Pattern.IntPattern(BigInteger.Parse("99999999999999999999999")));
-        AssertRoundtrip<Pattern>(new Pattern.FloatPattern(3.14));
-        AssertRoundtrip<Pattern>(new Pattern.FloatPattern(-0.5));
+        AssertRoundtrip<Pattern>(new Pattern.FloatPattern(157, 50));
+        AssertRoundtrip<Pattern>(new Pattern.FloatPattern(-1, 2));
+        AssertRoundtrip<Pattern>(new Pattern.FloatPattern(BigInteger.Pow(10, 400) + 1, BigInteger.Pow(10, 1001)));
 
         AssertRoundtrip<Pattern>(
             new Pattern.TuplePattern([new Pattern.VarPattern("a"), new Pattern.VarPattern("b")]));
