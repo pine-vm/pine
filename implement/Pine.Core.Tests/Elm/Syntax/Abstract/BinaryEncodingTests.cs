@@ -10,7 +10,9 @@ using System.Buffers.Binary;
 using System.Collections.Generic;
 using System.IO;
 using System.Numerics;
+using System.Runtime.ExceptionServices;
 using System.Security.Cryptography;
+using System.Threading;
 using Xunit;
 
 using InfixDirection = Pine.Core.Elm.Syntax.Concrete.InfixDirection;
@@ -38,6 +40,19 @@ public class BinaryEncodingTests
     {
         using var stream = new MemoryStream();
         ElmSyntaxAbstractBinary.Encode(stream, declarations);
+        return stream.ToArray();
+    }
+
+    private static byte[] EncodeNestedNegations(int depth)
+    {
+        using var stream = new MemoryStream();
+        using var writer = new ValueEncodingBinaryDeterministic.TreeEncoder<object>(stream.Write);
+        var negationHash = Encode(new Expression.Negation(Expression.UnitExpr.Instance)).AsSpan(8, 32);
+
+        for (var index = 0; index < depth; ++index)
+            writer.StartExternalEval(negationHash, 1);
+
+        writer.StartExternalEval(Encode(Expression.UnitExpr.Instance).AsSpan(8, 32), 0);
         return stream.ToArray();
     }
 
@@ -446,19 +461,8 @@ public class BinaryEncodingTests
             decode.Should().Throw<InvalidDataException>();
         }
 
-        using var nestedStream = new MemoryStream();
-
-        using (var writer = new ValueEncodingBinaryDeterministic.TreeEncoder<object>(nestedStream.Write))
-        {
-            var negationHash = Encode(new Expression.Negation(Expression.UnitExpr.Instance)).AsSpan(8, 32);
-
-            for (var index = 0; index < 520; ++index)
-                writer.StartExternalEval(negationHash, 1);
-
-            writer.StartExternalEval(Encode(Expression.UnitExpr.Instance).AsSpan(8, 32), 0);
-        }
-
-        Action nested = () => ElmSyntaxAbstractBinary.DecodeExpression(nestedStream.ToArray(), out _);
+        var nestedBytes = EncodeNestedNegations(520);
+        Action nested = () => ElmSyntaxAbstractBinary.DecodeExpression(nestedBytes, out _);
         nested.Should().Throw<InvalidDataException>();
 
         Action invalidDirection =
@@ -466,6 +470,43 @@ public class BinaryEncodingTests
                 new Expression.OperatorApplication("+", (InfixDirection)256, Integer(1), Integer(2)));
 
         invalidDirection.Should().Throw<ArgumentOutOfRangeException>();
+    }
+
+    [Theory]
+    [InlineData(256 * 1024)]
+    [InlineData(1024 * 1024)]
+    public void Rejects_excessive_nesting_without_overflowing_small_thread_stacks(int stackSize)
+    {
+        var shallow = EncodeNestedNegations(8);
+        var excessive = EncodeNestedNegations(520);
+        ExceptionDispatchInfo? failure = null;
+
+        var thread =
+            new Thread(
+                () =>
+                {
+                    try
+                    {
+                        var decoded = ElmSyntaxAbstractBinary.DecodeExpression(shallow, out var consumed);
+                        consumed.Should().Be(shallow.Length);
+
+                        for (var index = 0; index < 8; ++index)
+                            decoded = decoded.Should().BeOfType<Expression.Negation>().Subject.Expression;
+
+                        decoded.Should().Be(Expression.UnitExpr.Instance);
+                        Action decode = () => ElmSyntaxAbstractBinary.DecodeExpression(excessive, out _);
+                        decode.Should().Throw<InvalidDataException>();
+                    }
+                    catch (Exception error)
+                    {
+                        failure = ExceptionDispatchInfo.Capture(error);
+                    }
+                },
+                maxStackSize: stackSize);
+
+        thread.Start();
+        thread.Join();
+        failure?.Throw();
     }
 
     [Fact]

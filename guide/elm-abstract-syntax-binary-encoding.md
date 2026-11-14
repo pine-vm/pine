@@ -96,7 +96,9 @@ heap sharing.
 Constructor expressions, inline environments and raw scalar fields are deliberately
 not referenceable in the specialized profile. References to them, unknown hashes,
 wrong retained types, invalid arities/counts/scalars and nesting beyond 512 reader
-levels fail with `InvalidDataException`. Completed nodes remain referenceable.
+levels fail with `InvalidDataException`. Available execution stack is checked as
+well, so smaller thread stacks can reject nesting below that limit safely.
+Completed nodes remain referenceable.
 Dispose decoders to return cleared scratch buffers. Retained Pine blobs own slices
 of immutable input memory, not copies.
 

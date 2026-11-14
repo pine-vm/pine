@@ -43,6 +43,10 @@ reads and `ReadInlineBlob` directly. Allocate only the final nodes and their
 owned arrays; no encoded expression, environment array, list wrapper, pending
 Eval object or success wrapper is needed. Enforce arity, component counts,
 field types, scalar validity, constructor whitelist and a suitable `MaximumDepth`.
+Recursive adapters must also check available execution stack: a fixed nesting
+limit alone cannot protect smaller OS thread stacks. The shared reader rejects
+specialized reads when `RuntimeHelpers.TryEnsureSufficientExecutionStack` fails,
+rather than allowing a process-fatal stack overflow.
 
 This is a **restricted profile**: constructor-expression entries, inline
 environments and raw scalar blobs are not referenceable. Neither emit nor accept

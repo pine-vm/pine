@@ -215,3 +215,30 @@ dotnet run --no-build -c Release --project explore/2026-11-14-binary-tree-alloca
 
 The equivalence tests also verify the generated hashes against all canonical
 constructor expressions. C# changes were formatted with `dotnet format`.
+
+## Windows stack-overflow correction
+
+The Windows Debug test process in Actions run `43601127273` terminated without
+a test summary. Its diagnostic artifact ends with
+`Rejects_truncated_invalid_and_forward_reference_data` in progress. That test
+decodes 520 nested constructor Evals to exercise the 512-level rejection.
+
+On a 1 MiB thread stack, the unchanged decoder reproduced a fatal stack overflow
+around 222 levels in a Linux Debug process. Recursive constructor dispatch and
+the shared reader's inline pending-frame storage exhaust smaller thread stacks
+before the fixed depth guard is reached. The larger Linux default stack masked
+the failure; it was not a Windows wire-format or assertion difference.
+
+Specialized reads now check
+`RuntimeHelpers.TryEnsureSufficientExecutionStack` before dispatch. Insufficient
+stack produces `InvalidDataException`, just like other rejected syntax inputs,
+instead of terminating the process. The 512-level ceiling still applies; the
+safe effective ceiling also depends on the thread stack and generated code.
+Ordinary Pine traversal remains iterative and does not use this new check.
+The successful-read check introduces no heap allocation.
+
+The same Debug reproducer now safely rejects on both 1 MiB and 256 KiB stacks.
+An automated regression exercises shallow successful decoding and excessive
+nesting on explicitly sized threads, so Linux also covers this Windows failure.
+All 13 syntax-codec cases passed in Debug; all 110 Pine, syntax and SCC codec
+cases passed in Release, including the unchanged allocation budgets.

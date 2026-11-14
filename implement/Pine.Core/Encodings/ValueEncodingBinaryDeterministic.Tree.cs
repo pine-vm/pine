@@ -452,6 +452,10 @@ public static partial class ValueEncodingBinaryDeterministic
             where TNode : class
             where TAdapter : struct, IDecoding<TNode, TItem>
         {
+            // Recursive adapters can exhaust a small OS thread stack before MaximumDepth.
+            if (adapter.HasExternalEvaluation && !RuntimeHelpers.TryEnsureSufficientExecutionStack())
+                throw Invalid("Insufficient execution stack for specialized tree nesting");
+
             ++_depth;
             var pending = new PooledStack<Pending<TNode>>();
 
