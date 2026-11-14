@@ -102,10 +102,10 @@ public partial class Canonicalization
         {
             var chain = new Stack<DeclQualifiedName>();
 
-            for (DeclQualifiedName? current = key; current is not null; current = Predecessors[current])
+            for (var current = key; current is not null; current = Predecessors[current])
                 chain.Push(current);
 
-            return chain.ToArray();
+            return [.. chain];
         }
     }
 

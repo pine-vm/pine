@@ -660,8 +660,7 @@ public sealed class PineVMWorkProfile : IDisposable
         if (directVisitBudget is <= 0)
             throw new ArgumentOutOfRangeException(nameof(directVisitBudget));
 
-        if (referenceCapacity < 0)
-            throw new ArgumentOutOfRangeException(nameof(referenceCapacity));
+        ArgumentOutOfRangeException.ThrowIfNegative(referenceCapacity);
 
         if (constructorInvocationBudget is <= 0)
             throw new ArgumentOutOfRangeException(nameof(constructorInvocationBudget));

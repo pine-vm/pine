@@ -80,7 +80,7 @@ public record CompiledExpression(
             SyntaxFactory.MemberAccessExpression(
                 SyntaxKind.SimpleMemberAccessExpression,
                 leftExpression,
-                SyntaxFactory.IdentifierName(nameof(Result<int, int>.MapError))))
+                SyntaxFactory.IdentifierName(nameof(Result<,>.MapError))))
         .WithArgumentList(
             SyntaxFactory.ArgumentList(
                 SyntaxFactory.SingletonSeparatedList(

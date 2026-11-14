@@ -41,7 +41,8 @@ public sealed record InvocationCacheGenerationOptions
 /// retiring a generation also retires its expression index. Result access and rotation use
 /// the same lock; expression-membership reads do not. Argument materialization happens outside that lock.
 /// </summary>
-public sealed class GenerationalInvocationCache : IInvocationCacheAccess
+/// <remarks>Creates an empty cache with one generation.</remarks>
+public sealed class GenerationalInvocationCache(InvocationCacheGenerationOptions? options = null) : IInvocationCacheAccess
 {
     private sealed class Generation
     {
@@ -78,7 +79,7 @@ public sealed class GenerationalInvocationCache : IInvocationCacheAccess
     private long _retiredEntries;
 
     /// <summary>The immutable policy used for automatic request-boundary rotation.</summary>
-    public InvocationCacheGenerationOptions Options { get; }
+    public InvocationCacheGenerationOptions Options { get; } = options ?? InvocationCacheGenerationOptions.Default;
 
     /// <summary>Latest published newest-generation count, read without acquiring the cache lock.</summary>
     public int NewestGenerationEntryCount => Volatile.Read(ref _newestGenerationEntryCount);
@@ -88,12 +89,6 @@ public sealed class GenerationalInvocationCache : IInvocationCacheAccess
     /// are approximate; use <see cref="GetStatistics"/> for a consistent diagnostic snapshot.
     /// </summary>
     public long PhysicalEntryCount => Volatile.Read(ref _physicalEntryCount);
-
-    /// <summary>Creates an empty cache with one generation.</summary>
-    public GenerationalInvocationCache(InvocationCacheGenerationOptions? options = null)
-    {
-        Options = options ?? InvocationCacheGenerationOptions.Default;
-    }
 
     /// <inheritdoc/>
     public bool MayContainExpression(PineValue expressionValue) =>

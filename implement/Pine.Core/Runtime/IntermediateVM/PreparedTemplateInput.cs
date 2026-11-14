@@ -86,16 +86,12 @@ internal sealed class PreparedTemplateInput
         return StackFrameInput.FromArguments(Parameters, arguments);
     }
 
-    private sealed class ProjectionCache
+    private sealed class ProjectionCache(StaticFunctionInterface parameters)
     {
         private readonly ConditionalWeakTable<TemplateValueRecipe, PreparedTemplateInput> _recipes = [];
 
-        private readonly ConditionalWeakTable<TemplateValueRecipe, PreparedTemplateInput>.CreateValueCallback _prepare;
-
-        public ProjectionCache(StaticFunctionInterface parameters)
-        {
-            _prepare = recipe => new PreparedTemplateInput(recipe, parameters);
-        }
+        private readonly ConditionalWeakTable<TemplateValueRecipe, PreparedTemplateInput>.CreateValueCallback _prepare =
+            recipe => new PreparedTemplateInput(recipe, parameters);
 
         public PreparedTemplateInput Get(TemplateValueRecipe recipe) => _recipes.GetValue(recipe, _prepare);
     }

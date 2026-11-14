@@ -52,20 +52,13 @@ public partial class Canonicalization
         UnavailableValue
     }
 
-    internal readonly struct InputQuery : IEquatable<InputQuery>
+    internal readonly struct InputQuery(Canonicalization.InputKind kind, string name) : IEquatable<InputQuery>
     {
-        public InputKind Kind { get; }
+        public InputKind Kind { get; } = kind;
 
-        public string Name { get; }
+        public string Name { get; } = name;
 
-        private readonly int hashCode;
-
-        public InputQuery(InputKind kind, string name)
-        {
-            Kind = kind;
-            Name = name;
-            hashCode = HashCode.Combine(kind, name);
-        }
+        private readonly int hashCode = HashCode.Combine(kind, name);
 
         public bool Equals(InputQuery other) => Kind == other.Kind && Name == other.Name;
 

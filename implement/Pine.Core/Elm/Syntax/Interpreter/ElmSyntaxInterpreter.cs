@@ -1147,8 +1147,8 @@ public partial class ElmSyntaxInterpreter
 
         // Either: (currentExpr, currentEnv) is the next thing to evaluate ("Eval" mode),
         // or currentValue holds the value about to be returned to the top kont ("Return" mode).
-        PreparedExpression? currentExpr = initialExpression;
-        ApplicationContext currentEnv = initialEnv;
+        var currentExpr = initialExpression;
+        var currentEnv = initialEnv;
         PineValueInProcess? currentValue = null;
 
         if (initialApplication is not null)
