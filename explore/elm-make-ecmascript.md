@@ -54,8 +54,11 @@ The snapshot runner and reporting are shared by the CLI and integration tests.
 Expectation files define the cases to run; scenarios do not need every combination
 of output target and compiler flavor. Coverage audits check every retained output
 and require at least one active expectation per entry point, not a complete matrix.
-Live-reference variation tests construct their compilation requests independently
-of the stored snapshots.
+Compiler conformance tests compare only against checked-in snapshots; they never
+launch the classic compiler or generate expectations during a test run.
+Reference generation and reproducibility checks are explicit maintainer CLI
+operations. Tests of maintenance guards and report projection do not execute the
+reference binary.
 `run` supports `--skip-expect-debug`, `--skip-expect-optimize` and
 `--max-diff-hunks <count>`. By default, `run` and
 `ElmMakeEcmascript_Run_all_snapshots` execute the actual Elm implementation in
@@ -213,9 +216,9 @@ the implementation under test does not yet support their syntax.
 `ElmMakeEcmascriptCoverageTests` checks all 20 non-GLSL abstract expression
 variants, every valid abstract pattern variant, both let variants, and important subcases. It
 also requires every app function/constructor to occur in **each** reference
-output, preventing coverage from living only in unused source. A separately
-named reference-reproducibility test confirms those snapshots still correspond
-to the input application; it is not the actual compiler conformance test.
+output, preventing coverage from living only in unused source. Maintainers can
+check reference reproducibility explicitly with `run --reference`; ordinary tests
+run only the implementation under test against the stored expectations.
 
 `FloatPattern` exists in the syntax model but is forbidden by Elm 0.19.1.
 Negative integer patterns are also forbidden. The fixture therefore uses valid
@@ -245,15 +248,31 @@ archives and registry versions are checked in alongside existing dependencies.
 
 The coverage audit checks each constructor, its Program signature, and retained
 main/view/update declarations in each reference output.
-A separate reference-reproducibility test replays every retained snapshot. Actual
-compilation now reproduces them without skips, error-expectation substitutions,
+Actual compilation reproduces them without skips, error-expectation substitutions,
 or reference fallback. Unit tests cover command-only, subscription-only and
 combined manager layouts, ordered graph dependencies, Program/flags aliases,
-unsupported flags, and debugger exclusion. Additional live-reference variations
-cover inferred sandbox mains, aliased Program signatures, and Platform workers.
+unsupported flags, and debugger exclusion. The `program-variations` snapshot
+scenario covers inferred sandbox mains, aliased Program signatures, and Platform workers.
 Debug coverage includes the real debugger runtime and transitive message metadata,
 including recursive unions, generic record aliases, lists, and tuples. The minimal
 static Html scenario retains development HTML and debug/optimized HTML and JavaScript.
+
+### Additional snapshot scenarios
+
+The former development-variation tests are covered by the existing expression,
+pattern, browser, and optimization snapshots and have been removed rather than
+duplicated. `program-variations` adds the remaining Program/flags aliases, Platform
+worker, inferred sandbox main, and debugger metadata cases. One message type
+combines imported and local generic aliases with a recursive union. These cases
+are replayed by `ElmMakeEcmascript_Run_all_snapshots`, not separate duplicate
+conformance tests.
+
+`debug-todo` has development/debug output snapshots and an optimized
+`DEBUG REMNANTS` error expectation. `error-debug-dead-code` isolates rejection of
+Debug calls in an otherwise unused declaration. `error-imported-naming` stores
+all three naming problems across two imported modules. Its semantic-diagnostic
+test additionally checks names and typed locations that the error snapshot format
+does not retain; it never consults a live reference compiler.
 
 ### Classic compiler optimization coverage
 
@@ -317,8 +336,8 @@ main/effect initialization separately.
 The audit checks the emitted body of each witness, not incidental kernel code
 elsewhere in the output, and requires every app function/constructor in every
 reference snapshot. It also checks negative controls to avoid falsely claiming
-tail-call/composition optimizations. Reference reproducibility is tested
-separately from actual compiler conformance.
+tail-call/composition optimizations. Reference reproducibility is an explicit
+maintainer CLI operation, separate from ordinary compiler conformance tests.
 
 The new development witnesses exposed missing Bitwise specializations and a
 noncanonical `flag /= False` lowering. These are fixed in the focused `CoreCalls`

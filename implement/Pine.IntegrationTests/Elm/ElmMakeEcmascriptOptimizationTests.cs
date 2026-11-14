@@ -291,25 +291,6 @@ public partial class ElmMakeEcmascriptCoverageTests
         }
     }
 
-    [Fact]
-    public async Task ElmMakeEcmascript_optimization_reference_snapshots_are_reproducible()
-    {
-        var scenario = OptimizationScenario;
-
-        var results =
-            await ElmMakeEcmascriptScenarios.RunAsync(
-                CorpusDirectory,
-                [scenario],
-                new ElmMakeReferenceCompiler(CorpusDirectory).CompileOutcomeAsync);
-
-        var report = ElmMakeEcmascriptScenarios.RenderResults(results);
-        Console.WriteLine("Reference reproducibility only:\n" + report);
-
-        results.Should().HaveCount(scenario.Expectations.Count(item => !item.Skipped)).And.OnlyContain(
-            result => result.Passed,
-            report);
-    }
-
     private static string Witness(string output, string name) =>
         Definition(output, "$author$project$Optimizations$" + name);
 

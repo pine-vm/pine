@@ -244,30 +244,17 @@ public class ElmMakeEcmascriptErrorTests
     public async Task ElmMakeEcmascript_structured_naming_errors_collect_across_declarations_and_imported_modules(
         ElmMakeExecutionPath executionPath)
     {
-        var original = ValidScenario;
+        var original =
+            ElmMakeEcmascriptScenarios.SelectScenario(
+                ElmMakeEcmascriptScenarios.Discover(CorpusDirectory),
+                "error-imported-naming");
+
         var expectation = original.Expectations[0];
         var inputs = await new ElmMakePackageSnapshots(CorpusDirectory).PrepareAsync(original, expectation);
-        FileTree Source(string text) => FileTree.File(Encoding.UTF8.GetBytes(text));
-
-        var app =
-            original.AppFiles
-            .SetNodeAtPathSorted(
-                [
-                "src",
-                "Main.elm"
-                ],
-                Source("module Main exposing (main)\nimport Html\nimport A\nimport B\nmain = Html.text (A.value ++ B.value)\n"))
-            .SetNodeAtPathSorted(
-                [
-                "src",
-                "A.elm"
-                ],
-                Source("module A exposing (value)\nvalue = (missingOne, missingTwo)\n"))
-            .SetNodeAtPathSorted(["src", "B.elm"], Source("module B exposing (value)\nvalue = missingThree\n"));
 
         var result =
             ElmMakeCompiler.Compile(
-                app,
+                original.AppFiles,
                 inputs.ManifestPath,
                 ["src", "Main.elm"],
                 expectation.OutputType,
@@ -296,21 +283,6 @@ public class ElmMakeEcmascriptErrorTests
 
         locations.OrderBy(location => location.Region.Start.Column).Select(location => location.Region.Start.Column)
             .Should().Equal(9, 10, 22);
-
-        var scenario =
-            original with { AppFiles = app, Expectations = [expectation with { Kind = ElmMakeExpectationKind.ErrorsOmittingDetails }] };
-
-        var actual =
-            await ElmMakeScenarioCompiler.CompileAsync(
-                CorpusDirectory,
-                scenario,
-                scenario.Expectations[0],
-                executionPath: executionPath);
-
-        var reference =
-            await new ElmMakeReferenceCompiler(CorpusDirectory).CompileAsync(scenario, scenario.Expectations[0]);
-
-        actual.Should().Be(reference);
     }
 
     [Fact]
@@ -613,97 +585,18 @@ public class ElmMakeEcmascriptErrorTests
             ElmMakeEcmascriptScenarios.RunAsync(corpus.Path, scenarios, (_, _, _) => Task.FromResult(compilation));
     }
 
-    [Theory]
-    [InlineData(ElmMakeExecutionPath.PineVM)]
-    [InlineData(ElmMakeExecutionPath.SyntaxInterpreter)]
-    public async Task ElmMakeEcmascript_error_generation_and_actual_backends_agree_on_project_diagnostics(
-        ElmMakeExecutionPath executionPath)
-    {
-        using var corpus = new TemporaryCorpus();
-
-        var expectation =
-            ElmMakeEcmascriptScenarios.ParseExpectation(
-                "example/expect/0-19-1/src/Main.elm.js.errors-omitting-details.txt");
-
-        var scenario =
-            new ElmMakeScenario(
-                "example",
-                FileTree.EmptyTree.SetNodeAtPathSorted(
-                    [
-                    "src",
-                    "Main.elm"
-                    ],
-                    FileTree.File(Encoding.UTF8.GetBytes("module Main exposing (main)\nmain = 1\n"))),
-                [expectation]);
-
-        await corpus.WriteApp(scenario);
-        var reference = new ElmMakeReferenceCompiler(corpus.Path);
-        await reference.GenerateAsync(scenario, expectation, TextWriter.Null);
-        var discovered = ElmMakeEcmascriptScenarios.Discover(corpus.Path);
-
-        var results =
-            await ElmMakeEcmascriptScenarios.RunAsync(
-                corpus.Path,
-                discovered,
-                (app, item, token) => ElmMakeScenarioCompiler.CompileOutcomeAsync(corpus.Path, app, item, token, executionPath));
-
-        results.Should().ContainSingle().Which.Passed.Should().BeTrue(ElmMakeEcmascriptScenarios.RenderResults(results));
-        var overwrite = () => reference.GenerateAsync(scenario, expectation, TextWriter.Null);
-        await overwrite.Should().ThrowAsync<IOException>().WithMessage("*remove it manually*");
-    }
-
     [Fact]
-    public async Task ElmMakeEcmascript_error_reference_generation_collects_imported_errors_and_replays_without_temp_paths()
+    public async Task ElmMakeEcmascript_error_generation_rejects_opposite_expectations_before_acquiring_dependencies()
     {
         using var corpus = new TemporaryCorpus();
-        corpus.CopyPackages();
-        var original = ValidScenario;
-
-        var expectation =
-            ElmMakeEcmascriptScenarios.ParseExpectation(
-                "example/expect/0-19-1/src/Main.elm.html.errors-omitting-details.txt");
-
-        var app =
-            original.AppFiles
-            .SetNodeAtPathSorted(
-                [
-                "src",
-                "Main.elm"
-                ],
-                Source("module Main exposing (main)\nimport Html\nimport A\nimport B\nmain = Html.text (A.value ++ B.value)\n"))
-            .SetNodeAtPathSorted(["src", "A.elm"], Source("module A exposing (value)\nvalue = missingA\n"))
-            .SetNodeAtPathSorted(["src", "B.elm"], Source("module B exposing (value)\nvalue = missingB\n"));
-
-        var scenario = new ElmMakeScenario("example", app, [expectation]);
-        var reference = new ElmMakeReferenceCompiler(corpus.Path);
-        await reference.GenerateAsync(scenario, expectation, TextWriter.Null);
-        var text = await File.ReadAllTextAsync(ElmMakeEcmascriptScenarios.ExpectationPath(corpus.Path, expectation));
-        var problems = ElmMakeErrorSnapshots.Parse(text);
-        problems.Select(problem => problem.File).Should().BeEquivalentTo("src/A.elm", "src/B.elm");
-        problems.Should().OnlyContain(problem => problem.Region != null && problem.Title == "NAMING ERROR");
-        (await reference.CompileAsync(scenario, expectation)).Should().Be(text);
-        var replay = await ElmMakeEcmascriptScenarios.RunAsync(corpus.Path, [scenario], reference.CompileOutcomeAsync);
-        replay.Should().ContainSingle().Which.Passed.Should().BeTrue();
-
-        static FileTree Source(string text) => FileTree.File(Encoding.UTF8.GetBytes(text));
-    }
-
-    [Fact]
-    public async Task ElmMakeEcmascript_error_generation_rejects_success_and_opposite_expectations_without_writing()
-    {
-        using var corpus = new TemporaryCorpus();
-        corpus.CopyPackages();
         var original = ValidScenario;
         var expectation = original.Expectations[0] with { Kind = ElmMakeExpectationKind.ErrorsOmittingDetails };
         var reference = new ElmMakeReferenceCompiler(corpus.Path);
         var conflict = () => reference.GenerateAsync(original, expectation, TextWriter.Null);
         await conflict.Should().ThrowAsync<InvalidDataException>().WithMessage("*Contradictory*");
 
-        var succeeds =
-            () => reference.GenerateAsync(original with { Expectations = [expectation] }, expectation, TextWriter.Null);
-
-        await succeeds.Should().ThrowAsync<InvalidDataException>().WithMessage("*compilation succeeded*");
         File.Exists(ElmMakeEcmascriptScenarios.ExpectationPath(corpus.Path, expectation)).Should().BeFalse();
+        Directory.Exists(Path.Combine(corpus.Path, "packages")).Should().BeFalse();
     }
 
     [Fact]
@@ -765,10 +658,6 @@ public class ElmMakeEcmascriptErrorTests
             };
 
         (await snapshots.PrepareAsync(invalid, error)).Packages.Should().BeEmpty();
-        var compiler = new ElmMakeReferenceCompiler(corpus.Path);
-        var crashes = () => compiler.GenerateAsync(invalid, error, TextWriter.Null);
-        await crashes.Should().ThrowAsync<InvalidDataException>().WithMessage("*Invalid reference compiler failure*");
-        File.Exists(ElmMakeEcmascriptScenarios.ExpectationPath(corpus.Path, error)).Should().BeFalse();
 
         var manifest =
             Encoding.UTF8.GetString(((FileTree.FileNode)original.AppFiles.GetNodeAtPath(["elm.json"])!).Bytes.Span);
@@ -784,15 +673,11 @@ public class ElmMakeEcmascriptErrorTests
                             manifest.Replace("\"application\"", "\"not-a-project-type\"", StringComparison.Ordinal)))),
             };
 
-        await compiler.GenerateAsync(invalid, error, TextWriter.Null);
-        var generated = await File.ReadAllTextAsync(ElmMakeEcmascriptScenarios.ExpectationPath(corpus.Path, error));
-
-        ElmMakeErrorSnapshots.Parse(generated).Should().ContainSingle()
-            .Which.File.Should().Be("elm.json");
+        (await snapshots.PrepareAsync(invalid, error)).Packages.Should().BeEmpty();
     }
 
     [Fact]
-    public async Task ElmMakeEcmascript_error_generation_allows_invalid_dependency_graphs_but_verifies_explicit_pins()
+    public async Task ElmMakeEcmascript_error_preparation_allows_invalid_dependency_graphs_but_verifies_explicit_pins()
     {
         using var corpus = new TemporaryCorpus();
         corpus.CopyPackages();
@@ -817,13 +702,9 @@ public class ElmMakeEcmascriptErrorTests
                 Expectations = [expectation],
             };
 
-        await new ElmMakeReferenceCompiler(corpus.Path).GenerateAsync(scenario, expectation, TextWriter.Null);
-        var text = await File.ReadAllTextAsync(ElmMakeEcmascriptScenarios.ExpectationPath(corpus.Path, expectation));
-
-        ElmMakeErrorSnapshots.Parse(text).Should().ContainSingle().Which
-            .Should().Be(new ElmMakeSnapshotProblem("elm.json", null, "MISSING DEPENDENCY"));
-
         var snapshots = new ElmMakePackageSnapshots(corpus.Path);
+        var prepared = await snapshots.PrepareAsync(scenario, expectation);
+        prepared.Packages.Keys.Should().Contain(new ElmPackageIdentity("elm/html", new(1, 0, 0)));
         var path = snapshots.ArchivePath(new("elm/html", new(1, 0, 0)));
         await File.WriteAllBytesAsync(path, new byte[] { 1, 2, 3 });
         var corrupt = () => snapshots.PrepareAsync(scenario, expectation, acquireMissing: true);
@@ -844,19 +725,6 @@ public class ElmMakeEcmascriptErrorTests
             var destination = ElmMakeEcmascriptScenarios.ExpectationPath(Path, expectation);
             Directory.CreateDirectory(System.IO.Path.GetDirectoryName(destination)!);
             await File.WriteAllTextAsync(destination, text);
-        }
-
-        public async Task WriteApp(ElmMakeScenario scenario)
-        {
-            var input = System.IO.Path.Combine(Path, "scenarios", scenario.Name, "input-app");
-            Directory.CreateDirectory(input);
-
-            foreach (var (path, content) in scenario.AppFiles.EnumerateFilesTransitive())
-            {
-                var destination = System.IO.Path.Combine([input, .. path]);
-                Directory.CreateDirectory(System.IO.Path.GetDirectoryName(destination)!);
-                await File.WriteAllBytesAsync(destination, content.ToArray());
-            }
         }
 
         public void CopyPackages()

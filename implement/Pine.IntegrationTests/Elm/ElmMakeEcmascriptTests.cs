@@ -1,7 +1,6 @@
 using AwesomeAssertions;
 using Pine.CLI;
 using Pine.Core.Elm;
-using Pine.Core.Elm.ElmInElm;
 using Pine.Core.Files;
 using Pine.Core.Functional;
 using Pine.Core.Runtime.IntermediateVM;
@@ -166,57 +165,6 @@ public class ElmMakeEcmascriptTests
 
         inputs.Packages.Single(item => item.Key.Name == "elm/virtual-dom").Value
             .GetNodeAtPath(["src", "Elm", "Kernel", "VirtualDom.js"]).Should().BeOfType<FileTree.FileNode>();
-    }
-
-    [Fact]
-    public async Task ElmMakeEcmascript_compiler_source_typechecks_with_classic_Elm()
-    {
-        var app = StaticHtmlTextEmptyScenario.AppFiles;
-        var manifestFile = (FileTree.FileNode)app.GetNodeAtPath(["elm.json"])!;
-        var manifest = System.Text.Json.Nodes.JsonNode.Parse(manifestFile.Bytes.Span)!;
-
-        manifest["dependencies"]!["direct"]!["elm/json"] =
-            manifest["dependencies"]!["indirect"]!["elm/json"]!.DeepClone();
-
-        manifest["dependencies"]!["indirect"]!.AsObject().Remove("elm/json");
-        app = app.SetNodeAtPathSorted(["elm.json"], FileTree.File(Encoding.UTF8.GetBytes(manifest.ToJsonString())));
-        var sources = BundledFiles.CompilerSourceContainerFilesDefault.Value;
-
-        foreach (var (path, content) in sources.EnumerateFilesTransitive().Where(
-            file => file.path[^1].EndsWith(".elm", StringComparison.Ordinal) &&
-                ((file.path[0] == "elm-make-ecmascript" && !file.path.Contains("tests")) ||
-                file.path[0] == "pine-elm-syntax")))
-        {
-            var start = path.TakeWhile(segment => segment != "src").Count() + 1;
-            app = app.SetNodeAtPathSorted(["src", .. path.Skip(start)], FileTree.File(content));
-        }
-
-        app =
-            app.SetNodeAtPathSorted(
-                ["src", "Main.elm"],
-                FileTree.File(
-                    Encoding.UTF8.GetBytes(
-                        """
-                        module Main exposing (main)
-                        import ElmMake
-                        import ElmMake.Model as Model
-                        import Html
-                        main =
-                            Html.text
-                                (case ElmMake.make
-                                    { files = [], manifestPath = [], entryPoint = []
-                                    , packages = [], outputType = Model.JavaScript, flavor = Model.Development
-                                    }
-                                 of
-                                    Ok output -> output
-                                    Err _ -> ""
-                                )
-                        """)));
-
-        var scenario = StaticHtmlTextEmptyScenario with { AppFiles = app };
-        var expectation = scenario.Expectations.First();
-        var output = await new ElmMakeReferenceCompiler(CorpusDirectory).CompileAsync(scenario, expectation);
-        output.Should().Contain("$author$project$ElmMake$make");
     }
 
     [Theory]
@@ -662,75 +610,6 @@ public class ElmMakeEcmascriptTests
             results.Single().Passed.Should().BeFalse(
                 "normalization must preserve text, spaces, Unicode data and final newlines");
         }
-    }
-
-    [Theory]
-    [InlineData("module Main exposing (main)\nimport Html\nmain = Html.text \"a quote: ' and a backslash: \\\\\"\n")]
-    [InlineData("module Main exposing (main)\nimport Html\nmain : Html.Html msg\nmain = Html.text \"typed\"\n")]
-    [InlineData("module Main exposing (main)\nimport Html exposing (text)\nmain = text \"exposed\"\n")]
-    [InlineData("module Main exposing (main)\nimport Html\nmain = Html.text greeting\ngreeting = if 2 < 3 then \"yes\" else \"no\"\n")]
-    [InlineData("module Main exposing (main)\nimport Html\nmain = Html.text (count 4)\ncount n = if n < 1 then \"done\" else count (n - 1)\n")]
-    [InlineData("module Main exposing (main)\nimport Html\nmain = Html.text (choose [])\nchoose chars = case chars of\n    'x' :: _ -> \"x\"\n    _ -> \"other\"\n")]
-    public async Task ElmMakeEcmascript_development_variations_match_classic_reference(string source)
-    {
-        var original = StaticHtmlTextEmptyScenario;
-
-        var scenario =
-            original with
-            {
-                AppFiles =
-                original.AppFiles.SetNodeAtPathSorted(
-                    [
-                    "src",
-                    "Main.elm"
-                    ],
-                    FileTree.File(Encoding.UTF8.GetBytes(source))),
-            };
-
-        var expectation = scenario.Expectations.First();
-        var actual = await ElmMakeScenarioCompiler.CompileAsync(CorpusDirectory, scenario, expectation);
-        var reference = await new ElmMakeReferenceCompiler(CorpusDirectory).CompileAsync(scenario, expectation);
-        actual.ReplaceLineEndings("\n").Should().Be(reference.ReplaceLineEndings("\n"));
-    }
-
-    [Theory]
-    [InlineData(
-        "module Sandbox exposing (main)\nimport Browser\nimport Html\nmain = Browser.sandbox { init = (), update = \\_ model -> model, view = \\_ -> Html.text \"inferred\" }\n")]
-    [InlineData(
-        "module Sandbox exposing (main)\nimport Browser\nimport Html\ntype alias Flags = ()\ntype alias App flags = Program flags () ()\nmain : App Flags\nmain = Browser.element { init = \\() -> ((), Cmd.none), update = \\_ model -> (model, Cmd.none), subscriptions = \\_ -> Sub.none, view = \\_ -> Html.text \"aliases\" }\n")]
-    [InlineData(
-        "module Sandbox exposing (main)\nimport Platform\nmain : Program () () Never\nmain = Platform.worker { init = \\() -> ((), Cmd.none), update = \\message _ -> never message, subscriptions = \\_ -> Sub.none }\n")]
-    public async Task ElmMakeEcmascript_program_main_variations_match_classic_reference(string source)
-    {
-        var original =
-            ElmMakeEcmascriptScenarios.SelectScenario(
-                ElmMakeEcmascriptScenarios.Discover(CorpusDirectory),
-                "browser-programs");
-
-        var scenario =
-            original with
-            {
-                AppFiles =
-                original.AppFiles.SetNodeAtPathSorted(
-                    [
-                    "src",
-                    "Sandbox.elm"
-                    ],
-                    FileTree.File(Encoding.UTF8.GetBytes(source))),
-            };
-
-        var expectation =
-            new ElmMakeExpectation(
-                scenario.Name,
-                "src/Sandbox.elm",
-                new(0, 19, 1),
-                ElmMakeOutputType.JavaScript,
-                ElmMakeFlavor.Development,
-                false);
-
-        var actual = await ElmMakeScenarioCompiler.CompileAsync(CorpusDirectory, scenario, expectation);
-        var reference = await new ElmMakeReferenceCompiler(CorpusDirectory).CompileAsync(scenario, expectation);
-        actual.ReplaceLineEndings("\n").Should().Be(reference.ReplaceLineEndings("\n"));
     }
 
     [Fact]

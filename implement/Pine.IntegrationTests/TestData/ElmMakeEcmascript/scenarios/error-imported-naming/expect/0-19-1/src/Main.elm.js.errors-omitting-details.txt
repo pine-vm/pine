@@ -1,0 +1,11 @@
+File: src/A.elm
+Region: 2:10-2:20
+Title: NAMING ERROR
+
+File: src/A.elm
+Region: 2:22-2:32
+Title: NAMING ERROR
+
+File: src/B.elm
+Region: 2:9-2:21
+Title: NAMING ERROR

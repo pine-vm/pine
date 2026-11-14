@@ -68,25 +68,6 @@ public partial class ElmMakeEcmascriptCoverageTests
     }
 
     [Fact]
-    public async Task ElmMakeEcmascript_coverage_scenario_reference_snapshots_are_reproducible()
-    {
-        var scenario = Scenario;
-
-        var results =
-            await ElmMakeEcmascriptScenarios.RunAsync(
-                CorpusDirectory,
-                [scenario],
-                new ElmMakeReferenceCompiler(CorpusDirectory).CompileOutcomeAsync);
-
-        var report = ElmMakeEcmascriptScenarios.RenderResults(results);
-        Console.WriteLine("Reference reproducibility only:\n" + report);
-
-        results.Should().HaveCount(scenario.Expectations.Count(item => !item.Skipped)).And.OnlyContain(
-            result => result.Passed,
-            report);
-    }
-
-    [Fact]
     public async Task ElmMakeEcmascript_browser_programs_cover_each_constructor_with_active_expectations()
     {
         var scenario =
@@ -139,28 +120,6 @@ public partial class ElmMakeEcmascriptCoverageTests
                     .And.Contain("$elm$browser$Browser$" + constructor);
             }
         }
-    }
-
-    [Fact]
-    public async Task ElmMakeEcmascript_browser_programs_reference_snapshots_are_reproducible()
-    {
-        var scenario =
-            ElmMakeEcmascriptScenarios.SelectScenario(
-                ElmMakeEcmascriptScenarios.Discover(CorpusDirectory),
-                "browser-programs");
-
-        var results =
-            await ElmMakeEcmascriptScenarios.RunAsync(
-                CorpusDirectory,
-                [scenario],
-                new ElmMakeReferenceCompiler(CorpusDirectory).CompileOutcomeAsync);
-
-        var report = ElmMakeEcmascriptScenarios.RenderResults(results);
-        Console.WriteLine("Reference reproducibility only:\n" + report);
-
-        results.Should().HaveCount(scenario.Expectations.Count(item => !item.Skipped)).And.OnlyContain(
-            result => result.Passed,
-            report);
     }
 
     [Fact]
