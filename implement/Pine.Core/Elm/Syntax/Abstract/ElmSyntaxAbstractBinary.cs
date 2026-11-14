@@ -11,19 +11,16 @@ using InfixDirection = Pine.Core.Elm.Syntax.Concrete.InfixDirection;
 namespace Pine.Core.Elm.Syntax.Abstract;
 
 /// <summary>
-/// Versioned, self-delimiting binary syntax with structural back-references.
-/// A session can contain several roots, sharing expression, annotation and Pine-value instances.
-/// This format contains no source-resolution or compiler identities.
+/// Abstract syntax represented by hash-addressed Pine constructor expressions and shallow
+/// environments. Sessions share retained nodes; no canonical Pine trees are built at runtime.
 /// </summary>
 public static partial class ElmSyntaxAbstractBinary
 {
-    private const int Header = 0x45415302;
-
     private sealed record Digest(ReadOnlyMemory<byte> Bytes);
 
     private static readonly ConditionalWeakTable<Declaration, Digest> s_hashes = [];
 
-    /// <summary>Hashes the binary declaration directly, without materializing its encoded bytes.</summary>
+    /// <summary>Streams the standalone declaration bytes into SHA-256, with weak identity memoization.</summary>
     public static ReadOnlyMemory<byte> ComputeHash(Declaration declaration) =>
         s_hashes.GetValue(
             declaration,
@@ -34,144 +31,206 @@ public static partial class ElmSyntaxAbstractBinary
                 return new(hash.GetHashAndReset());
             }).Bytes;
 
-    /// <summary>Writes one expression, starting a fresh reference scope.</summary>
+    /// <summary>Writes one expression in an independent reference scope.</summary>
     public static void Encode(Action<ReadOnlySpan<byte>> write, Expression expression)
     {
         using var encoder = new Encoder(write);
         encoder.WriteExpression(expression);
     }
 
-    /// <summary>Writes one declaration, starting a fresh reference scope.</summary>
+    /// <summary>Writes one declaration in an independent reference scope.</summary>
     public static void Encode(Action<ReadOnlySpan<byte>> write, Declaration declaration)
     {
         using var encoder = new Encoder(write);
         encoder.WriteDeclaration(declaration);
     }
 
-    /// <summary>Writes a counted batch whose declarations share internal references.</summary>
+    /// <summary>Writes a declaration list sharing one reference scope.</summary>
     public static void Encode(Action<ReadOnlySpan<byte>> write, IReadOnlyList<Declaration> declarations)
     {
         using var encoder = new Encoder(write);
         encoder.WriteDeclarations(declarations);
     }
 
-    /// <summary>Writes one expression to a stream without closing it.</summary>
+    /// <summary>Writes one expression without closing the stream.</summary>
     public static void Encode(Stream stream, Expression expression) => Encode(stream.Write, expression);
 
-    /// <summary>Writes one declaration to a stream without closing it.</summary>
+    /// <summary>Writes one declaration without closing the stream.</summary>
     public static void Encode(Stream stream, Declaration declaration) => Encode(stream.Write, declaration);
 
-    /// <summary>Writes a declaration batch to a stream without closing it.</summary>
+    /// <summary>Writes a declaration list without closing the stream.</summary>
     public static void Encode(Stream stream, IReadOnlyList<Declaration> declarations) =>
         Encode(stream.Write, declarations);
 
-    /// <summary>Reads one expression and reports its extent; trailing bytes belong to the caller.</summary>
+    /// <summary>Reads one expression, reporting its extent and leaving trailing bytes to the caller.</summary>
     public static Expression DecodeExpression(ReadOnlyMemory<byte> source, out int bytesRead)
     {
-        var decoder = new Decoder(source);
+        using var decoder = new Decoder(source);
         var result = decoder.ReadExpression();
         bytesRead = decoder.BytesRead;
         return result;
     }
 
-    /// <summary>Reads one declaration and reports its extent; trailing bytes belong to the caller.</summary>
+    /// <summary>Reads one declaration, reporting its extent.</summary>
     public static Declaration DecodeDeclaration(ReadOnlyMemory<byte> source, out int bytesRead)
     {
-        var decoder = new Decoder(source);
+        using var decoder = new Decoder(source);
         var result = decoder.ReadDeclaration();
         bytesRead = decoder.BytesRead;
         return result;
     }
 
-    /// <summary>Reads a counted batch, preserving shared instances across declarations.</summary>
+    /// <summary>Reads a declaration list with shared retained instances, reporting its extent.</summary>
     public static IReadOnlyList<Declaration> DecodeDeclarations(ReadOnlyMemory<byte> source, out int bytesRead)
     {
-        var decoder = new Decoder(source);
+        using var decoder = new Decoder(source);
         var result = decoder.ReadDeclarations();
         bytesRead = decoder.BytesRead;
         return result;
     }
 
-    /// <summary>
-    /// Buffered syntax writer. Dispose or Flush before consuming the destination.
-    /// Internal-reference IDs are completion-order indices, independent of object identity.
-    /// </summary>
+    private enum Constructor
+    {
+        String, QualifiedDeclaration, QualifiedPattern, None, Some,
+        Function, Implementation, Signature, Choice, Alias, Infix, ValueConstructor,
+        RecordDefinition, RecordField, RecordSetter, Case, LetFunction, LetDestructuring,
+        FunctionDeclaration, ChoiceTypeDeclaration, AliasDeclaration, PortDeclaration, InfixDeclaration,
+        GenericType, Typed, Unit, Tupled, Record, GenericRecord, FunctionTypeAnnotation,
+        AllPattern, VarPattern, UnitPattern, CharPattern, StringPattern, IntPattern, FloatPattern,
+        TuplePattern, RecordPattern, UnConsPattern, ListPattern, NamedPattern, AsPattern,
+        UnitExpr, StringLiteral, CharLiteral, IntegerLiteral, FloatLiteral, Negation, ListExpr,
+        Identifier, IfBlock, PrefixOperator, Application, OperatorApplication, TupledExpression,
+        LambdaExpression, CaseExpression, LetExpression, RecordExpr, RecordAccess,
+        RecordAccessFunction, RecordUpdateExpression, GLSLExpression
+    }
+
+    /// <summary>Streaming writer; disposing releases bounded, reusable reference dictionaries.</summary>
+    /// <remarks>Starts an independent reference scope.</remarks>
     public sealed class Encoder(Action<ReadOnlySpan<byte>> write) : IDisposable
     {
-        private readonly BinaryEncoding.Writer _writer = CreateWriter(write);
+        private ValueEncodingBinaryDeterministic.TreeEncoder<object> _writer = new(write, reuseReferences: true);
 
-        private Dictionary<Expression, int>? _expressions;
-
-        private Dictionary<TypeAnnotation, int>? _annotations;
-
-        private Dictionary<PineValue, int>? _values;
-
-        private static BinaryEncoding.Writer CreateWriter(Action<ReadOnlySpan<byte>> write)
-        {
-            var writer = new BinaryEncoding.Writer(write);
-            writer.Int32(Header);
-            return writer;
-        }
-
-        /// <summary>Flushes buffered bytes without resetting reference tables.</summary>
-        public void Flush() => _writer.Flush();
+        /// <summary>All writes are synchronous; no bytes remain buffered.</summary>
+        public void Flush() => _writer.EnsureActive();
 
         /// <inheritdoc/>
         public void Dispose() => _writer.Dispose();
 
-        /// <summary>Writes a counted batch without resetting the session's references.</summary>
+        private void Start(Constructor constructor, int count) =>
+            _writer.StartExternalEval(ConstructorHash(constructor), count);
+
+        private void String(string value)
+        {
+            if (_writer.TryReference(value))
+                return;
+
+            Start(Constructor.String, 1);
+            _writer.Utf32(value);
+        }
+
+        private void Strings(IReadOnlyList<string> values)
+        {
+            for (var index = 0; index < values.Count; ++index)
+                String(values[index]);
+        }
+
+        private void Value(PineValue value)
+        {
+            switch (value)
+            {
+                case PineValue.BlobValue blob:
+                    if (!_writer.TryBlobReference(blob))
+                        _writer.Blob(blob.Bytes.Span);
+
+                    break;
+
+                case PineValue.ListValue list:
+                    if (_writer.TryReference(list))
+                        break;
+
+                    _writer.StartList(list.Items.Length);
+
+                    foreach (var item in list.Items.Span)
+                        Value(item);
+
+                    break;
+
+                default:
+                    throw new NotImplementedException(
+                        nameof(Value) + " does not handle Pine value variant: " + value.GetType().Name);
+            }
+        }
+
+        private void Direction(InfixDirection direction)
+        {
+            if (direction is not (InfixDirection.Left or InfixDirection.Right or InfixDirection.Non))
+                throw new ArgumentOutOfRangeException(nameof(direction), direction, "Unknown infix direction.");
+
+            _writer.Integer(direction == InfixDirection.Left ? 0 : direction == InfixDirection.Right ? 1 : 2);
+        }
+
+        /// <summary>Writes a declaration list without resetting session references.</summary>
         public void WriteDeclarations(IReadOnlyList<Declaration> declarations)
         {
-            _writer.Int32(declarations.Count);
+            _writer.StartList(declarations.Count);
 
-            for (var index = 0; index < declarations.Count; index++)
+            for (var index = 0; index < declarations.Count; ++index)
                 WriteDeclaration(declarations[index]);
         }
 
-        /// <summary>Writes a declaration in this reference scope.</summary>
+        /// <summary>Writes a declaration in this session.</summary>
         public void WriteDeclaration(Declaration declaration)
         {
             switch (declaration)
             {
                 case Declaration.FunctionDeclaration function:
-                    _writer.Byte(1);
-                    WriteFunction(function.Function);
+                    Start(Constructor.FunctionDeclaration, 1);
+                    Function(function.Function);
                     break;
 
                 case Declaration.ChoiceTypeDeclaration choice:
-                    _writer.Byte(2);
-                    _writer.String(choice.TypeDeclaration.Name);
-                    WriteStrings(choice.TypeDeclaration.Generics);
-                    _writer.Int32(choice.TypeDeclaration.Constructors.Count);
+                    Start(Constructor.ChoiceTypeDeclaration, 1);
 
-                    for (var index = 0; index < choice.TypeDeclaration.Constructors.Count; index++)
+                    Start(
+                        Constructor.Choice,
+                        2 + choice.TypeDeclaration.Generics.Count + choice.TypeDeclaration.Constructors.Count);
+
+                    String(choice.TypeDeclaration.Name);
+                    _writer.Integer(choice.TypeDeclaration.Generics.Count);
+                    Strings(choice.TypeDeclaration.Generics);
+
+                    for (var index = 0; index < choice.TypeDeclaration.Constructors.Count; ++index)
                     {
                         var constructor = choice.TypeDeclaration.Constructors[index];
-                        _writer.String(constructor.Name);
-                        WriteValue(constructor.NameValue);
-                        WriteAnnotations(constructor.Arguments);
+                        Start(Constructor.ValueConstructor, 2 + constructor.Arguments.Count);
+                        String(constructor.Name);
+                        Value(constructor.NameValue);
+                        Annotations(constructor.Arguments);
                     }
 
                     break;
 
                 case Declaration.AliasDeclaration alias:
-                    _writer.Byte(3);
-                    _writer.String(alias.TypeAlias.Name);
-                    WriteStrings(alias.TypeAlias.Generics);
+                    Start(Constructor.AliasDeclaration, 1);
+                    Start(Constructor.Alias, 3 + alias.TypeAlias.Generics.Count);
+                    String(alias.TypeAlias.Name);
+                    _writer.Integer(alias.TypeAlias.Generics.Count);
+                    Strings(alias.TypeAlias.Generics);
                     WriteTypeAnnotation(alias.TypeAlias.TypeAnnotation);
                     break;
 
                 case Declaration.PortDeclaration port:
-                    _writer.Byte(4);
-                    WriteSignature(port.Signature);
+                    Start(Constructor.PortDeclaration, 1);
+                    Signature(port.Signature, optional: false);
                     break;
 
                 case Declaration.InfixDeclaration infix:
-                    _writer.Byte(5);
-                    WriteDirection(infix.Infix.Direction);
-                    _writer.Int32(infix.Infix.Precedence);
-                    _writer.String(infix.Infix.Operator);
-                    _writer.String(infix.Infix.FunctionName);
+                    Start(Constructor.InfixDeclaration, 1);
+                    Start(Constructor.Infix, 4);
+                    Direction(infix.Infix.Direction);
+                    _writer.Integer(infix.Infix.Precedence);
+                    String(infix.Infix.Operator);
+                    String(infix.Infix.FunctionName);
                     break;
 
                 default:
@@ -181,100 +240,81 @@ public static partial class ElmSyntaxAbstractBinary
             }
         }
 
-        private void WriteFunction(FunctionStruct function)
+        private void Signature(Signature signature, bool optional)
         {
-            _writer.Byte(function.Signature is null ? (byte)0 : (byte)1);
+            if (optional)
+                Start(Constructor.Some, 1);
 
-            if (function.Signature is { } signature)
-                WriteSignature(signature);
-
-            _writer.String(function.Declaration.Name);
-            WritePatterns(function.Declaration.Arguments);
-            WriteExpression(function.Declaration.Expression);
-        }
-
-        private void WriteSignature(Signature signature)
-        {
-            _writer.String(signature.Name);
+            Start(Constructor.Signature, 2);
+            String(signature.Name);
             WriteTypeAnnotation(signature.TypeAnnotation);
         }
 
-        private void WriteDirection(InfixDirection direction) =>
-            _writer.Byte(
-                direction switch
-                {
-                    InfixDirection.Left => 0,
-                    InfixDirection.Right => 1,
-                    InfixDirection.Non => 2,
-
-                    _ =>
-                    throw new ArgumentOutOfRangeException(nameof(direction), direction, "Unknown infix direction.")
-                });
-
-        private void WriteStrings(IReadOnlyList<string> strings)
+        private void Function(FunctionStruct function)
         {
-            _writer.Int32(strings.Count);
+            Start(Constructor.Function, 2);
 
-            for (var index = 0; index < strings.Count; index++)
-                _writer.String(strings[index]);
+            if (function.Signature is { } signature)
+                Signature(signature, optional: true);
+
+            else
+                Start(Constructor.None, 0);
+
+            Start(Constructor.Implementation, 2 + function.Declaration.Arguments.Count);
+            String(function.Declaration.Name);
+            WriteExpression(function.Declaration.Expression);
+            Patterns(function.Declaration.Arguments);
         }
 
-        private void WriteAnnotations(IReadOnlyList<TypeAnnotation> annotations)
+        private void Annotations(IReadOnlyList<TypeAnnotation> annotations)
         {
-            _writer.Int32(annotations.Count);
-
-            for (var index = 0; index < annotations.Count; index++)
+            for (var index = 0; index < annotations.Count; ++index)
                 WriteTypeAnnotation(annotations[index]);
         }
 
-        /// <summary>Writes an annotation, or an internal reference to its earlier structural equal.</summary>
+        /// <summary>Writes an annotation, referencing an earlier structural equal when available.</summary>
         public void WriteTypeAnnotation(TypeAnnotation annotation)
         {
-            _annotations ??= [];
-
-            if (_annotations.TryGetValue(annotation, out var reference))
-            {
-                _writer.Byte(0);
-                _writer.Int32(reference);
+            if (_writer.TryReference(annotation))
                 return;
-            }
 
             switch (annotation)
             {
                 case TypeAnnotation.GenericType generic:
-                    _writer.Byte(1);
-                    _writer.String(generic.Name);
+                    Start(Constructor.GenericType, 1);
+                    String(generic.Name);
                     break;
 
                 case TypeAnnotation.Typed typed:
-                    _writer.Byte(2);
-                    WriteStrings(typed.ModuleName);
-                    _writer.String(typed.Name);
-                    WriteAnnotations(typed.TypeArguments);
+                    Start(Constructor.Typed, 2 + typed.ModuleName.Count + typed.TypeArguments.Count);
+                    _writer.Integer(typed.ModuleName.Count);
+                    Strings(typed.ModuleName);
+                    String(typed.Name);
+                    Annotations(typed.TypeArguments);
                     break;
 
                 case TypeAnnotation.Unit:
-                    _writer.Byte(3);
+                    Start(Constructor.Unit, 0);
                     break;
 
                 case TypeAnnotation.Tupled tuple:
-                    _writer.Byte(4);
-                    WriteAnnotations(tuple.TypeAnnotations);
+                    Start(Constructor.Tupled, tuple.TypeAnnotations.Count);
+                    Annotations(tuple.TypeAnnotations);
                     break;
 
                 case TypeAnnotation.Record record:
-                    _writer.Byte(5);
-                    WriteRecordDefinition(record.RecordDefinition);
+                    Start(Constructor.Record, 1);
+                    RecordDefinition(record.RecordDefinition);
                     break;
 
                 case TypeAnnotation.GenericRecord record:
-                    _writer.Byte(6);
-                    _writer.String(record.GenericName);
-                    WriteRecordDefinition(record.RecordDefinition);
+                    Start(Constructor.GenericRecord, 2);
+                    String(record.GenericName);
+                    RecordDefinition(record.RecordDefinition);
                     break;
 
                 case TypeAnnotation.FunctionTypeAnnotation function:
-                    _writer.Byte(7);
+                    Start(Constructor.FunctionTypeAnnotation, 2);
                     WriteTypeAnnotation(function.ArgumentType);
                     WriteTypeAnnotation(function.ReturnType);
                     break;
@@ -284,134 +324,244 @@ public static partial class ElmSyntaxAbstractBinary
                         nameof(WriteTypeAnnotation) + " does not handle annotation variant: " +
                         annotation.GetType().Name);
             }
-
-            _annotations.Add(annotation, _annotations.Count);
         }
 
-        private void WriteRecordDefinition(RecordDefinition record)
+        private void RecordDefinition(RecordDefinition record)
         {
-            _writer.Int32(record.Fields.Count);
+            Start(Constructor.RecordDefinition, record.Fields.Count);
 
-            for (var index = 0; index < record.Fields.Count; index++)
+            for (var index = 0; index < record.Fields.Count; ++index)
             {
                 var field = record.Fields[index];
-                _writer.String(field.FieldName);
-                WriteValue(field.FieldNameValue);
+                Start(Constructor.RecordField, 3);
+                String(field.FieldName);
+                Value(field.FieldNameValue);
                 WriteTypeAnnotation(field.FieldType);
             }
         }
 
-        private void WriteExpressions(IReadOnlyList<Expression> expressions)
+        private void Patterns(IReadOnlyList<Pattern> patterns)
         {
-            _writer.Int32(expressions.Count);
+            for (var index = 0; index < patterns.Count; ++index)
+                WritePattern(patterns[index]);
+        }
 
-            for (var index = 0; index < expressions.Count; index++)
+        private void WritePattern(Pattern pattern)
+        {
+            switch (pattern)
+            {
+                case Pattern.AllPattern:
+                    Start(Constructor.AllPattern, 0);
+                    break;
+
+                case Pattern.VarPattern variable:
+                    Start(Constructor.VarPattern, 1);
+                    String(variable.Name);
+                    break;
+
+                case Pattern.UnitPattern:
+                    Start(Constructor.UnitPattern, 0);
+                    break;
+
+                case Pattern.CharPattern literal:
+                    Start(Constructor.CharPattern, 2);
+                    _writer.Integer(literal.Value);
+                    Value(literal.ValueAsPineValue);
+                    break;
+
+                case Pattern.StringPattern literal:
+                    Start(Constructor.StringPattern, 2);
+                    String(literal.Value);
+                    Value(literal.ValueAsPineValue);
+                    break;
+
+                case Pattern.IntPattern literal:
+                    Start(Constructor.IntPattern, 2);
+                    _writer.Integer(literal.Value);
+                    Value(literal.ValueAsPineValue);
+                    break;
+
+                case Pattern.FloatPattern literal:
+                    Start(Constructor.FloatPattern, 2);
+                    _writer.Integer(literal.Numerator);
+                    _writer.Integer(literal.Denominator);
+                    break;
+
+                case Pattern.TuplePattern tuple:
+                    Start(Constructor.TuplePattern, tuple.Elements.Count);
+                    Patterns(tuple.Elements);
+                    break;
+
+                case Pattern.RecordPattern record:
+                    Start(Constructor.RecordPattern, 1 + record.Fields.Length * 2);
+                    _writer.Integer(record.Fields.Length);
+
+                    foreach (var field in record.Fields)
+                        String(field.FieldName);
+
+                    foreach (var field in record.Fields)
+                        Value(field.FieldNameValue);
+
+                    break;
+
+                case Pattern.UnConsPattern cons:
+                    Start(Constructor.UnConsPattern, 2);
+                    WritePattern(cons.Head);
+                    WritePattern(cons.Tail);
+                    break;
+
+                case Pattern.ListPattern list:
+                    Start(Constructor.ListPattern, list.Elements.Count);
+                    Patterns(list.Elements);
+                    break;
+
+                case Pattern.NamedPattern named:
+                    Start(Constructor.NamedPattern, 2 + named.Arguments.Count);
+
+                    if (!_writer.TryReference(named.Name))
+                    {
+                        Start(Constructor.QualifiedPattern, 1 + named.Name.ModuleName.Count);
+                        String(named.Name.Name);
+                        Strings(named.Name.ModuleName);
+                    }
+
+                    Value(named.TagNameAsPineValue);
+                    Patterns(named.Arguments);
+                    break;
+
+                case Pattern.AsPattern alias:
+                    Start(Constructor.AsPattern, 2);
+                    WritePattern(alias.Pattern);
+                    String(alias.Name);
+                    break;
+
+                default:
+                    throw new NotImplementedException(
+                        nameof(WritePattern) + " does not handle pattern variant: " + pattern.GetType().Name);
+            }
+        }
+
+        private void Expressions(IReadOnlyList<Expression> expressions)
+        {
+            for (var index = 0; index < expressions.Count; ++index)
                 WriteExpression(expressions[index]);
         }
 
-        /// <summary>Writes an expression, or an internal reference to its earlier structural equal.</summary>
+        private void Setters(IReadOnlyList<RecordSetter> setters)
+        {
+            for (var index = 0; index < setters.Count; ++index)
+            {
+                var setter = setters[index];
+                Start(Constructor.RecordSetter, 3);
+                String(setter.FieldName);
+                Value(setter.FieldNameValue);
+                WriteExpression(setter.Value);
+            }
+        }
+
+        /// <summary>Writes an expression, referencing an earlier structural equal when available.</summary>
         public void WriteExpression(Expression expression)
         {
-            _expressions ??= [];
-
-            if (_expressions.TryGetValue(expression, out var reference))
-            {
-                _writer.Byte(0);
-                _writer.Int32(reference);
+            if (_writer.TryReference(expression))
                 return;
-            }
 
             switch (expression)
             {
                 case Expression.UnitExpr:
-                    _writer.Byte(1);
+                    Start(Constructor.UnitExpr, 0);
                     break;
 
                 case Expression.StringLiteral literal:
-                    _writer.Byte(2);
-                    _writer.String(literal.Value);
-                    WriteValue(literal.ValueAsPineValue);
+                    Start(Constructor.StringLiteral, 2);
+                    String(literal.Value);
+                    Value(literal.ValueAsPineValue);
                     break;
 
                 case Expression.CharLiteral literal:
-                    _writer.Byte(3);
-                    _writer.Int32(literal.Value);
-                    WriteValue(literal.ValueAsPineValue);
+                    Start(Constructor.CharLiteral, 2);
+                    _writer.Integer(literal.Value);
+                    Value(literal.ValueAsPineValue);
                     break;
 
                 case Expression.IntegerLiteral literal:
-                    _writer.Byte(4);
+                    Start(Constructor.IntegerLiteral, 2);
                     _writer.Integer(literal.Value);
-                    WriteValue(literal.ValueAsPineValue);
+                    Value(literal.ValueAsPineValue);
                     break;
 
                 case Expression.FloatLiteral literal:
-                    _writer.Byte(5);
+                    Start(Constructor.FloatLiteral, 2);
                     _writer.Integer(literal.Numerator);
                     _writer.Integer(literal.Denominator);
                     break;
 
                 case Expression.Negation negation:
-                    _writer.Byte(6);
+                    Start(Constructor.Negation, 1);
                     WriteExpression(negation.Expression);
                     break;
 
                 case Expression.ListExpr list:
-                    _writer.Byte(7);
-                    WriteExpressions(list.Elements);
+                    Start(Constructor.ListExpr, list.Elements.Count);
+                    Expressions(list.Elements);
                     break;
 
                 case Expression.Identifier identifier:
-                    _writer.Byte(8);
-                    WriteStrings(identifier.QualifiedName.Namespaces);
-                    _writer.String(identifier.QualifiedName.DeclName);
+                    Start(Constructor.Identifier, 1);
+
+                    if (!_writer.TryReference(identifier.QualifiedName))
+                    {
+                        Start(Constructor.QualifiedDeclaration, 1 + identifier.QualifiedName.Namespaces.Count);
+                        String(identifier.QualifiedName.DeclName);
+                        Strings(identifier.QualifiedName.Namespaces);
+                    }
+
                     break;
 
                 case Expression.IfBlock conditional:
-                    _writer.Byte(9);
+                    Start(Constructor.IfBlock, 3);
                     WriteExpression(conditional.Condition);
                     WriteExpression(conditional.ThenBlock);
                     WriteExpression(conditional.ElseBlock);
                     break;
 
                 case Expression.PrefixOperator prefix:
-                    _writer.Byte(10);
-                    _writer.String(prefix.Operator);
+                    Start(Constructor.PrefixOperator, 1);
+                    String(prefix.Operator);
                     break;
 
                 case Expression.Application application:
-                    _writer.Byte(11);
+                    Start(Constructor.Application, 1 + application.Arguments.Count);
                     WriteExpression(application.Function);
-                    WriteExpressions(application.Arguments);
+                    Expressions(application.Arguments);
                     break;
 
                 case Expression.OperatorApplication operation:
-                    _writer.Byte(12);
-                    _writer.String(operation.Operator);
-                    WriteDirection(operation.Direction);
+                    Start(Constructor.OperatorApplication, 4);
+                    String(operation.Operator);
+                    Direction(operation.Direction);
                     WriteExpression(operation.Left);
                     WriteExpression(operation.Right);
                     break;
 
                 case Expression.TupledExpression tuple:
-                    _writer.Byte(13);
-                    WriteExpressions(tuple.Elements);
+                    Start(Constructor.TupledExpression, tuple.Elements.Count);
+                    Expressions(tuple.Elements);
                     break;
 
                 case Expression.LambdaExpression lambda:
-                    _writer.Byte(14);
-                    WritePatterns(lambda.Arguments);
+                    Start(Constructor.LambdaExpression, 1 + lambda.Arguments.Count);
                     WriteExpression(lambda.Expression);
+                    Patterns(lambda.Arguments);
                     break;
 
                 case Expression.CaseExpression cases:
-                    _writer.Byte(15);
+                    Start(Constructor.CaseExpression, 1 + cases.Cases.Count);
                     WriteExpression(cases.Expression);
-                    _writer.Int32(cases.Cases.Count);
 
-                    for (var index = 0; index < cases.Cases.Count; index++)
+                    for (var index = 0; index < cases.Cases.Count; ++index)
                     {
                         var branch = cases.Cases[index];
+                        Start(Constructor.Case, 2);
                         WritePattern(branch.Pattern);
                         WriteExpression(branch.Expression);
                     }
@@ -419,22 +569,22 @@ public static partial class ElmSyntaxAbstractBinary
                     break;
 
                 case Expression.LetExpression let:
-                    _writer.Byte(16);
-                    _writer.Int32(let.Declarations.Count);
+                    Start(Constructor.LetExpression, 1 + let.Declarations.Count);
+                    WriteExpression(let.Expression);
 
-                    for (var index = 0; index < let.Declarations.Count; index++)
+                    for (var index = 0; index < let.Declarations.Count; ++index)
                     {
                         var declaration = let.Declarations[index];
 
                         switch (declaration)
                         {
                             case LetDeclaration.LetFunction function:
-                                _writer.Byte(1);
-                                WriteFunction(function.Function);
+                                Start(Constructor.LetFunction, 1);
+                                Function(function.Function);
                                 break;
 
                             case LetDeclaration.LetDestructuring destructuring:
-                                _writer.Byte(2);
+                                Start(Constructor.LetDestructuring, 2);
                                 WritePattern(destructuring.Pattern);
                                 WriteExpression(destructuring.Expression);
                                 break;
@@ -446,190 +596,41 @@ public static partial class ElmSyntaxAbstractBinary
                         }
                     }
 
-                    WriteExpression(let.Expression);
                     break;
 
                 case Expression.RecordExpr record:
-                    _writer.Byte(17);
-                    WriteSetters(record.Fields);
+                    Start(Constructor.RecordExpr, record.Fields.Count);
+                    Setters(record.Fields);
                     break;
 
                 case Expression.RecordAccess access:
-                    _writer.Byte(18);
+                    Start(Constructor.RecordAccess, 3);
                     WriteExpression(access.Record);
-                    _writer.String(access.FieldName);
-                    WriteValue(access.FieldNameValue);
+                    String(access.FieldName);
+                    Value(access.FieldNameValue);
                     break;
 
                 case Expression.RecordAccessFunction access:
-                    _writer.Byte(19);
-                    _writer.String(access.FieldName);
-                    WriteValue(access.FieldNameValue);
+                    Start(Constructor.RecordAccessFunction, 2);
+                    String(access.FieldName);
+                    Value(access.FieldNameValue);
                     break;
 
                 case Expression.RecordUpdateExpression update:
-                    _writer.Byte(20);
-                    _writer.String(update.RecordName);
-                    WriteSetters(update.Fields);
+                    Start(Constructor.RecordUpdateExpression, 1 + update.Fields.Count);
+                    String(update.RecordName);
+                    Setters(update.Fields);
                     break;
 
                 case Expression.GLSLExpression glsl:
-                    _writer.Byte(21);
-                    _writer.String(glsl.ShaderCode);
+                    Start(Constructor.GLSLExpression, 1);
+                    String(glsl.ShaderCode);
                     break;
 
                 default:
                     throw new NotImplementedException(
                         nameof(WriteExpression) + " does not handle expression variant: " + expression.GetType().Name);
             }
-
-            _expressions.Add(expression, _expressions.Count);
-        }
-
-        private void WriteSetters(IReadOnlyList<RecordSetter> fields)
-        {
-            _writer.Int32(fields.Count);
-
-            for (var index = 0; index < fields.Count; index++)
-            {
-                var field = fields[index];
-                _writer.String(field.FieldName);
-                WriteValue(field.FieldNameValue);
-                WriteExpression(field.Value);
-            }
-        }
-
-        private void WritePatterns(IReadOnlyList<Pattern> patterns)
-        {
-            _writer.Int32(patterns.Count);
-
-            for (var index = 0; index < patterns.Count; index++)
-                WritePattern(patterns[index]);
-        }
-
-        private void WritePattern(Pattern pattern)
-        {
-            switch (pattern)
-            {
-                case Pattern.AllPattern:
-                    _writer.Byte(1);
-                    break;
-
-                case Pattern.VarPattern variable:
-                    _writer.Byte(2);
-                    _writer.String(variable.Name);
-                    break;
-
-                case Pattern.UnitPattern:
-                    _writer.Byte(3);
-                    break;
-
-                case Pattern.CharPattern literal:
-                    _writer.Byte(4);
-                    _writer.Int32(literal.Value);
-                    WriteValue(literal.ValueAsPineValue);
-                    break;
-
-                case Pattern.StringPattern literal:
-                    _writer.Byte(5);
-                    _writer.String(literal.Value);
-                    WriteValue(literal.ValueAsPineValue);
-                    break;
-
-                case Pattern.IntPattern literal:
-                    _writer.Byte(6);
-                    _writer.Integer(literal.Value);
-                    WriteValue(literal.ValueAsPineValue);
-                    break;
-
-                case Pattern.FloatPattern literal:
-                    _writer.Byte(7);
-                    _writer.Integer(literal.Numerator);
-                    _writer.Integer(literal.Denominator);
-                    break;
-
-                case Pattern.TuplePattern tuple:
-                    _writer.Byte(8);
-                    WritePatterns(tuple.Elements);
-                    break;
-
-                case Pattern.RecordPattern record:
-                    _writer.Byte(9);
-                    _writer.Int32(record.Fields.Length);
-
-                    foreach (var field in record.Fields)
-                    {
-                        _writer.String(field.FieldName);
-                        WriteValue(field.FieldNameValue);
-                    }
-
-                    break;
-
-                case Pattern.UnConsPattern cons:
-                    _writer.Byte(10);
-                    WritePattern(cons.Head);
-                    WritePattern(cons.Tail);
-                    break;
-
-                case Pattern.ListPattern list:
-                    _writer.Byte(11);
-                    WritePatterns(list.Elements);
-                    break;
-
-                case Pattern.NamedPattern named:
-                    _writer.Byte(12);
-                    WriteStrings(named.Name.ModuleName);
-                    _writer.String(named.Name.Name);
-                    WritePatterns(named.Arguments);
-                    WriteValue(named.TagNameAsPineValue);
-                    break;
-
-                case Pattern.AsPattern alias:
-                    _writer.Byte(13);
-                    WritePattern(alias.Pattern);
-                    _writer.String(alias.Name);
-                    break;
-
-                default:
-                    throw new NotImplementedException(
-                        nameof(WritePattern) + " does not handle pattern variant: " + pattern.GetType().Name);
-            }
-        }
-
-        private void WriteValue(PineValue value)
-        {
-            _values ??= [];
-
-            if (_values.TryGetValue(value, out var reference))
-            {
-                _writer.Byte(0);
-                _writer.Int32(reference);
-                return;
-            }
-
-            switch (value)
-            {
-                case PineValue.BlobValue blob:
-                    _writer.Byte(1);
-                    _writer.Int32(blob.Bytes.Length);
-                    _writer.Bytes(blob.Bytes.Span);
-                    break;
-
-                case PineValue.ListValue list:
-                    _writer.Byte(2);
-                    _writer.Int32(list.Items.Length);
-
-                    foreach (var item in list.Items.Span)
-                        WriteValue(item);
-
-                    break;
-
-                default:
-                    throw new NotImplementedException(
-                        nameof(WriteValue) + " does not handle Pine value variant: " + value.GetType().Name);
-            }
-
-            _values.Add(value, _values.Count);
         }
     }
 }

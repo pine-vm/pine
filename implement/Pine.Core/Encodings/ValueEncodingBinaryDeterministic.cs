@@ -1,228 +1,79 @@
 using Pine.Core.Functional;
 using Pine.Core.PineLanguage;
 using System;
-using System.Buffers.Binary;
 using System.Collections.Frozen;
 using System.Collections.Generic;
 
 namespace Pine.Core.Encodings;
 
-/// <summary>
-/// Functions to encode and decode <see cref="PineValue"/> instances 
-/// to and from a compact binary representation.
-/// </summary>
+/// <summary>Deterministic binary Pine trees, also usable through retained-model adapters.</summary>
 public static partial class ValueEncodingBinaryDeterministic
 {
-    /// <summary>
-    /// Size in bytes of the tag identifier used for differentiating entry types.
-    /// </summary>
+    /// <summary>All tags are big-endian Int32 values.</summary>
     public const int TagSize = 4;
 
-    /// <summary>
-    /// Tag identifier indicating the PineValue represents a Blob.
-    /// </summary>
+    /// <summary>A length-prefixed blob, padded to a multiple of four bytes.</summary>
     public const int TagBlob = 1;
 
-    /// <summary>
-    /// Tag identifier indicating the PineValue represents a List.
-    /// </summary>
+    /// <summary>A counted list of encoded children.</summary>
     public const int TagList = 3;
 
-    /// <summary>
-    /// Tag identifier indicating the PineValue represents a Reference to a previously encoded value.
-    /// </summary>
+    /// <summary>A backward, relative Int32 reference to a completed entry.</summary>
     public const int TagReferenceInteral = 4;
 
-    /// <summary>
-    /// Tag identifier indicating the PineValue is given by a reference to a value external to the encoded data.
-    /// The tag is followed by <see cref="ReferenceExternal256Length"/> bytes identifying the referenced value.
-    /// Decoding resolves the reference via a delegate supplied by the caller.
-    /// Encoding does not emit this tag.
-    /// </summary>
+    /// <summary>A 256-bit reference resolved by the caller.</summary>
     public const int TagReferenceExternal256 = 5;
 
-    /// <summary>
-    /// Tag identifier indicating an Eval, followed by the encoded expression value and then the environment value.
-    /// Both arguments are decoded normally, including resolving internal and external references and nested Evals.
-    /// Decoding evaluates the resolved arguments via a delegate supplied by the caller.
-    /// Encoding does not emit this tag.
-    /// </summary>
+    /// <summary>An encoded expression followed by its environment.</summary>
     public const int TagEval = 6;
 
-    /// <summary>
-    /// Number of bytes identifying the referenced value in an entry tagged with <see cref="TagReferenceExternal256"/>.
-    /// </summary>
+    /// <summary>External references contain exactly this many bytes.</summary>
     public const int ReferenceExternal256Length = 32;
 
-    /// <summary>
-    /// Encodes a <see cref="PineValue"/> to the specified stream using 32-bit IDs.
-    /// </summary>
-    /// <param name="stream">The output stream to write the encoded bytes to.</param>
-    /// <param name="composition">The PineValue instance to encode.</param>
-    public static void Encode(
-        System.IO.Stream stream,
-        PineValue composition)
+    /// <summary>Encodes a Pine tree without closing the destination.</summary>
+    public static void Encode(System.IO.Stream stream, PineValue composition) =>
+        Encode(stream.Write, composition);
+
+    /// <summary>Encodes a Pine tree iteratively, preserving the original byte layout.</summary>
+    public static void Encode(Action<ReadOnlySpan<byte>> write, PineValue composition)
     {
-        void Write(ReadOnlySpan<byte> bytes)
-        {
-            stream.Write(bytes);
-        }
-
-        Encode(Write, composition);
-    }
-
-    /// <summary>
-    /// Encodes a <see cref="PineValue"/> using a provided span-writing delegate.
-    /// </summary>
-    /// <param name="write">An action that writes the encoded bytes.</param>
-    /// <param name="composition">The PineValue instance to encode.</param>
-    public static void Encode(
-        Action<ReadOnlySpan<byte>> write,
-        PineValue composition)
-    {
-        var blobsStartAddresses = new Dictionary<PineValue.BlobValue, long>();
-
-        var listsStartAddresses = new Dictionary<PineValue.ListValue, long>();
-
-        var bytesWritten = 0L;
-
-        void WriteAndCount(ReadOnlySpan<byte> bytes)
-        {
-            write(bytes);
-            bytesWritten += bytes.Length;
-        }
-
-        void WriteReferenceToEarlier(long writtenEarlierAddress)
-        {
-            var relativeAddress = writtenEarlierAddress - (bytesWritten + TagSize);
-
-            if (relativeAddress < int.MinValue)
-            {
-                throw new InvalidOperationException(
-                    "Relative address of reference at offset " + bytesWritten +
-                    " exceeds the range of a 32-bit integer: " + relativeAddress);
-            }
-
-            WriteAndCount(s_tagReferenceEncoded.Span);
-
-            Span<byte> encodedInt32 = stackalloc byte[4];
-
-            BinaryPrimitives.WriteInt32BigEndian(
-                encodedInt32,
-                (int)relativeAddress);
-
-            WriteAndCount(encodedInt32);
-        }
-
-        // Use an explicit stack rather than recursion so that deeply nested
-        // values do not overflow the call stack. Items are pushed in reverse
-        // order so that they are processed (and thus written) in their original
-        // order, preserving the exact pre-order byte layout and back-reference
-        // addressing of the recursive implementation.
+        using var encoder = new TreeEncoder<PineValue>(write);
         var pending = new Stack<PineValue>();
-
         pending.Push(composition);
 
-        Span<byte> encodedInt32 = stackalloc byte[4];
-
-        while (pending.Count is not 0)
+        while (pending.TryPop(out var current))
         {
-            var current = pending.Pop();
-
-            if (current is PineValue.ListValue list)
+            switch (current)
             {
-                if (listsStartAddresses.TryGetValue(list, out var earlierAddress))
-                {
-                    // Already encoded this list earlier - write a reference.
-                    WriteReferenceToEarlier(earlierAddress);
+                case PineValue.ListValue list:
+                    if (encoder.TryReference(list))
+                        break;
 
-                    continue;
-                }
+                    encoder.StartList(list.Items.Length);
 
-                listsStartAddresses[list] = bytesWritten;
+                    for (var index = list.Items.Length - 1; index >= 0; --index)
+                        pending.Push(list.Items.Span[index]);
 
-                WriteAndCount(s_tagListEncoded.Span);
+                    break;
 
-                BinaryPrimitives.WriteInt32BigEndian(encodedInt32, list.Items.Length);
+                case PineValue.BlobValue blob:
+                    if (!encoder.TryBlobReference(blob))
+                        encoder.Blob(blob.Bytes.Span);
 
-                WriteAndCount(encodedInt32);
+                    break;
 
-                for (var i = list.Items.Length - 1; i >= 0; i--)
-                {
-                    pending.Push(list.Items.Span[i]);
-                }
-
-                continue;
+                default:
+                    throw new NotImplementedException(
+                        nameof(Encode) + " does not handle Pine value variant: " + current.GetType().Name);
             }
-
-            if (current is PineValue.BlobValue blob)
-            {
-                if (blobsStartAddresses.TryGetValue(blob, out var earlierAddress))
-                {
-                    // Already encoded this blob earlier - write a reference.
-                    WriteReferenceToEarlier(earlierAddress);
-
-                    continue;
-                }
-
-                blobsStartAddresses[blob] = bytesWritten;
-
-                WriteAndCount(s_tagBlobEncoded.Span);
-
-                BinaryPrimitives.WriteInt32BigEndian(encodedInt32, blob.Bytes.Length);
-
-                WriteAndCount(encodedInt32);
-
-                WriteAndCount(blob.Bytes.Span);
-
-                // encode blobs aligned to blocks of four bytes.
-                switch (blob.Bytes.Length % 4)
-                {
-                    case 1:
-                        WriteAndCount(s_paddingBytes_3.Span);
-                        break;
-
-                    case 2:
-                        WriteAndCount(s_paddingBytes_2.Span);
-                        break;
-
-                    case 3:
-                        WriteAndCount(s_paddingBytes_1.Span);
-                        break;
-                }
-
-                continue;
-            }
-
-            throw new NotImplementedException(
-                "Encoding of this PineValue type is not implemented: " +
-                current.GetType().FullName);
         }
     }
 
     /// <summary>
-    /// Decodes the root <see cref="PineValue"/> from its binary representation.
+    /// Decodes one root. Each Eval invokes the callback once; internal references reuse completed
+    /// results. Callbacks receive fully decoded arguments and use allocation-free ValueResult.
+    /// Trailing bytes belong to the enclosing format.
     /// </summary>
-    /// <param name="sourceBytes">The binary-encoded data as memory.</param>
-    /// <param name="blobInstancesToReuse">Optional dictionary of blob instances to reuse during decoding.</param>
-    /// <param name="listInstancesToReuse">Optional dictionary of list instances to reuse during decoding.</param>
-    /// <param name="resolveExternalReference">
-    /// Optional delegate to resolve entries tagged with <see cref="TagReferenceExternal256"/>.
-    /// It receives the <see cref="ReferenceExternal256Length"/> bytes of the reference and returns the referenced value,
-    /// or null if not found. When this delegate is not given, every external reference is treated as not found.
-    /// </param>
-    /// <param name="evaluate">
-    /// Optional delegate for entries tagged with <see cref="TagEval"/>. It receives the already resolved
-    /// encoded expression value and environment value and returns the resulting value or a rejection reason.
-    /// Its value-type result avoids allocating a result wrapper for each Eval.
-    /// Each Eval entry invokes the delegate once, after both arguments have been decoded.
-    /// Internal references to a completed Eval reuse its result without invoking the delegate again.
-    /// When this delegate is not given, every Eval is rejected.
-    /// Rejection aborts decoding with <see cref="DecodeError.EvalRejected"/>, including both resolved arguments.
-    /// </param>
-    /// <returns>
-    /// The decoded PineValue instance, or a description of the error if decoding failed.
-    /// </returns>
     public static Result<DecodeError, PineValue> DecodeRoot(
         ReadOnlyMemory<byte> sourceBytes,
         IReadOnlyDictionary<int, FrozenSet<PineValue.BlobValue>>? blobInstancesToReuse = null,
@@ -230,287 +81,79 @@ public static partial class ValueEncodingBinaryDeterministic
         Func<ReadOnlyMemory<byte>, PineValue?>? resolveExternalReference = null,
         Func<PineValue, PineValue, ValueResult<string, PineValue>>? evaluate = null)
     {
-        var decoded = new Dictionary<long, PineValue>();
+        using var decoder = new TreeDecoder<PineValue>(sourceBytes);
 
-        var readPosition = 0;
-
-        bool TryReadNextInt32(out int value)
+        try
         {
-            if (sourceBytes.Length - readPosition < 4)
-            {
-                value = 0;
-                return false;
-            }
-
-            value =
-                BinaryPrimitives.ReadInt32BigEndian(
-                    sourceBytes.Span.Slice(readPosition, 4));
-
-            readPosition += 4;
-
-            return true;
+            return
+                decoder.Read<PineValue, PineDecoding<PineValue>>(
+                    new(blobInstancesToReuse, listInstancesToReuse, resolveExternalReference, evaluate));
         }
-
-        DecodeError UnexpectedEnd(string expected) =>
-            new DecodeError.UnexpectedEndOfInput(Offset: readPosition, Expected: expected);
-
-        // Use an explicit stack rather than recursion so that deeply nested
-        // values do not overflow the call stack.
-        var pendingValues = new Stack<PendingValue>();
-
-        while (true)
+        catch (DecodeException error)
         {
-            var startAddress = readPosition;
-
-            if (!TryReadNextInt32(out var tag))
-            {
-                return UnexpectedEnd("tag");
-            }
-
-            PineValue completedValue;
-
-            if (tag is TagReferenceInteral)
-            {
-                var addressBase = readPosition;
-
-                if (!TryReadNextInt32(out var relativeAddress))
-                {
-                    return UnexpectedEnd("relative address of reference");
-                }
-
-                var referencedAddress = (long)addressBase + relativeAddress;
-
-                if (!decoded.TryGetValue(referencedAddress, out var referencedValue))
-                {
-                    return
-                        new DecodeError.InvalidInternalReference(
-                            Offset: startAddress,
-                            ReferencedAddress: referencedAddress);
-                }
-
-                completedValue = referencedValue;
-            }
-            else if (tag is TagReferenceExternal256)
-            {
-                if (sourceBytes.Length - readPosition < ReferenceExternal256Length)
-                {
-                    return UnexpectedEnd("reference of external reference");
-                }
-
-                var reference = sourceBytes.Slice(readPosition, ReferenceExternal256Length);
-
-                readPosition += ReferenceExternal256Length;
-
-                if (resolveExternalReference?.Invoke(reference) is not { } referencedValue)
-                {
-                    return
-                        new DecodeError.ExternalReferenceNotFound(
-                            Offset: startAddress,
-                            Reference: reference);
-                }
-
-                decoded[startAddress] = referencedValue;
-
-                completedValue = referencedValue;
-            }
-            else if (tag is TagList)
-            {
-                if (!TryReadNextInt32(out var itemCount))
-                {
-                    return UnexpectedEnd("item count of list");
-                }
-
-                if (itemCount < 0)
-                {
-                    return new DecodeError.NegativeLength(Offset: startAddress, Tag: tag, Length: itemCount);
-                }
-
-                // Each item occupies at least a tag and a 32-bit integer.
-                if ((sourceBytes.Length - readPosition) / (TagSize + 4) < itemCount)
-                {
-                    return
-                        new DecodeError.LengthExceedsRemainingInput(
-                            Offset: startAddress,
-                            Tag: tag,
-                            Length: itemCount,
-                            RemainingBytes: sourceBytes.Length - readPosition);
-                }
-
-                if (itemCount is not 0)
-                {
-                    pendingValues.Push(new PendingValue(startAddress, tag, new PineValue[itemCount]));
-
-                    continue;
-                }
-
-                completedValue = CompleteList(startAddress, []);
-            }
-            else if (tag is TagEval)
-            {
-                pendingValues.Push(new PendingValue(startAddress, tag, new PineValue[2]));
-
-                continue;
-            }
-            else if (tag is TagBlob)
-            {
-                if (!TryReadNextInt32(out var byteCount))
-                {
-                    return UnexpectedEnd("byte count of blob");
-                }
-
-                if (byteCount < 0)
-                {
-                    return new DecodeError.NegativeLength(Offset: startAddress, Tag: tag, Length: byteCount);
-                }
-
-                var paddedBytesCount =
-                    ((long)byteCount + 3) & ~3L;
-
-                if (sourceBytes.Length - readPosition < paddedBytesCount)
-                {
-                    return
-                        new DecodeError.LengthExceedsRemainingInput(
-                            Offset: startAddress,
-                            Tag: tag,
-                            Length: byteCount,
-                            RemainingBytes: sourceBytes.Length - readPosition);
-                }
-
-                var blobBytes =
-                    sourceBytes.Slice(readPosition, byteCount);
-
-                readPosition += (int)paddedBytesCount;
-
-                var blobValue = PineValue.Blob(blobBytes);
-
-                if (blobInstancesToReuse is not null &&
-                    blobInstancesToReuse.TryGetValue(byteCount, out var reusableBlobs))
-                {
-                    reusableBlobs.TryGetValue(
-                        blobValue,
-                        out var reusedBlobValue);
-
-                    blobValue = reusedBlobValue ?? blobValue;
-                }
-
-                decoded[startAddress] = blobValue;
-
-                completedValue = blobValue;
-            }
-            else
-            {
-                return new DecodeError.UnknownTag(Offset: startAddress, Tag: tag);
-            }
-
-            // Deliver the completed value to the enclosing lists or Evals, completing them in turn when full.
-            while (true)
-            {
-                if (!pendingValues.TryPeek(out var parent))
-                {
-                    return completedValue;
-                }
-
-                parent.Items[parent.NextIndex] = completedValue;
-
-                parent.NextIndex++;
-
-                if (parent.NextIndex < parent.Items.Length)
-                {
-                    break;
-                }
-
-                pendingValues.Pop();
-
-                switch (parent.Tag)
-                {
-                    case TagList:
-                        completedValue = CompleteList(parent.StartAddress, parent.Items);
-                        break;
-
-                    case TagEval:
-                        var encodedExpression = parent.Items[0];
-                        var environment = parent.Items[1];
-
-                        if (evaluate is null)
-                        {
-                            return
-                                new DecodeError.EvalRejected(
-                                    Offset: parent.StartAddress,
-                                    EncodedExpression: encodedExpression,
-                                    Environment: environment,
-                                    Reason: "No evaluation delegate was provided.");
-                        }
-
-                        var evaluationResult = evaluate(encodedExpression, environment);
-
-                        if (evaluationResult.IsErr)
-                        {
-                            return
-                                new DecodeError.EvalRejected(
-                                    Offset: parent.StartAddress,
-                                    EncodedExpression: encodedExpression,
-                                    Environment: environment,
-                                    Reason: evaluationResult.Error);
-                        }
-
-                        completedValue = evaluationResult.Value;
-                        decoded[parent.StartAddress] = completedValue;
-
-                        break;
-
-                    default:
-                        throw new NotImplementedException(
-                            "DecodeRoot does not handle pending value tag: " + parent.Tag);
-                }
-            }
-        }
-
-        PineValue CompleteList(int startAddress, PineValue[] items)
-        {
-            var listValue = PineValue.List(items);
-
-            if (listInstancesToReuse is not null &&
-                listInstancesToReuse.TryGetValue(items.Length, out var reusableLists))
-            {
-                reusableLists.TryGetValue(
-                    listValue,
-                    out var reusedListValue);
-
-                listValue = reusedListValue ?? listValue;
-            }
-
-            decoded[startAddress] = listValue;
-
-            return listValue;
+            return error.Error;
         }
     }
 
-    private sealed class PendingValue(int startAddress, int tag, PineValue[] items)
+    /// <summary>Pine factories reusable with a wider reference-table item type.</summary>
+    public readonly struct PineDecoding<TItem>(
+        IReadOnlyDictionary<int, FrozenSet<PineValue.BlobValue>>? blobs = null,
+        IReadOnlyDictionary<int, FrozenSet<PineValue.ListValue>>? lists = null,
+        Func<ReadOnlyMemory<byte>, PineValue?>? resolve = null,
+        Func<PineValue, PineValue, ValueResult<string, PineValue>>? evaluate = null)
+        : IDecoding<PineValue, TItem> where TItem : class
     {
-        public int StartAddress { get; } = startAddress;
+        /// <inheritdoc/>
+        public PineValue Blob(ReadOnlyMemory<byte> bytes)
+        {
+            var value = PineValue.Blob(bytes);
 
-        public int Tag { get; } = tag;
+            if (blobs is not null && blobs.TryGetValue(bytes.Length, out var reusable) &&
+                reusable.TryGetValue(value, out var reused))
+            {
+                return reused;
+            }
 
-        public PineValue[] Items { get; } = items;
+            return value;
+        }
 
-        public int NextIndex { get; set; }
+        /// <inheritdoc/>
+        public PineValue List(PineValue[] items)
+        {
+            var value = PineValue.List(items);
+
+            if (lists is not null && lists.TryGetValue(items.Length, out var reusable) &&
+                reusable.TryGetValue(value, out var reused))
+            {
+                return reused;
+            }
+
+            return value;
+        }
+
+        /// <inheritdoc/>
+        public PineValue? ResolveExternal(ReadOnlyMemory<byte> reference) => resolve?.Invoke(reference);
+
+        /// <inheritdoc/>
+        public ValueResult<string, PineValue> Evaluate(PineValue expression, PineValue environment) =>
+            evaluate is null
+            ?
+            ValueResult<string, PineValue>.err("No evaluation delegate was provided.")
+            :
+            evaluate(expression, environment);
+
+        /// <inheritdoc/>
+        public DecodeError Rejected(long offset, PineValue expression, PineValue environment, string reason) =>
+            new DecodeError.EvalRejected(offset, expression, environment, reason);
+
+        /// <inheritdoc/>
+        public bool HasExternalEvaluation => false;
+
+        /// <inheritdoc/>
+        public int MaximumDepth => int.MaxValue;
+
+        /// <inheritdoc/>
+        public PineValue EvaluateExternal(ref TreeDecoder<TItem> decoder, ReadOnlyMemory<byte> reference) =>
+            throw new InvalidOperationException("Pine evaluation requires a resolved expression.");
     }
-
-    private readonly static ReadOnlyMemory<byte> s_tagBlobEncoded =
-        new([0, 0, 0, TagBlob]);
-
-    private readonly static ReadOnlyMemory<byte> s_tagListEncoded =
-        new([0, 0, 0, TagList]);
-
-    private readonly static ReadOnlyMemory<byte> s_tagReferenceEncoded =
-        new([0, 0, 0, TagReferenceInteral]);
-
-    private readonly static ReadOnlyMemory<byte> s_paddingBytes_1 =
-        new([0]);
-
-    private readonly static ReadOnlyMemory<byte> s_paddingBytes_2 =
-        new([0, 0]);
-
-    private readonly static ReadOnlyMemory<byte> s_paddingBytes_3 =
-        new([0, 0, 0]);
 }

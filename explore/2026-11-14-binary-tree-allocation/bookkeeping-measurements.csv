@@ -1,0 +1,9 @@
+fixture,operation,repetitions,total_bytes,mean_bytes,min_bytes,max_bytes
+wide-1024,index-cold,1,0,0,0,0
+wide-1024,index-warmed,256,0,0,0,0
+shared-1024,index-cold,1,0,0,0,0
+shared-1024,index-warmed,256,0,0,0,0
+distinct-shared-1024,index-cold,1,66416,66416,66416,66416
+distinct-shared-1024,index-warmed,256,0,0,0,0
+wide-1024,encoder-tables-cold,1,204520,204520,204520,204520
+wide-1024,encoder-tables-warmed,256,0,0,0,0

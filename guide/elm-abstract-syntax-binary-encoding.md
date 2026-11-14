@@ -23,15 +23,15 @@ using (var encoder = new ElmSyntaxAbstractBinary.Encoder(stream.Write))
 }
 ```
 
-Disposal flushes the pooled output buffer; `Flush` makes buffered bytes visible
-without ending the reference scope. Large strings are transcoded in bounded
-UTF-8 chunks; arbitrary-precision integers use spans with pooled storage for
-large values.
+Writes are synchronous; `Flush` does not end the reference scope. Disposal clears
+and releases reusable reference dictionaries. Strings stream canonical big-endian
+UTF-32 through a bounded stack buffer. Arbitrary-precision integers use canonical
+Pine signed-magnitude blobs and pooled span storage for large magnitudes.
 
 Read those roots with the corresponding decoder methods:
 
 ```csharp
-var decoder = new ElmSyntaxAbstractBinary.Decoder(encodedMemory);
+using var decoder = new ElmSyntaxAbstractBinary.Decoder(encodedMemory);
 var expression = decoder.ReadExpression();
 var declarations = decoder.ReadDeclarations();
 var annotation = decoder.ReadTypeAnnotation();
@@ -44,50 +44,64 @@ first byte and advance the enclosing reader by `BytesRead`. The standalone
 `DecodeExpression`, `DecodeDeclaration`, and `DecodeDeclarations` helpers also
 report their consumed extent. A new encoder/decoder starts an independent scope.
 
-## Syntax wire format, version 2
+## Syntax wire format: Pine constructors, no version header
 
-Each session begins with the four bytes `45 41 53 02` (`EAS`, version 2).
-There is no padding. Integers and lengths are big-endian. Collection and UTF-8
-byte lengths are nonnegative signed 32-bit integers. Strings use strict UTF-8.
-Arbitrary-precision integers are a byte length followed by minimal signed,
-big-endian two's-complement bytes (zero occupies one byte). Float patterns and
-expressions both store their arbitrary-precision integer numerator and denominator
-separately. Version 1, which stored float patterns as IEEE 754 bits, is rejected;
-persisted syntax must be regenerated.
+Syntax uses the shared deterministic Pine entry format. All tags and lengths
+are big-endian Int32 values. A blob is tag `1`, byte length, bytes and padding to
+a multiple of four. A list is tag `3`, item count and children. An internal
+reference is tag `4` followed by an Int32 offset relative to the position after
+its tag; the target must be the start of a completed retained entry.
 
-Each node starts with a one-byte tag. Fields follow their model-constructor
-order, except that a function's optional signature starts with byte `0` (absent)
-or `1` (present). Lists start with their element count. Namespaced identifiers
-store namespace-component lists and then the unqualified name.
+Each syntax constructor is tag `6` (Eval), tag `5` (external expression), its
+32-byte Pine expression hash, then an inline list environment. Constructor hashes
+are static compiler data; there is no AST version ID. The previous `EAS` formats
+are rejected. Regenerate stored syntax and dependent content addresses.
 
-| Category | Tags, in order starting at 1 |
+`ElmSyntaxAbstractBinary.Constructors.cs` defines the canonical Pine expressions.
+They produce the Elm model in `elm-in-elm/pine-elm-syntax/src/ElmSyntax/Abstract`,
+using the canonical [Elm value encoding](elm-value-encoding.md). Its
+`ResolveConstructorExpression` permits ordinary Pine decoding and interpretation;
+these expression representations are initialized only when that resolver is used,
+never by the specialized syntax route. The generated constructor hashes are
+verified against those expressions by the Elm-value equivalence tests.
+
+Environments follow the retained .NET model, not the canonical value shape:
+
+| Constructor | Shallow environment |
 | --- | --- |
-| Expression | UnitExpr, StringLiteral, CharLiteral, IntegerLiteral, FloatLiteral, Negation, ListExpr, Identifier, IfBlock, PrefixOperator, Application, OperatorApplication, TupledExpression, LambdaExpression, CaseExpression, LetExpression, RecordExpr, RecordAccess, RecordAccessFunction, RecordUpdateExpression, GLSLExpression |
-| Type annotation | GenericType, Typed, Unit, Tupled, Record, GenericRecord, FunctionTypeAnnotation |
-| Declaration | FunctionDeclaration, ChoiceTypeDeclaration, AliasDeclaration, PortDeclaration, InfixDeclaration |
-| Pattern | AllPattern, VarPattern, UnitPattern, CharPattern, StringPattern, IntPattern, FloatPattern, TuplePattern, RecordPattern, UnConsPattern, ListPattern, NamedPattern, AsPattern |
-| Let declaration | LetFunction, LetDestructuring |
-| Pine value | BlobValue, ListValue |
+| Application | function, arguments... |
+| LambdaExpression | body, patterns... |
+| CaseExpression | scrutinee, retained cases... |
+| LetExpression | body, retained let declarations... |
+| Typed | moduleCount, module components..., name, type arguments... |
+| NamedPattern | retained qualified name, cached tag value, patterns... |
+| Qualified name | name, module components... |
+| RecordPattern | fieldCount, field names..., cached field values... |
+| String | raw UTF-32 blob |
+| Literal | source scalar/string, cached Pine value |
 
-Infix directions occupy one byte: left `0`, right `1`, non-associative `2`.
-Precomputed Pine values are preserved exactly, not regenerated from literals or
-names. A Pine blob is its byte length and bytes; a Pine list is its count and
-encoded children.
+Record fields, setters, function parts, signatures and other retained aggregate
+objects have their own constructors. Variable-length tails allocate directly into
+their final typed arrays. No temporary canonical lists, records or argument arrays
+are constructed. Float literals/patterns retain their exact numerator and
+denominator; the canonical Elm projection normalizes the rational.
 
-Expressions, type annotations, and Pine values have separate internal-reference
-tables. Tag `0` in one of these categories is followed by a nonnegative 32-bit
-table index. Every fully decoded non-reference node is appended to its
-category's table, after its children; reference entries do not append another
-entry. Forward/self references and indices in another category are invalid.
-The encoder deduplicates structural equals, not just identical objects, so equal
-syntax encodes identically regardless of prior heap sharing. Tables span every
-root in a session, allowing different declarations to reuse the same expression
-and annotation instances on decoding.
+Cached Pine values are additional payload fields, preserved exactly rather than
+regenerated or included in the Elm projection. Their blobs/lists use the ordinary
+shared reader with Pine factories and the same widened reference table. Strings,
+qualified names, expressions and annotations can be reused across session roots.
+Structural deduplication and fixed field order make bytes independent of prior
+heap sharing.
 
-Malformed input, unknown versions/tags, invalid lengths/references, and nesting
-deeper than 512 levels fail with `InvalidDataException`. Pine blobs retain input
-memory slices; callers must keep that memory immutable while decoded syntax is
-in use.
+Constructor expressions, inline environments and raw scalar fields are deliberately
+not referenceable in the specialized profile. References to them, unknown hashes,
+wrong retained types, invalid arities/counts/scalars and nesting beyond 512 reader
+levels fail with `InvalidDataException`. Completed nodes remain referenceable.
+Dispose decoders to return cleared scratch buffers. Retained Pine blobs own slices
+of immutable input memory, not copies.
+
+See [the reusable strategy spec](binary-tree-encoding-via-pine.md) and the
+[implementation log and allocation measurements](../explore/2026-11-14-reuse-pine-value-binary-encoding-implementation-log.md).
 
 ## SCC blobs
 

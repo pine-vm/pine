@@ -1560,6 +1560,41 @@ public class ValueEncodingBinaryDeterministicTests
     /*  Helpers                                                            */
     /* ------------------------------------------------------------------ */
 
+    [Fact]
+    public void Reference_target_index_rehashes_preserves_aliases_and_ignores_enclosing_trailers()
+    {
+        var unique =
+            Enumerable.Range(0, 64)
+            .Select(index => IntegerEncoding.EncodeSignedInteger(100000 + index)).ToArray();
+
+        var value =
+            PineValue.List([.. unique, .. unique.Reverse(), .. Enumerable.Repeat(unique[0], 1024)]);
+
+        var encoded = EncodeToBytes(value);
+        var withTrailer = new byte[encoded.Length + 8];
+        encoded.CopyTo(withTrailer, 0);
+        withTrailer.AsSpan(encoded.Length).Fill(0xaa);
+        var decoded = (PineValue.ListValue)DecodeRootExpectingOk(withTrailer);
+        decoded.Should().Be(value);
+
+        for (var index = 0; index < unique.Length; ++index)
+            decoded.Items.Span[unique.Length + index].Should().BeSameAs(decoded.Items.Span[unique.Length - 1 - index]);
+
+        decoded.Items.Span[^1].Should().BeSameAs(decoded.Items.Span[0]);
+    }
+
+    [Fact]
+    public void Encoding_does_not_invoke_the_writer_for_empty_alignment_padding()
+    {
+        var chunks = new List<byte[]>();
+
+        ValueEncodingBinaryDeterministic.Encode(
+            bytes => chunks.Add(bytes.ToArray()),
+            PineValue.Blob([1, 2, 3, 4]));
+
+        chunks.Select(chunk => chunk.Length).Should().Equal(4, 4, 4);
+    }
+
     private static byte[] EncodeToBytes(PineValue value)
     {
         using var stream = new MemoryStream();
