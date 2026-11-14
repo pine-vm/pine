@@ -14,7 +14,7 @@ using System.Text.RegularExpressions;
 
 namespace Pine;
 
-public class VolatileProcessCSharp : VolatileProcess
+public partial class VolatileProcessCSharp : VolatileProcess
 {
     private readonly System.Threading.Lock @lock = new();
 
@@ -199,7 +199,7 @@ public class VolatileProcessCSharp : VolatileProcess
         return "InterfaceToHost_Request(\"" + request.Replace(@"\", @"\\").Replace("\"", "\\\"") + "\")";
     }
 
-    private class MetadataResolver(
+    private partial class MetadataResolver(
         string csharpScriptCode,
         // TODO: Make getFileFromHashSHA256 optional after migration phase.
         Func<byte[], byte[]?> getFileFromHashSHA256)
@@ -257,7 +257,7 @@ public class VolatileProcessCSharp : VolatileProcess
              * Value observed for args.Name:
              * "BotEngine.Interface, Version=1606.3019.0.0, Culture=neutral, PublicKeyToken=null"
              * */
-            var assemblySimpleName = Regex.Match(args.Name, "([^,]+)").Value;
+            var assemblySimpleName = AssemblySimpleNameRegex().Match(args.Name).Value;
 
             appdomainResolvedAssemblies.TryGetValue(assemblySimpleName, out var alreadyResolved);
 
@@ -349,7 +349,7 @@ public class VolatileProcessCSharp : VolatileProcess
         {
             lock (@lock)
             {
-                var sha256Match = Regex.Match(request.reference, "sha256:([\\d\\w]+)", RegexOptions.IgnoreCase);
+                var sha256Match = Sha256ReferenceRegex().Match(request.reference);
 
                 if (!sha256Match.Success)
                 {
@@ -442,6 +442,12 @@ public class VolatileProcessCSharp : VolatileProcess
                 loadedTreesFromUrl,
                 hash,
                 hintUrls);
+
+        [GeneratedRegex("([^,]+)")]
+        private static partial Regex AssemblySimpleNameRegex();
+
+        [GeneratedRegex("sha256:([\\d\\w]+)", RegexOptions.IgnoreCase, "")]
+        private static partial Regex Sha256ReferenceRegex();
     }
 
     public static bool IsComment(SyntaxTrivia trivia) =>
@@ -450,7 +456,7 @@ public class VolatileProcessCSharp : VolatileProcess
 
     public static IEnumerable<Uri> EnumerateUrlsFromText(string text)
     {
-        foreach (var nonSpace in Regex.Split(text, "\\s+"))
+        foreach (var nonSpace in WhitespaceRegex().Split(text))
         {
             if (Uri.TryCreate(nonSpace, UriKind.Absolute, out var uri))
             {
@@ -460,4 +466,7 @@ public class VolatileProcessCSharp : VolatileProcess
     }
 
     public record RunResult(object? ReturnValue = null, Exception? Exception = null);
+
+    [GeneratedRegex("\\s+")]
+    private static partial Regex WhitespaceRegex();
 }

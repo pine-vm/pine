@@ -13,9 +13,9 @@ using System.Threading;
 
 namespace Pine.CLI;
 
-internal sealed record RunSource(FileTree Tree, string[] FilePath, string? Declaration, int? Line, string? DirectoryPath)
+internal sealed partial record RunSource(FileTree Tree, string[] FilePath, string? Declaration, int? Line, string? DirectoryPath)
 {
-    internal sealed class Loader(
+    internal sealed partial class Loader(
         string cacheDirectory,
         TextWriter diagnostics,
         Func<string, string, string>? resolveBranch = null,
@@ -115,9 +115,7 @@ internal sealed record RunSource(FileTree Tree, string[] FilePath, string? Decla
         public RunSource Read(string source, string? inputDirectory, CancellationToken token)
         {
             var selector =
-                Regex.Match(
-                    source,
-                    @"^(?<file>.*\.elm)(?:[/\\](?<decl>[a-z][A-Za-z0-9_]*))?(?:#L(?<line>[1-9][0-9]*))?$");
+                SourceSelectorRegex().Match(source);
 
             if (!selector.Success)
             {
@@ -430,6 +428,9 @@ internal sealed record RunSource(FileTree Tree, string[] FilePath, string? Decla
             Visit(entry.Bytes);
             return [.. missing];
         }
+
+        [GeneratedRegex(@"^(?<file>.*\.elm)(?:[/\\](?<decl>[a-z][A-Za-z0-9_]*))?(?:#L(?<line>[1-9][0-9]*))?$")]
+        private static partial Regex SourceSelectorRegex();
 
     }
 

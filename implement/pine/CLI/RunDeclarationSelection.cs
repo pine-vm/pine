@@ -11,7 +11,7 @@ using System.Threading;
 
 namespace Pine.CLI;
 
-internal static class RunDeclarationSelection
+internal static partial class RunDeclarationSelection
 {
     internal sealed record Candidate(string Name, string? Signature);
 
@@ -184,7 +184,7 @@ internal static class RunDeclarationSelection
         var colon = signature.IndexOf(':');
         var result = new StringBuilder();
 
-        foreach (Match token in Regex.Matches(signature, @"[A-Za-z_][A-Za-z0-9_.]*|->|.", RegexOptions.Singleline))
+        foreach (Match token in SignatureTokenRegex().Matches(signature))
         {
             var text = Markup.Escape(token.Value);
 
@@ -200,4 +200,7 @@ internal static class RunDeclarationSelection
 
         return result.ToString();
     }
+
+    [GeneratedRegex(@"[A-Za-z_][A-Za-z0-9_.]*|->|.", RegexOptions.Singleline)]
+    private static partial Regex SignatureTokenRegex();
 }

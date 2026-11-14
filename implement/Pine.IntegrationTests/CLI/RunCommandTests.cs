@@ -17,7 +17,7 @@ using Xunit;
 
 namespace Pine.IntegrationTests.CLI;
 
-public sealed class RunCommandTests : IDisposable
+public sealed partial class RunCommandTests : IDisposable
 {
     private readonly string _directory =
         Path.Combine(Path.GetTempPath(), "pine-run-tests-" + Guid.NewGuid().ToString("N"));
@@ -332,12 +332,12 @@ public sealed class RunCommandTests : IDisposable
             var result = Run("inferred", input: "hello", batchOnly: batchOnly, color: color);
             result.Exit.Should().Be(0, result.Error);
             result.Output.Should().Be("5" + Environment.NewLine);
-            Regex.Replace(result.Error, @"\x1b\[[0-9;]*m", "").Should().Contain("inferred : String -> Int");
+            AnsiStyleRegex().Replace(result.Error, "").Should().Contain("inferred : String -> Int");
 
             var invalid = Run("multiple", input: "hello", batchOnly: batchOnly, color: color);
             invalid.Exit.Should().Be(1);
 
-            Regex.Replace(invalid.Error, @"\x1b\[[0-9;]*m", "").Should().Contain(
+            AnsiStyleRegex().Replace(invalid.Error, "").Should().Contain(
                 "multiple : String -> String -> String");
 
             foreach (var diagnostics in new[] { result.Error, invalid.Error })
@@ -1637,4 +1637,7 @@ public sealed class RunCommandTests : IDisposable
     }
 
     public void Dispose() => Directory.Delete(_directory, recursive: true);
+
+    [GeneratedRegex(@"\x1b\[[0-9;]*m")]
+    private static partial Regex AnsiStyleRegex();
 }

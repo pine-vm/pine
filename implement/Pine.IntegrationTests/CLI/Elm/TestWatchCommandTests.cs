@@ -20,7 +20,7 @@ using Xunit;
 
 namespace Pine.IntegrationTests.CLI.Elm;
 
-public class TestWatchCommandTests
+public partial class TestWatchCommandTests
 {
     private static readonly TimeSpan s_wait = TimeSpan.FromSeconds(60);
 
@@ -1264,8 +1264,8 @@ public class TestWatchCommandTests
             watcher.RaiseChange();
             var second = await output.NextContaining("Invocations:");
 
-            Regex.Match(second, @"loops: [\d_]+").Value
-                .Should().Be(Regex.Match(first, @"loops: [\d_]+").Value).And.NotBeEmpty();
+            LoopCountRegex().Match(second).Value
+                .Should().Be(LoopCountRegex().Match(first).Value).And.NotBeEmpty();
 
             watching.IsCompleted.Should().BeFalse();
         }
@@ -1532,4 +1532,7 @@ public class TestWatchCommandTests
             Test.fuzz (Fuzz.constant 100) "repeated work"
                 (\value -> Expect.equal 5050 (total value 0))
         """;
+
+    [GeneratedRegex(@"loops: [\d_]+")]
+    private static partial Regex LoopCountRegex();
 }

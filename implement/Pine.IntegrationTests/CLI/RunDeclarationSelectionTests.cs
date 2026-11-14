@@ -14,7 +14,7 @@ using Xunit;
 
 namespace Pine.IntegrationTests.CLI;
 
-public class RunDeclarationSelectionTests
+public partial class RunDeclarationSelectionTests
 {
     private static readonly RunDeclarationSelection.Candidate[] s_candidates =
         [
@@ -125,7 +125,7 @@ public class RunDeclarationSelectionTests
         select.Should().Throw<ArgumentException>().WithMessage("*stdin is redirected*");
         keys.Remaining.Should().Be(8);
 
-        Regex.Replace(output.ToString(), @"\x1b\[[0-9;]*m", "")
+        AnsiStyleRegex().Replace(output.ToString(), "")
             .Should().Contain("alpha : String -> Int").And.NotContain("Declaration name or number>");
     }
 
@@ -247,4 +247,7 @@ public class RunDeclarationSelectionTests
 
         public void WriteAnsi(Action<AnsiWriter> action) => console.WriteAnsi(action);
     }
+
+    [GeneratedRegex(@"\x1b\[[0-9;]*m")]
+    private static partial Regex AnsiStyleRegex();
 }

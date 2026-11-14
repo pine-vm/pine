@@ -59,7 +59,10 @@ The model is designed for an interpreter that operates over `PineValue`. To avoi
 
 Use `ConvertFromConcrete` to convert syntax nodes from `Pine.Core.Elm.Syntax.Concrete` to `Pine.Core.Elm.Syntax.Abstract`.
 `ConvertToConcrete` converts from `Pine.Core.Elm.Syntax.Abstract` to `Pine.Core.Elm.Syntax.Concrete` while filling the locations and ranges of syntax nodes with zeroes.
-Rational floats are rendered exactly, with no fractional-digit cutoff. Values without a finite decimal representation are rejected rather than approximated. Prepared-value diagnostics render nonterminating rationals as division expressions instead of approximating them as float literals.
+Rational floats are rendered exactly, with no fractional-digit cutoff. Values
+without a finite decimal representation are rejected rather than approximated.
+Prepared-value diagnostics render nonterminating rationals as division expressions
+instead of approximating them as float literals.
 
 The Elm compiler canonicalizes concrete syntax while keeping source ranges available for diagnostics, then converts directly to abstract syntax for optimization and type inference. Compiler passes must not round-trip through the legacy syntax model. Source-oriented features, such as applying inferred annotations, retain the original concrete file for output.
 

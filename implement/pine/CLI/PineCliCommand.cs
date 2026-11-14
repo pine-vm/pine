@@ -13,7 +13,7 @@ using static ElmTime.Platform.WebService.Configuration;
 
 namespace Pine.CLI;
 
-public class PineCliCommand
+public partial class PineCliCommand
 {
     public static string AppVersionId => "0.5.14";
 
@@ -225,7 +225,7 @@ public class PineCliCommand
         if (site.StartsWith(".") || site.StartsWith("/"))
             return true;
 
-        if (Regex.IsMatch(site, "^http(|s)://", RegexOptions.IgnoreCase))
+        if (HttpUrlRegex().IsMatch(site))
             return false;
 
         try
@@ -263,7 +263,7 @@ public class PineCliCommand
 
         var executableDirectoryPath = Path.GetDirectoryName(executableFilePath);
 
-        var commandName = Regex.Match(Path.GetFileName(executableFilePath)!, @"(.+?)(?=\.exe$|$)").Groups[1].Value;
+        var commandName = ExecutableNameRegex().Match(Path.GetFileName(executableFilePath)!).Groups[1].Value;
 
         (bool executableIsRegisteredOnPath, Action registerExecutableDirectoryOnPath) checkInstallation()
         {
@@ -432,4 +432,9 @@ public class PineCliCommand
 
     private static readonly DateTimeOffset s_programStartTime = DateTimeOffset.UtcNow;
 
+    [GeneratedRegex("^http(|s)://", RegexOptions.IgnoreCase, "")]
+    private static partial Regex HttpUrlRegex();
+
+    [GeneratedRegex(@"(.+?)(?=\.exe$|$)")]
+    private static partial Regex ExecutableNameRegex();
 }

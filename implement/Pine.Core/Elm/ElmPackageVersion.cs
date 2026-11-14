@@ -5,15 +5,12 @@ using System.Text.RegularExpressions;
 namespace Pine.Core.Elm;
 
 /// <summary>An Elm registry version, compared numerically rather than lexicographically.</summary>
-public readonly record struct ElmPackageVersion(int Major, int Minor, int Patch) : IComparable<ElmPackageVersion>
+public readonly partial record struct ElmPackageVersion(int Major, int Minor, int Patch) : IComparable<ElmPackageVersion>
 {
-    private static readonly Regex s_version =
-        new(@"^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$", RegexOptions.CultureInvariant);
-
     /// <summary>Parses three non-negative numeric components; rejects tags, leading zeroes and prerelease suffixes.</summary>
     public static ElmPackageVersion Parse(string text)
     {
-        var match = s_version.Match(text);
+        var match = VersionRegex().Match(text);
 
         if (!match.Success ||
             !int.TryParse(match.Groups[1].Value, NumberStyles.None, CultureInfo.InvariantCulture, out var major) ||
@@ -38,18 +35,18 @@ public readonly record struct ElmPackageVersion(int Major, int Minor, int Patch)
     /// <inheritdoc/>
     public override string ToString() =>
         string.Create(CultureInfo.InvariantCulture, $"{Major}.{Minor}.{Patch}");
+
+    [GeneratedRegex(@"^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$", RegexOptions.CultureInvariant)]
+    private static partial Regex VersionRegex();
 }
 
 /// <summary>An exact version or an interval in Elm's constraint syntax.</summary>
-public sealed record ElmPackageVersionConstraint(
+public sealed partial record ElmPackageVersionConstraint(
     ElmPackageVersion Lower,
     bool IncludeLower,
     ElmPackageVersion Upper,
     bool IncludeUpper)
 {
-    private static readonly Regex s_range =
-        new(@"^(\S+) (<|<=) v (<|<=) (\S+)$", RegexOptions.CultureInvariant);
-
     /// <summary>Whether the interval denotes a single exact version.</summary>
     public bool IsExact => Lower == Upper && IncludeLower && IncludeUpper;
 
@@ -60,7 +57,7 @@ public sealed record ElmPackageVersionConstraint(
     /// <summary>Parses an exact version or an Elm range, preserving inclusive/exclusive bounds.</summary>
     public static ElmPackageVersionConstraint Parse(string text)
     {
-        var match = s_range.Match(text);
+        var match = RangeRegex().Match(text);
 
         if (!match.Success)
             return Exact(ElmPackageVersion.Parse(text));
@@ -116,4 +113,7 @@ public sealed record ElmPackageVersionConstraint(
         Lower.ToString()
         :
         $"{Lower} {(IncludeLower ? "<=" : "<")} v {(IncludeUpper ? "<=" : "<")} {Upper}";
+
+    [GeneratedRegex(@"^(\S+) (<|<=) v (<|<=) (\S+)$", RegexOptions.CultureInvariant)]
+    private static partial Regex RangeRegex();
 }

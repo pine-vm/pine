@@ -26,7 +26,7 @@ using SyntaxFile = Pine.Core.Elm.Syntax.Concrete.File;
 
 namespace Pine.CLI;
 
-internal sealed record RunCompilation(
+internal sealed partial record RunCompilation(
     PineValue Environment,
     string ModuleName,
     string Declaration,
@@ -98,9 +98,8 @@ internal sealed record RunCompilation(
                                 item.Function.Signature is { } signature
                                 ?
                                 name + " : " +
-                                Regex.Replace(
+                                WhitespaceRegex().Replace(
                                     Rendering.RenderTypeAnnotation(signature.Value.TypeAnnotation),
-                                    @"\s+",
                                     " ")
                                 :
                                 null);
@@ -216,7 +215,7 @@ internal sealed record RunCompilation(
 
             while (annotation is TypeAnnotation.FunctionTypeAnnotation arrow)
             {
-                annotations.Add(Regex.Replace(Rendering.RenderTypeAnnotation(arrow.ArgumentType), @"\s+", " "));
+                annotations.Add(WhitespaceRegex().Replace(Rendering.RenderTypeAnnotation(arrow.ArgumentType), " "));
                 annotation = arrow.ReturnType.Value;
             }
 
@@ -401,4 +400,7 @@ internal sealed record RunCompilation(
 
         return new(TypeInference.ExpandTypeAliases(type, aliases, root.Namespaces), choices);
     }
+
+    [GeneratedRegex(@"\s+")]
+    private static partial Regex WhitespaceRegex();
 }

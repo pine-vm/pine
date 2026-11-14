@@ -18,7 +18,7 @@ using Xunit;
 
 namespace Pine.Core.Tests.Runtime.IntermediateVM;
 
-public class StackInstructionTextFormatTests
+public partial class StackInstructionTextFormatTests
 {
     private static readonly StackInstructionTraceRenderer.RenderingOptions s_persistence =
         StackInstructionTraceRenderer.RenderingOptions.Persistence;
@@ -1014,7 +1014,7 @@ public class StackInstructionTextFormatTests
 
     private static void AssertFullHashes(StackInstructionTraceRenderer.RenderedInstructions rendered)
     {
-        foreach (Match match in Regex.Matches(rendered.Text, @"hash 0x([0-9a-f]+)"))
+        foreach (Match match in ExpressionHashRegex().Matches(rendered.Text))
         {
             var hash = match.Groups[1].Value;
             hash.Length.Should().Be(64);
@@ -1095,4 +1095,7 @@ public class StackInstructionTextFormatTests
         System.Collections.IEnumerator System.Collections.IEnumerable.GetEnumerator() =>
             GetEnumerator();
     }
+
+    [GeneratedRegex(@"hash 0x([0-9a-f]+)")]
+    private static partial Regex ExpressionHashRegex();
 }

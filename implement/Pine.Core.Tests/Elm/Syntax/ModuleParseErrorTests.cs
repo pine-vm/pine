@@ -17,7 +17,7 @@ using Range = Pine.Core.Elm.Syntax.Concrete.Range;
 
 namespace Pine.Core.Tests.Elm.Syntax;
 
-public class ModuleParseErrorTests
+public partial class ModuleParseErrorTests
 {
     [Fact]
     public void SyntaxError_inventory_matches_Elm_reference_JSON()
@@ -169,9 +169,8 @@ public class ModuleParseErrorTests
                                 continue;
 
                             message[i] =
-                                Regex.Replace(
+                                SnippetLineNumberRegex().Replace(
                                     text.GetValue<string>(),
-                                    @"(?m)^(\d+)(\| )",
                                     match =>
                                     (int.Parse(match.Groups[1].Value, CultureInfo.InvariantCulture) + 2).ToString(
                                         CultureInfo.InvariantCulture) +
@@ -803,4 +802,7 @@ public class ModuleParseErrorTests
 
     private static string MessageText(JsonNode? part) =>
         part is JsonObject ? part["string"]!.GetValue<string>() : part!.GetValue<string>();
+
+    [GeneratedRegex(@"(?m)^(\d+)(\| )")]
+    private static partial Regex SnippetLineNumberRegex();
 }

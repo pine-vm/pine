@@ -23,7 +23,7 @@ public abstract record LoadCompositionOrigin
         : LoadCompositionOrigin;
 }
 
-public static class LoadComposition
+public static partial class LoadComposition
 {
     public static ProcessWithLog<string, Result<string, (FileTree tree, LoadCompositionOrigin origin)>>
         LoadFromPathResolvingNetworkDependencies(
@@ -55,11 +55,7 @@ public static class LoadComposition
                     (loadFromEditorOk.tree, (LoadCompositionOrigin)new LoadCompositionOrigin.FromEditor(loadFromEditorOk.parsedUrl)));
         }
 
-        if (System.Text.RegularExpressions.Regex.Match(
-            sourcePath,
-            "^http(s|)\\:",
-            System.Text.RegularExpressions.RegexOptions.IgnoreCase)
-            .Success)
+        if (HttpSchemeRegex().Match(sourcePath).Success)
         {
             return
                 asProcess
@@ -127,4 +123,7 @@ public static class LoadComposition
 
     public static ProcessWithLog<string, T> AsProcessWithStringLog<T>(T result) =>
         new ProcessWithLog<string, T>.Result(result);
+
+    [System.Text.RegularExpressions.GeneratedRegex("^http(s|)\\:", System.Text.RegularExpressions.RegexOptions.IgnoreCase, "")]
+    private static partial System.Text.RegularExpressions.Regex HttpSchemeRegex();
 }

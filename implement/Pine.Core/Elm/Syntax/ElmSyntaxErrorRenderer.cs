@@ -375,7 +375,7 @@ public static partial class ElmSyntaxErrorRenderer
         public string[] Lines => _lines ??= text.Split(s_lineSeparators, StringSplitOptions.None);
     }
 
-    private sealed class RenderContext
+    private sealed partial class RenderContext
     {
         private readonly RenderSource _source;
 
@@ -487,9 +487,9 @@ public static partial class ElmSyntaxErrorRenderer
                 ?
                 Annotated
                 :
-                Regex.Match(
-                    _source.Lines.ElementAtOrDefault((_error.ContextRange?.Start.Row ?? _error.Region.Start.Row) - 1) ?? "",
-                    @"^\s*([a-z][\w]*)").Groups[1].Value;
+                DeclarationNameRegex().Match(
+                    _source.Lines.ElementAtOrDefault((_error.ContextRange?.Start.Row ?? _error.Region.Start.Row) - 1) ?? "")
+                    .Groups[1].Value;
 
         public string Snippet =>
             _snippet ??= _includeSource ? RenderSnippet(_source.Lines, _error, _constructContext) : "";
@@ -510,6 +510,9 @@ public static partial class ElmSyntaxErrorRenderer
 
         public string LowerName =>
             _lowerName ??= Found.Length > 0 ? char.ToLowerInvariant(Found[0]) + Found[1..] : "";
+
+        [GeneratedRegex(@"^\s*([a-z][\w]*)")]
+        private static partial Regex DeclarationNameRegex();
     }
 
     private static string RenderShaderDetail(ElmSyntaxProblem.Shader shader)

@@ -16,7 +16,7 @@ using Xunit;
 
 namespace Pine.IntegrationTests.CLI;
 
-public sealed class RunWatchCommandTests : IDisposable
+public sealed partial class RunWatchCommandTests : IDisposable
 {
     private static readonly TimeSpan s_wait = TimeSpan.FromSeconds(60);
 
@@ -227,7 +227,7 @@ public sealed class RunWatchCommandTests : IDisposable
             if (reportDurations)
             {
                 var latest =
-                    Regex.Matches(error.ToString(), @"(?m)^execution: ([0-9.]+) (ms|s)")
+                    ExecutionTimeRegex().Matches(error.ToString())
                     .Last();
 
                 var seconds =
@@ -297,16 +297,14 @@ public sealed class RunWatchCommandTests : IDisposable
 
         void AssertDurations(int compilations, int executions)
         {
-            Regex.Matches(error.ToString(), @"(?m)^source loading: (?:[0-9]+ ms|[0-9]+\.[0-9]{2} s)\r?$").Count.Should()
+            SourceLoadingDurationRegex().Matches(error.ToString()).Count.Should()
                 .Be(reportDurations ? compilations : 0);
 
-            Regex.Matches(
-                error.ToString(),
-                @"(?m)^dependency resolution and compilation: (?:[0-9]+ ms|[0-9]+\.[0-9]{2} s)\r?$")
+            CompilationDurationRegex().Matches(error.ToString())
                 .Count.Should()
                 .Be(reportDurations ? compilations : 0);
 
-            Regex.Matches(error.ToString(), @"(?m)^execution: (?:[0-9]+ ms|[0-9]+\.[0-9]{2} s)\r?$").Count.Should()
+            ExecutionDurationRegex().Matches(error.ToString()).Count.Should()
                 .Be(reportDurations ? executions : 0);
         }
     }
@@ -738,4 +736,16 @@ public sealed class RunWatchCommandTests : IDisposable
     }
 
     public void Dispose() => Directory.Delete(_directory, recursive: true);
+
+    [GeneratedRegex(@"(?m)^execution: ([0-9.]+) (ms|s)")]
+    private static partial Regex ExecutionTimeRegex();
+
+    [GeneratedRegex(@"(?m)^source loading: (?:[0-9]+ ms|[0-9]+\.[0-9]{2} s)\r?$")]
+    private static partial Regex SourceLoadingDurationRegex();
+
+    [GeneratedRegex(@"(?m)^dependency resolution and compilation: (?:[0-9]+ ms|[0-9]+\.[0-9]{2} s)\r?$")]
+    private static partial Regex CompilationDurationRegex();
+
+    [GeneratedRegex(@"(?m)^execution: (?:[0-9]+ ms|[0-9]+\.[0-9]{2} s)\r?$")]
+    private static partial Regex ExecutionDurationRegex();
 }
