@@ -1,3 +1,4 @@
+using Pine.Core.CodeAnalysis;
 using Pine.Core.Encodings;
 using Pine.Core.PineLanguage;
 using System;
@@ -111,6 +112,12 @@ public static partial class ElmSyntaxAbstractBinary
     {
         private ValueEncodingBinaryDeterministic.TreeEncoder<object> _writer = new(write, reuseReferences: true);
 
+        internal Encoder(Action<ReadOnlySpan<byte>> write, IEqualityComparer<object> referenceComparer)
+            : this(write) =>
+            _writer = new(write, reuseReferences: true, referenceComparer);
+
+        internal ref ValueEncodingBinaryDeterministic.TreeEncoder<object> Writer => ref _writer;
+
         /// <summary>All writes are synchronous; no bytes remain buffered.</summary>
         public void Flush() => _writer.EnsureActive();
 
@@ -120,7 +127,7 @@ public static partial class ElmSyntaxAbstractBinary
         private void Start(Constructor constructor, int count) =>
             _writer.StartExternalEval(ConstructorHash(constructor), count);
 
-        private void String(string value)
+        internal void String(string value)
         {
             if (_writer.TryReference(value))
                 return;
@@ -143,7 +150,7 @@ public static partial class ElmSyntaxAbstractBinary
                 String(values[index]);
         }
 
-        private void Value(PineValue value)
+        internal void Value(PineValue value)
         {
             switch (value)
             {
@@ -170,7 +177,7 @@ public static partial class ElmSyntaxAbstractBinary
             }
         }
 
-        private void Direction(InfixDirection direction)
+        internal void Direction(InfixDirection direction)
         {
             if (direction is not (InfixDirection.Left or InfixDirection.Right or InfixDirection.Non))
                 throw new ArgumentOutOfRangeException(nameof(direction), direction, "Unknown infix direction.");
@@ -199,33 +206,12 @@ public static partial class ElmSyntaxAbstractBinary
 
                 case Declaration.ChoiceTypeDeclaration choice:
                     Start(Constructor.ChoiceTypeDeclaration, 1);
-
-                    Start(
-                        Constructor.Choice,
-                        2 + choice.TypeDeclaration.Generics.Count + choice.TypeDeclaration.Constructors.Count);
-
-                    String(choice.TypeDeclaration.Name);
-                    _writer.Integer(choice.TypeDeclaration.Generics.Count);
-                    Strings(choice.TypeDeclaration.Generics);
-
-                    for (var index = 0; index < choice.TypeDeclaration.Constructors.Count; ++index)
-                    {
-                        var constructor = choice.TypeDeclaration.Constructors[index];
-                        Start(Constructor.ValueConstructor, 2 + constructor.Arguments.Count);
-                        String(constructor.Name);
-                        Value(constructor.NameValue);
-                        Annotations(constructor.Arguments);
-                    }
-
+                    Choice(choice.TypeDeclaration);
                     break;
 
                 case Declaration.AliasDeclaration alias:
                     Start(Constructor.AliasDeclaration, 1);
-                    Start(Constructor.Alias, 3 + alias.TypeAlias.Generics.Count);
-                    String(alias.TypeAlias.Name);
-                    _writer.Integer(alias.TypeAlias.Generics.Count);
-                    Strings(alias.TypeAlias.Generics);
-                    WriteTypeAnnotation(alias.TypeAlias.TypeAnnotation);
+                    Alias(alias.TypeAlias);
                     break;
 
                 case Declaration.PortDeclaration port:
@@ -235,11 +221,7 @@ public static partial class ElmSyntaxAbstractBinary
 
                 case Declaration.InfixDeclaration infix:
                     Start(Constructor.InfixDeclaration, 1);
-                    Start(Constructor.Infix, 4);
-                    Direction(infix.Infix.Direction);
-                    _writer.Integer(infix.Infix.Precedence);
-                    String(infix.Infix.Operator);
-                    String(infix.Infix.FunctionName);
+                    Infix(infix.Infix);
                     break;
 
                 default:
@@ -249,7 +231,61 @@ public static partial class ElmSyntaxAbstractBinary
             }
         }
 
-        private void Signature(Signature signature, bool optional)
+        internal void Choice(ChoiceTypeStruct choice)
+        {
+            Start(Constructor.Choice, 2 + choice.Generics.Count + choice.Constructors.Count);
+            String(choice.Name);
+            _writer.Integer(choice.Generics.Count);
+            Strings(choice.Generics);
+
+            for (var index = 0; index < choice.Constructors.Count; ++index)
+            {
+                var constructor = choice.Constructors[index];
+                Start(Constructor.ValueConstructor, 2 + constructor.Arguments.Count);
+                String(constructor.Name);
+                Value(constructor.NameValue);
+                Annotations(constructor.Arguments);
+            }
+        }
+
+        internal void Alias(TypeAlias alias)
+        {
+            Start(Constructor.Alias, 3 + alias.Generics.Count);
+            String(alias.Name);
+            _writer.Integer(alias.Generics.Count);
+            Strings(alias.Generics);
+            WriteTypeAnnotation(alias.TypeAnnotation);
+        }
+
+        internal void Infix(Infix infix)
+        {
+            Start(Constructor.Infix, 4);
+            Direction(infix.Direction);
+            _writer.Integer(infix.Precedence);
+            String(infix.Operator);
+            String(infix.FunctionName);
+        }
+
+        internal void QualifiedName(DeclQualifiedName name)
+        {
+            if (_writer.TryReference(name))
+                return;
+
+            Start(Constructor.QualifiedDeclaration, 1 + name.Namespaces.Count);
+            String(name.DeclName);
+            Strings(name.Namespaces);
+        }
+
+        internal void OptionalSignature(Signature? signature)
+        {
+            if (signature is not null)
+                Signature(signature, optional: true);
+
+            else
+                Start(Constructor.None, 0);
+        }
+
+        internal void Signature(Signature signature, bool optional)
         {
             if (optional)
                 Start(Constructor.Some, 1);
@@ -263,11 +299,7 @@ public static partial class ElmSyntaxAbstractBinary
         {
             Start(Constructor.Function, 2);
 
-            if (function.Signature is { } signature)
-                Signature(signature, optional: true);
-
-            else
-                Start(Constructor.None, 0);
+            OptionalSignature(function.Signature);
 
             Start(Constructor.Implementation, 2 + function.Declaration.Arguments.Count);
             String(function.Declaration.Name);
@@ -349,13 +381,13 @@ public static partial class ElmSyntaxAbstractBinary
             }
         }
 
-        private void Patterns(IReadOnlyList<Pattern> patterns)
+        internal void Patterns(IReadOnlyList<Pattern> patterns)
         {
             for (var index = 0; index < patterns.Count; ++index)
                 WritePattern(patterns[index]);
         }
 
-        private void WritePattern(Pattern pattern)
+        internal void WritePattern(Pattern pattern)
         {
             switch (pattern)
             {
@@ -516,14 +548,7 @@ public static partial class ElmSyntaxAbstractBinary
 
                 case Expression.Identifier identifier:
                     Start(Constructor.Identifier, 1);
-
-                    if (!_writer.TryReference(identifier.QualifiedName))
-                    {
-                        Start(Constructor.QualifiedDeclaration, 1 + identifier.QualifiedName.Namespaces.Count);
-                        String(identifier.QualifiedName.DeclName);
-                        Strings(identifier.QualifiedName.Namespaces);
-                    }
-
+                    QualifiedName(identifier.QualifiedName);
                     break;
 
                 case Expression.IfBlock conditional:

@@ -53,7 +53,7 @@ public static partial class ElmSyntaxAbstractBinary
         public void Dispose() => _reader.Dispose();
     }
 
-    private static T Read<T>(ref TreeReader reader) where T : class
+    internal static T Read<T>(ref TreeReader reader) where T : class
     {
         try
         {
@@ -81,7 +81,7 @@ public static partial class ElmSyntaxAbstractBinary
         return values;
     }
 
-    private static PineValue Value(ref TreeReader reader) =>
+    internal static PineValue Value(ref TreeReader reader) =>
         reader.Read<PineValue, ValueEncodingBinaryDeterministic.PineDecoding<object>>(default);
 
     private static BigInteger Integer(ref TreeReader reader)
@@ -118,7 +118,7 @@ public static partial class ElmSyntaxAbstractBinary
         return count;
     }
 
-    private static InfixDirection Direction(ref TreeReader reader) =>
+    internal static InfixDirection Direction(ref TreeReader reader) =>
         Int32(ref reader) switch
         {
             0 => InfixDirection.Left,
@@ -129,10 +129,20 @@ public static partial class ElmSyntaxAbstractBinary
             throw reader.Invalid("Invalid infix direction")
         };
 
-    private static void Arity(ref TreeReader reader, int actual, int expected, bool minimum = false)
+    internal static void Arity(ref TreeReader reader, int actual, int expected, bool minimum = false)
     {
         if (minimum ? actual < expected : actual != expected)
             throw reader.Invalid("Invalid constructor environment arity");
+    }
+
+    internal static Signature? OptionalSignature(ref TreeReader reader)
+    {
+        var signature = Read<object>(ref reader);
+
+        if (signature is not Signature && !ReferenceEquals(signature, s_noSignature))
+            throw reader.Invalid("Invalid optional signature");
+
+        return signature as Signature;
     }
 
     private readonly struct SyntaxDecoding<T> : ValueEncodingBinaryDeterministic.IDecoding<T, object> where T : class
@@ -262,12 +272,8 @@ public static partial class ElmSyntaxAbstractBinary
             case Constructor.Function:
                 {
                     Arity(ref reader, count, 2);
-                    var signature = Read<object>(ref reader);
-
-                    if (signature is not Signature && !ReferenceEquals(signature, s_noSignature))
-                        throw reader.Invalid("Invalid optional signature");
-
-                    return new FunctionStruct(signature as Signature, Read<FunctionImplementation>(ref reader));
+                    var signature = OptionalSignature(ref reader);
+                    return new FunctionStruct(signature, Read<FunctionImplementation>(ref reader));
                 }
 
             case Constructor.Implementation:

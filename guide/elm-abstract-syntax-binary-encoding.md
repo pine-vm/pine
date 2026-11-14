@@ -1,4 +1,4 @@
-# Binary Elm abstract syntax and SCC storage
+# Binary Elm syntax and SCC storage
 
 `Pine.Core.Elm.Syntax.Abstract.ElmSyntaxAbstractBinary` is independent of
 canonicalization, compilation, and SCC models. It encodes expressions, type
@@ -124,6 +124,72 @@ of immutable input memory, not copies.
 
 See [the reusable strategy spec](binary-tree-encoding-via-pine.md) and the
 [implementation log and allocation measurements](../explore/2026-11-14-reuse-pine-value-binary-encoding-implementation-log.md).
+
+## Prepared interpreter syntax
+
+`Pine.Core.Elm.Syntax.Interpreter.ElmSyntaxInterpreterPreparedBinary` adds an
+opt-in codec for `ElmSyntaxInterpreter.Prepared`, `PreparedDeclaration`,
+`PreparedExpression`, and `PreparedSourceDeclaration`. It does not replace
+`ElmSyntaxInterpreterPreparedJson`, `PreparedSourceDeclaration.Codec`, or the
+existing JSON-derived preparation cache keys.
+
+The stream/action `Encode` overloads leave streams open. Standalone
+`DecodePrepared`, `DecodeDeclaration`, `DecodeExpression`, and
+`DecodeSourceDeclaration` report consumed bytes for embedding. `ComputeHash`
+streams exactly the standalone prepared declaration bytes into SHA-256.
+`SourceDeclarationCodec` is an `ICacheCodec<PreparedSourceDeclaration>` adapter
+that requires a complete entry and rejects trailing bytes.
+
+The prepared encoder/decoder sessions can also write/read abstract declarations
+using `WriteSyntaxDeclaration`/`ReadSyntaxDeclaration`. All roots share one
+reference scope. Patterns, signatures, type annotations, names, strings and
+cached Pine values use the existing abstract codec; prepared expression bodies
+and dispatch plans have their own constructors. The same deterministic ASCII
+policy applies to all strings.
+
+Prepared constructors use the same Eval/external-hash/inline-environment
+envelope, without a separate version header. Their canonical ordinary-Pine
+result is a choice named `Prepared` plus the constructor name, with one argument
+containing the shallow environment list. `ResolveConstructorExpression`
+resolves these constructors together with the abstract and ASCII constructors.
+Static hashes are checked against ordinary interpretation by the equivalence
+tests; the specialized route never builds those canonical trees.
+
+| Constructor | Shallow environment |
+| --- | --- |
+| App | qualified key, prepared declaration, repeated in ordinal key order |
+| SourceDeclaration | original abstract declaration, retained prepared declaration |
+| Implementation | name, prepared body, patterns... |
+| ValueLiteral | exact evaluated Pine value |
+| LambdaExpression | prepared body, patterns... |
+| LetExpression | prepared body, prepared local declarations... |
+| CaseExpression | prepared scrutinee, retained dispatch plan |
+| CaseDispatch | dispatch segments in their original order |
+| ConstantValuePatterns | retained constant cases... |
+| ConstantCase | source pattern, exact matching Pine value, prepared body |
+
+Decoding reconstructs the retained prepared model directly; it never prepares
+the source again. This preserves reduced literals, arbitrary raw Pine payloads,
+cached record-field values, and constant/pattern/discard dispatch segments.
+Source/prepared pairs retain both bodies, even when they differ.
+
+Content-based prepared-expression reuse makes bytes independent of list
+identity or prior heap sharing. Structural hashes are weakly memoized by
+expression identity to avoid repeatedly hashing deep subtrees; dictionary
+iteration and memoization do not determine the wire order. Inputs must remain
+immutable, as with the abstract codec.
+
+Structural reuse can merge equivalent prepared expression instances. Treat a
+decoded source/prepared pair as a shared template: call `Rebind` before attaching
+identity-keyed source observers to obtain fresh expression occurrences and the
+current binding identities. Source paths are derived from the retained model,
+not serialized separately.
+
+Malformed counts, duplicate app keys, unknown constructors, wrong retained
+types, invalid references, and excessive nesting fail explicitly. The same
+512-level and available-stack checks and immutable-input ownership contract
+apply as for abstract syntax. This new format is not a JSON compatibility reader;
+switching persistence to it requires regenerating/versioning affected keys.
 
 ## SCC blobs
 

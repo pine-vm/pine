@@ -1614,6 +1614,34 @@ public class ValueEncodingBinaryDeterministicTests
         stream.Length.Should().Be(0);
     }
 
+    [Fact]
+    public void Reference_dictionary_reuse_preserves_the_requested_comparer()
+    {
+        IEqualityComparer<string>?[] comparers =
+            [StringComparer.OrdinalIgnoreCase, null, StringComparer.OrdinalIgnoreCase, StringComparer.Ordinal];
+
+        foreach (var comparer in comparers)
+        {
+            using var stream = new MemoryStream();
+
+            using (var encoder = new ValueEncodingBinaryDeterministic.TreeEncoder<string>(stream.Write, reuseReferences: true, comparer))
+            {
+                encoder.StartList(2);
+
+                foreach (var text in new[] { "a", "A" })
+                {
+                    if (!encoder.TryReference(text))
+                        encoder.Ascii(text);
+                }
+            }
+
+            DecodeRootExpectingOk(stream.ToArray()).Should().Be(
+                PineValue.List(
+                    PineValue.Blob([97]),
+                    PineValue.Blob(comparer == StringComparer.OrdinalIgnoreCase ? [97] : [65])));
+        }
+    }
+
     private static byte[] EncodeToBytes(PineValue value)
     {
         using var stream = new MemoryStream();

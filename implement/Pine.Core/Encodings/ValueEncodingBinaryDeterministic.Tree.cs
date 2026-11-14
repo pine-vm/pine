@@ -617,9 +617,27 @@ public static partial class ValueEncodingBinaryDeterministic
 
         private static Dictionary<T, long>? s_second;
 
-        public static Dictionary<T, long> Rent() =>
-            Interlocked.Exchange(ref s_available, null) ??
-            Interlocked.Exchange(ref s_second, null) ?? [];
+        public static Dictionary<T, long> Rent(IEqualityComparer<T>? comparer)
+        {
+            comparer ??= EqualityComparer<T>.Default;
+            var first = Interlocked.Exchange(ref s_available, null);
+
+            if (first is not null && ReferenceEquals(first.Comparer, comparer))
+                return first;
+
+            var second = Interlocked.Exchange(ref s_second, null);
+
+            if (first is not null)
+                Return(first);
+
+            if (second is not null && ReferenceEquals(second.Comparer, comparer))
+                return second;
+
+            if (second is not null)
+                Return(second);
+
+            return new(comparer);
+        }
 
         public static void Return(Dictionary<T, long> entries)
         {
@@ -636,7 +654,10 @@ public static partial class ValueEncodingBinaryDeterministic
     /// Optional bounded dictionary reuse is intended for short-lived syntax sessions.
     /// </summary>
     /// <remarks>Starts a fresh scope; optional dictionary reuse retains at most two bounded tables.</remarks>
-    public struct TreeEncoder<TItem>(Action<ReadOnlySpan<byte>> write, bool reuseReferences = false) : IDisposable where TItem : notnull
+    public struct TreeEncoder<TItem>(
+        Action<ReadOnlySpan<byte>> write,
+        bool reuseReferences = false,
+        IEqualityComparer<TItem>? referenceComparer = null) : IDisposable where TItem : notnull
     {
         private readonly Action<ReadOnlySpan<byte>> _write = write;
 
@@ -676,7 +697,12 @@ public static partial class ValueEncodingBinaryDeterministic
         {
             EnsureActive();
 
-            entries ??= _reuseReferences ? DictionaryPool<TItem>.Rent() : [];
+            entries ??=
+                _reuseReferences
+                ?
+                DictionaryPool<TItem>.Rent(referenceComparer)
+                :
+                new(referenceComparer);
 
             if (entries.TryGetValue(key, out var address))
             {
