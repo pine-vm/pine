@@ -26,6 +26,9 @@ public static partial class ElmSyntaxAbstractBinary
     /// </summary>
     public static PineValue? ResolveConstructorExpression(ReadOnlyMemory<byte> hash)
     {
+        if (ElmValueEncodingExpressions.StringFromAsciiHash.SequenceEqual(hash.Span))
+            return ElmValueEncodingExpressions.StringFromAscii;
+
         for (var index = 0; index < ConstructorHashBytes.Length / 32; ++index)
         {
             if (ConstructorHash((Constructor)index).SequenceEqual(hash.Span))

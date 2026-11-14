@@ -5,6 +5,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Runtime.CompilerServices;
 using System.Security.Cryptography;
+using System.Text;
 
 using InfixDirection = Pine.Core.Elm.Syntax.Concrete.InfixDirection;
 
@@ -124,8 +125,16 @@ public static partial class ElmSyntaxAbstractBinary
             if (_writer.TryReference(value))
                 return;
 
-            Start(Constructor.String, 1);
-            _writer.Utf32(value);
+            if (Ascii.IsValid(value))
+            {
+                _writer.StartExternalEval(ElmValueEncodingExpressions.StringFromAsciiHash, 1);
+                _writer.Ascii(value);
+            }
+            else
+            {
+                Start(Constructor.String, 1);
+                _writer.Utf32(value);
+            }
         }
 
         private void Strings(IReadOnlyList<string> values)

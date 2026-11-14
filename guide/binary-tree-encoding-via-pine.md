@@ -18,6 +18,14 @@ Eval(External256(hash(ExpressionEncoding.EncodeExpressionAsValue(C))),
 Here `hash` is based on the canonical representation as specified in [pine-value-encoding-and-content-addressing.md](pine-value-encoding-and-content-addressing.md).
 Store constructor hashes as static compiler data and whitelist them on decoding.
 
+For canonical Elm strings, codecs can reuse
+`Pine.Core.Elm.ElmValueEncodingExpressions.StringFromAscii` and its static
+`StringFromAsciiHash`. The expression consumes `[asciiBlob]` and produces the
+canonical tagged string with a UTF-32 payload. `TreeEncoder<TItem>.Ascii`
+streams a validated ASCII blob without a payload-sized temporary array. The
+AST codec combines this shared expression with its own constructor whitelist;
+see its [deterministic string policy](elm-abstract-syntax-binary-encoding.md).
+
 Flatten according to the **retained model**, not its canonical Pine shape.
 An application uses `[function, argument0, argument1, ...]`. A constructor with multiple variable-size components needs explicit counts or retained subobjects:
 `[moduleCount, module0, ..., name, pattern0, ...]`, or a separately constructed qualified-name object that is already retained in the model.

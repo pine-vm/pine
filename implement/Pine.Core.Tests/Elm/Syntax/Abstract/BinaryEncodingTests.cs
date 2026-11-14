@@ -9,9 +9,11 @@ using System;
 using System.Buffers.Binary;
 using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 using System.Numerics;
 using System.Runtime.ExceptionServices;
 using System.Security.Cryptography;
+using System.Text;
 using System.Threading;
 using Xunit;
 
@@ -207,6 +209,88 @@ public class BinaryEncodingTests
         length.Should().Be(encoded.Length);
         restored.Should().Equal(declarations);
         Encode(restored).Should().Equal(encoded);
+    }
+
+    [Fact]
+    public void Selects_ASCII_by_content_and_preserves_UTF32_decoding_and_deterministic_hashes()
+    {
+        var unicode = Encode(new Expression.GLSLExpression("\u0080"));
+        var utf32Hash = unicode.AsMemory(56, 32);
+        var allAscii = new string([.. Enumerable.Range(0, 128).Select(value => (char)value)]);
+
+        foreach (var text in new[] { "", "\0", "\u007f", allAscii, "\u0080", "a\u00e9", "a\U0001f600" })
+        {
+            var expression = new Expression.GLSLExpression(text);
+            var bytes = Encode(expression);
+            var ascii = Ascii.IsValid(text);
+
+            bytes.AsSpan(56, 32).SequenceEqual(ElmValueEncodingExpressions.StringFromAsciiHash)
+                .Should().Be(ascii);
+
+            BinaryPrimitives.ReadInt32BigEndian(bytes.AsSpan(100)).Should().Be(
+                ascii ? text.Length : Encoding.UTF32.GetByteCount(text));
+
+            ElmSyntaxAbstractBinary.DecodeExpression(bytes, out var consumed).Should().Be(expression);
+            consumed.Should().Be(bytes.Length);
+
+            var copy = new Expression.GLSLExpression(new string(text.ToCharArray()));
+            Encode(copy).Should().Equal(bytes);
+
+            var declaration = Function("root", expression);
+
+            ElmSyntaxAbstractBinary.ComputeHash(Function("root", copy)).ToArray().Should().Equal(
+                ElmSyntaxAbstractBinary.ComputeHash(declaration).ToArray());
+
+            using var legacy = new MemoryStream();
+
+            using (var writer = new ValueEncodingBinaryDeterministic.TreeEncoder<object>(legacy.Write))
+            {
+                writer.StartExternalEval(bytes.AsSpan(8, 32), 1);
+                writer.StartExternalEval(utf32Hash.Span, 1);
+                writer.Utf32(text);
+            }
+
+            ElmSyntaxAbstractBinary.DecodeExpression(legacy.ToArray(), out _).Should().Be(expression);
+        }
+    }
+
+    [Fact]
+    public void ASCII_strings_preserve_padding_and_streaming_buffer_boundaries()
+    {
+        foreach (var length in new[] { 0, 1, 2, 3, 4, 4095, 4096, 4097, 1_000_000 })
+        {
+            var expression = new Expression.GLSLExpression(new string('x', length));
+            var bytes = Encode(expression);
+            bytes.Length.Should().Be(104 + ((length + 3) & ~3));
+            bytes.AsSpan(104, length).IndexOfAnyExcept((byte)'x').Should().Be(-1);
+            bytes.AsSpan(104 + length).IndexOfAnyExcept((byte)0).Should().Be(-1);
+            ElmSyntaxAbstractBinary.DecodeExpression(bytes, out _).Should().Be(expression);
+        }
+    }
+
+    [Fact]
+    public void Rejects_non_ASCII_payloads_wrong_ASCII_arities_and_wrong_retained_types()
+    {
+        var bytes = Encode(new Expression.GLSLExpression("a"));
+
+        foreach (var value in new byte[] { 0x80, 0xff })
+        {
+            var invalid = (byte[])bytes.Clone();
+            invalid[104] = value;
+            Action decode = () => ElmSyntaxAbstractBinary.DecodeExpression(invalid, out _);
+            decode.Should().Throw<InvalidDataException>();
+        }
+
+        foreach (var arity in new[] { 0, 2 })
+        {
+            var invalid = (byte[])bytes.Clone();
+            BinaryPrimitives.WriteInt32BigEndian(invalid.AsSpan(92), arity);
+            Action decode = () => ElmSyntaxAbstractBinary.DecodeExpression(invalid, out _);
+            decode.Should().Throw<InvalidDataException>();
+        }
+
+        Action wrongType = () => ElmSyntaxAbstractBinary.DecodeExpression(bytes.AsMemory(48), out _);
+        wrongType.Should().Throw<InvalidDataException>();
     }
 
     [Fact]
@@ -573,6 +657,6 @@ public class BinaryEncodingTests
         ElmSyntaxAbstractBinary.Encode(write, expression);
         var allocated = GC.GetAllocatedBytesForCurrentThread() - before;
         length.Should().BeGreaterThan(1_000_000);
-        allocated.Should().BeLessThan(8192, "large UTF-8 strings and integers use pooled span buffers");
+        allocated.Should().BeLessThan(8192, "large strings and integers use bounded span buffers");
     }
 }

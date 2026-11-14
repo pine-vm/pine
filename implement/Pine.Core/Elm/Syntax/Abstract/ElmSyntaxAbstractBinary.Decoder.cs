@@ -160,21 +160,37 @@ public static partial class ElmSyntaxAbstractBinary
 
         public T EvaluateExternal(ref TreeReader reader, ReadOnlyMemory<byte> reference)
         {
-            var constructor = -1;
+            object result;
 
-            for (var index = 0; index < ConstructorHashBytes.Length / 32; ++index)
+            if (ElmValueEncodingExpressions.StringFromAsciiHash.SequenceEqual(reference.Span))
             {
-                if (ConstructorHash((Constructor)index).SequenceEqual(reference.Span))
+                Arity(ref reader, reader.ReadInlineListLength(), 1);
+                var bytes = reader.ReadInlineBlob();
+
+                if (!Ascii.IsValid(bytes.Span))
+                    throw reader.Invalid("Invalid ASCII string byte");
+
+                result = Encoding.ASCII.GetString(bytes.Span);
+            }
+            else
+            {
+                var constructor = -1;
+
+                for (var index = 0; index < ConstructorHashBytes.Length / 32; ++index)
                 {
-                    constructor = index;
-                    break;
+                    if (ConstructorHash((Constructor)index).SequenceEqual(reference.Span))
+                    {
+                        constructor = index;
+                        break;
+                    }
                 }
+
+                if (constructor < 0)
+                    throw reader.Invalid("Unknown syntax constructor expression hash");
+
+                result = Construct(ref reader, (Constructor)constructor, reader.ReadInlineListLength());
             }
 
-            if (constructor < 0)
-                throw reader.Invalid("Unknown syntax constructor expression hash");
-
-            var result = Construct(ref reader, (Constructor)constructor, reader.ReadInlineListLength());
             return result is T typed ? typed : throw reader.Invalid("Constructor result has the wrong retained type");
         }
     }

@@ -1595,6 +1595,25 @@ public class ValueEncodingBinaryDeterministicTests
         chunks.Select(chunk => chunk.Length).Should().Equal(4, 4, 4);
     }
 
+    [Theory]
+    [InlineData("\u0080")]
+    [InlineData("ascii\u00e9")]
+    [InlineData("\ud800")]
+    public void ASCII_writer_rejects_non_ASCII_before_emitting_any_bytes(string text)
+    {
+        using var stream = new MemoryStream();
+
+        Action encode =
+            () =>
+            {
+                using var writer = new ValueEncodingBinaryDeterministic.TreeEncoder<object>(stream.Write);
+                writer.Ascii(text);
+            };
+
+        encode.Should().Throw<ArgumentException>();
+        stream.Length.Should().Be(0);
+    }
+
     private static byte[] EncodeToBytes(PineValue value)
     {
         using var stream = new MemoryStream();

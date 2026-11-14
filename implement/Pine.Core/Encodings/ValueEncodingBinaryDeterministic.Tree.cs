@@ -7,6 +7,7 @@ using System.Diagnostics.CodeAnalysis;
 using System.IO;
 using System.Numerics;
 using System.Runtime.CompilerServices;
+using System.Text;
 using System.Threading;
 
 namespace Pine.Core.Encodings;
@@ -739,6 +740,27 @@ public static partial class ValueEncodingBinaryDeterministic
             Span<byte> padding = stackalloc byte[3];
             padding.Clear();
             Bytes(padding[..count]);
+        }
+
+        /// <summary>Streams an ASCII blob through a bounded stack buffer, rejecting non-ASCII input.</summary>
+        public void Ascii(string value)
+        {
+            if (!System.Text.Ascii.IsValid(value))
+                throw new ArgumentException("Expected an ASCII string.", nameof(value));
+
+            Int32(TagBlob);
+            Int32(value.Length);
+            Span<byte> buffer = stackalloc byte[4096];
+
+            for (var index = 0; index < value.Length;)
+            {
+                var count = Math.Min(buffer.Length, value.Length - index);
+                var written = Encoding.ASCII.GetBytes(value.AsSpan(index, count), buffer);
+                Bytes(buffer[..written]);
+                index += count;
+            }
+
+            Padding(value.Length);
         }
 
         /// <summary>Streams canonical Pine UTF-32 scalars through a bounded stack buffer.</summary>

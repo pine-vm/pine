@@ -24,9 +24,10 @@ using (var encoder = new ElmSyntaxAbstractBinary.Encoder(stream.Write))
 ```
 
 Writes are synchronous; `Flush` does not end the reference scope. Disposal clears
-and releases reusable reference dictionaries. Strings stream canonical big-endian
-UTF-32 through a bounded stack buffer. Arbitrary-precision integers use canonical
-Pine signed-magnitude blobs and pooled span storage for large magnitudes.
+and releases reusable reference dictionaries. Strings stream ASCII or canonical
+big-endian UTF-32 through a bounded stack buffer. Arbitrary-precision integers
+use canonical Pine signed-magnitude blobs and pooled span storage for large
+magnitudes.
 
 Read those roots with the corresponding decoder methods:
 
@@ -65,6 +66,25 @@ these expression representations are initialized only when that resolver is used
 never by the specialized syntax route. The generated constructor hashes are
 verified against those expressions by the Elm-value equivalence tests.
 
+The resolver also admits the reusable
+`Pine.Core.Elm.ElmValueEncodingExpressions.StringFromAscii` expression. Its
+environment is `[asciiBlob]`, with one byte per character (0 through 127), and
+its result is the same canonical Elm string as the UTF-32 constructor produces.
+Other codecs can use this encoded expression and its static
+`StringFromAsciiHash` without depending on the AST model. The specialized
+decoder validates ASCII and constructs the retained .NET string directly;
+ordinary Pine interpretation expands the ASCII bytes into canonical UTF-32.
+
+The encoder uses ASCII exactly when **every UTF-16 code unit is at most 127**,
+including the empty string, NUL and DEL. Otherwise it encodes the entire string
+as UTF-32, without replacement or normalization. This content-only policy has
+no size threshold and does not depend on culture, platform, pooling, prior
+encodings or heap sharing. It is deterministic within a Pine release and is
+part of the persistence/hash contract. Reference reuse applies to strings in
+either representation. Previously stored UTF-32 strings remain decodable,
+but re-encoding ASCII strings now changes bytes and dependent declaration/SCC
+content addresses; regenerate persistent keys across this encoding change.
+
 Environments follow the retained .NET model, not the canonical value shape:
 
 | Constructor | Shallow environment |
@@ -77,7 +97,7 @@ Environments follow the retained .NET model, not the canonical value shape:
 | NamedPattern | retained qualified name, cached tag value, patterns... |
 | Qualified name | name, module components... |
 | RecordPattern | fieldCount, field names..., cached field values... |
-| String | raw UTF-32 blob |
+| String | raw ASCII blob when all characters are ASCII; otherwise raw UTF-32 blob |
 | Literal | source scalar/string, cached Pine value |
 
 Record fields, setters, function parts, signatures and other retained aggregate
