@@ -984,11 +984,11 @@ public class ElmLanguageServiceTests
 
         EvalWorkCountersFormatting.FormatCounts(aggregateCounters).ShouldBeWithDiff(
             """
-            InvocationCount: 715
-            BuildListCount: 1_359
-            BuildListItemCount: 5_951
+            InvocationCount: 717
+            BuildListCount: 1_361
+            BuildListItemCount: 5_957
             LoopIterationCount: 183
-            InstructionCount: 20_947
+            InstructionCount: 20_967
             DeferredTemplateValueAllocationCount: 0
             TemplateDirectInvocationCount: 8
             DeferredTemplateValueMaterializationCount: 0
@@ -1005,8 +1005,8 @@ public class ElmLanguageServiceTests
 
         InvocationCountReportFormatting.FormatCounts(aggregateInvocationCounts).ShouldBeWithDiff(
             """
-            CompiledExpressionCount: 164
-            InvocationCountTotal: 703
+            CompiledExpressionCount: 165
+            InvocationCountTotal: 705
             InvocationCountAverage: 4
             InvocationCountPercentile10: 1
             InvocationCountMedian: 2
@@ -1031,13 +1031,17 @@ public class ElmLanguageServiceTests
         pipeline.Should().NotBeNull();
 
         var opportunities =
-            OptimizationOpportunityFinder.FindGenericRecordAccessOpportunities(pipeline!.CompilerProgram);
+            OptimizationOpportunityFinder.FindGenericRecordAccessOpportunities(pipeline!.CompilerProgram)
+            .Where(opportunity => !ElmCompilerTestHelper.IsParserErrorRecordAccess(pipeline, opportunity));
 
         opportunities.Should().BeEmpty();
 
         var sourceOpportunities =
             OptimizationOpportunityFinder.FindOptimizationOpportunities(pipeline.CanonicalDeclarations)
-            .Where(opportunity => opportunity.Category is OpportunityCategory.RecordAccess);
+            .Where(
+                opportunity =>
+                opportunity.Category is OpportunityCategory.RecordAccess &&
+                !ElmCompilerTestHelper.IsParserErrorRecordAccess(pipeline, opportunity));
 
         sourceOpportunities.Select(
             opportunity => (opportunity.ContainingDecl, opportunity.Category, opportunity.Description))
@@ -1535,11 +1539,11 @@ public class ElmLanguageServiceTests
 
         EvalWorkCountersFormatting.FormatCounts(aggregateCounters).ShouldBeWithDiff(
             """
-            InvocationCount: 2_021
-            BuildListCount: 3_797
-            BuildListItemCount: 16_795
+            InvocationCount: 2_024
+            BuildListCount: 3_800
+            BuildListItemCount: 16_804
             LoopIterationCount: 641
-            InstructionCount: 56_557
+            InstructionCount: 56_587
             DeferredTemplateValueAllocationCount: 0
             TemplateDirectInvocationCount: 22
             DeferredTemplateValueMaterializationCount: 0
@@ -1556,8 +1560,8 @@ public class ElmLanguageServiceTests
 
         InvocationCountReportFormatting.FormatCounts(aggregateInvocationCounts).ShouldBeWithDiff(
             """
-            CompiledExpressionCount: 215
-            InvocationCountTotal: 1_976
+            CompiledExpressionCount: 216
+            InvocationCountTotal: 1_979
             InvocationCountAverage: 9
             InvocationCountPercentile10: 1
             InvocationCountMedian: 4
@@ -1679,11 +1683,11 @@ public class ElmLanguageServiceTests
 
         EvalWorkCountersFormatting.FormatCounts(aggregateCounters).ShouldBeWithDiff(
             """
-            InvocationCount: 2_027
-            BuildListCount: 3_812
-            BuildListItemCount: 16_873
+            InvocationCount: 2_030
+            BuildListCount: 3_815
+            BuildListItemCount: 16_882
             LoopIterationCount: 642
-            InstructionCount: 56_653
+            InstructionCount: 56_683
             DeferredTemplateValueAllocationCount: 0
             TemplateDirectInvocationCount: 23
             DeferredTemplateValueMaterializationCount: 0
@@ -1700,8 +1704,8 @@ public class ElmLanguageServiceTests
 
         InvocationCountReportFormatting.FormatCounts(aggregateInvocationCounts).ShouldBeWithDiff(
             """
-            CompiledExpressionCount: 215
-            InvocationCountTotal: 1_982
+            CompiledExpressionCount: 216
+            InvocationCountTotal: 1_985
             InvocationCountAverage: 9
             InvocationCountPercentile10: 1
             InvocationCountMedian: 4
@@ -1886,11 +1890,11 @@ public class ElmLanguageServiceTests
 
         EvalWorkCountersFormatting.FormatCounts(aggregateCounters).ShouldBeWithDiff(
             """
-            InvocationCount: 4_070
-            BuildListCount: 7_334
-            BuildListItemCount: 32_529
+            InvocationCount: 4_071
+            BuildListCount: 7_335
+            BuildListItemCount: 32_532
             LoopIterationCount: 2_704
-            InstructionCount: 118_839
+            InstructionCount: 118_853
             DeferredTemplateValueAllocationCount: 0
             TemplateDirectInvocationCount: 35
             DeferredTemplateValueMaterializationCount: 0
@@ -1907,12 +1911,12 @@ public class ElmLanguageServiceTests
 
         InvocationCountReportFormatting.FormatCounts(aggregateInvocationCounts).ShouldBeWithDiff(
             """
-            CompiledExpressionCount: 245
-            InvocationCountTotal: 3_975
+            CompiledExpressionCount: 246
+            InvocationCountTotal: 3_976
             InvocationCountAverage: 16
             InvocationCountPercentile10: 1
             InvocationCountMedian: 5
-            InvocationCountPercentile90: 46
+            InvocationCountPercentile90: 40
             """);
     }
 

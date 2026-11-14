@@ -105,6 +105,20 @@ public class CoreStringFunctionTests
         result.Should().Be(ToPine(String("")));
     }
 
+    [Theory]
+    [InlineData("  byte char\tfinally\nlast ")]
+    [InlineData("  byte char\tfinally\nlast")]
+    public void Words_publish_canonical_string_values(string input)
+    {
+        var result =
+            CoreLibraryTestHelper.ApplyGenericPine(
+                GetStringFunction("words"),
+                [ToPine(String(input))],
+                s_vm);
+
+        result.Should().Be(ToPine(ElmList(String("byte"), String("char"), String("finally"), String("last"))));
+    }
+
     [Fact]
     public void IsEmpty_empty_string()
     {

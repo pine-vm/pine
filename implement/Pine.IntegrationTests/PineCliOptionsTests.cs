@@ -8,6 +8,78 @@ namespace Pine.IntegrationTests;
 
 public class PineCliOptionsTests
 {
+    [Theory]
+    [InlineData("remove it manually", "generate", "static-html-text-empty/expect/0-19-1/src/Main.elm.html")]
+    [InlineData("Closest name: static-html-text-empty", "generate", "static-html-text-empt/expect/0-19-1/src/Main.elm.js")]
+    [InlineData("maxHunks", "run", "--reference", "--max-diff-hunks", "-1")]
+    [InlineData("compiler version qualifier", "generate", "static-html-text-empty/expect/src/Main.elm.js")]
+    [InlineData("Only Elm 0.19.1 is available", "generate", "static-html-text-empty/expect/0-19-2/src/Main.elm.js")]
+    public void ElmMakeEcmascript_CLI_reports_actionable_errors(string expectedError, params string[] arguments)
+    {
+        var result = RunPine(["elm", "maintain", "make-ecmascript", .. arguments]);
+        result.ExitCode.Should().Be(1);
+        result.StandardError.Should().Contain(expectedError).And.NotContain("Unhandled exception");
+    }
+
+    [Fact]
+    public void ElmMakeEcmascript_CLI_displays_corpus_statistics()
+    {
+        var result = RunPine("elm", "maintain", "make-ecmascript", "stats");
+        result.ExitCode.Should().Be(0);
+        result.StandardOutput.Should().MatchRegex(@"Scenarios: [1-9][0-9]*; expectations: [1-9][0-9]*");
+        result.StandardOutput.Should().Contain("Package archives:").And.Contain("Registry:");
+        result.StandardOutput.Should().MatchRegex(@"Compiler 0\.19\.1: [1-9][0-9]* expectations\.");
+        result.StandardError.Should().BeEmpty();
+    }
+
+    [Fact]
+    public void ElmMakeEcmascript_CLI_rejects_empty_scenarios_without_a_stack_trace()
+    {
+        var directory = CreateFormatTestDirectory();
+
+        try
+        {
+            Directory.CreateDirectory(Path.Combine(directory, "scenarios", "empty", "input-app"));
+            var result = RunPine("elm", "maintain", "make-ecmascript", "stats", "--test-data", directory);
+            result.ExitCode.Should().Be(1);
+            result.StandardError.Should().Contain("zero expectation files").And.NotContain("Unhandled exception");
+        }
+        finally
+        {
+            Directory.Delete(directory, recursive: true);
+        }
+    }
+
+    [Theory]
+    [InlineData()]
+    [InlineData("help")]
+    [InlineData("--help")]
+    [InlineData("elm", "--help")]
+    public void ElmMakeEcmascript_CLI_is_hidden_from_default_help(params string[] arguments)
+    {
+        var result = RunPine(arguments);
+        result.ExitCode.Should().Be(0);
+        result.StandardOutput.Should().NotMatchRegex(@"(?m)^\s+maintain\s").And.NotContain("make-ecmascript");
+        result.StandardError.Should().BeEmpty();
+    }
+
+    [Fact]
+    public void ElmMakeEcmascript_CLI_exposes_help_when_explicitly_addressed()
+    {
+        var maintain = RunPine("elm", "maintain", "--help");
+        maintain.ExitCode.Should().Be(0);
+        maintain.StandardOutput.Should().Contain("make-ecmascript");
+        maintain.StandardError.Should().BeEmpty();
+
+        var command = RunPine("elm", "maintain", "make-ecmascript", "--help");
+        command.ExitCode.Should().Be(0);
+
+        command.StandardOutput
+            .Should().Contain("stats").And.Contain("update-packages").And.Contain("generate").And.Contain("run");
+
+        command.StandardError.Should().BeEmpty();
+    }
+
     [Fact]
     public void Uppercase_short_version_option_prints_pine_version()
     {

@@ -13,7 +13,8 @@ public static class ElmCommand
                 InteractiveCommand.Create(dynamicPGOShare),
                 MakeCommand.Create(),
                 Elm.FormatCommand.Create(),
-                Elm.TestCommand.Create()
+                Elm.TestCommand.Create(),
+                Elm.MaintainCommand.Create()
             };
 
         return command;

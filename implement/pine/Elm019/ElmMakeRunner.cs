@@ -8,6 +8,8 @@ namespace Pine.Elm019;
 
 public static class ElmMakeRunner
 {
+    internal static string ExecutableFilePath => s_executableFilePathCached.Value;
+
     private readonly static Lazy<string> s_executableFilePathCached =
         new(
             () =>
