@@ -18,6 +18,8 @@ public static partial class ElmSyntaxAbstractBinary
 {
     private static readonly object s_noSignature = new();
 
+    private sealed record OptionalValue(object Value);
+
     /// <summary>Reads a syntax session, preserving references across roots. Dispose releases scratch storage.</summary>
     /// <remarks>Starts an independent reference scope over immutable input.</remarks>
     public ref struct Decoder(ReadOnlyMemory<byte> source)
@@ -35,6 +37,24 @@ public static partial class ElmSyntaxAbstractBinary
 
         /// <summary>Reads one annotation in the current scope.</summary>
         public TypeAnnotation ReadTypeAnnotation() => Read<TypeAnnotation>(ref _reader);
+
+        /// <summary>Reads a complete abstract source file.</summary>
+        public File ReadFile() => Read<File>(ref _reader);
+
+        /// <summary>Reads a module definition.</summary>
+        public Module ReadModule() => Read<Module>(ref _reader);
+
+        /// <summary>Reads an import.</summary>
+        public Import ReadImport() => Read<Import>(ref _reader);
+
+        /// <summary>Reads an exposing list.</summary>
+        public Exposing ReadExposing() => Read<Exposing>(ref _reader);
+
+        /// <summary>Reads an exposed name.</summary>
+        public TopLevelExpose ReadTopLevelExpose() => Read<TopLevelExpose>(ref _reader);
+
+        /// <summary>Reads a pattern.</summary>
+        public Pattern ReadPattern() => Read<Pattern>(ref _reader);
 
         /// <summary>Reads a declaration list without resetting session references.</summary>
         public Declaration[] ReadDeclarations()
@@ -136,13 +156,19 @@ public static partial class ElmSyntaxAbstractBinary
     }
 
     internal static Signature? OptionalSignature(ref TreeReader reader)
+        => Optional<Signature>(ref reader);
+
+    private static T? Optional<T>(ref TreeReader reader) where T : class
     {
-        var signature = Read<object>(ref reader);
+        var value = Read<object>(ref reader);
 
-        if (signature is not Signature && !ReferenceEquals(signature, s_noSignature))
-            throw reader.Invalid("Invalid optional signature");
+        if (ReferenceEquals(value, s_noSignature))
+            return null;
 
-        return signature as Signature;
+        if (value is OptionalValue { Value: T typed })
+            return typed;
+
+        throw reader.Invalid("Invalid optional " + typeof(T).Name);
     }
 
     private readonly struct SyntaxDecoding<T> : ValueEncodingBinaryDeterministic.IDecoding<T, object> where T : class
@@ -267,7 +293,84 @@ public static partial class ElmSyntaxAbstractBinary
 
             case Constructor.Some:
                 Arity(ref reader, count, 1);
-                return Read<Signature>(ref reader);
+                return new OptionalValue(Read<object>(ref reader));
+
+            case Constructor.File:
+                {
+                    Arity(ref reader, count, 2, minimum: true);
+                    var module = Read<Module>(ref reader);
+                    var importCount = Count(ref reader, count - 2);
+                    var imports = Array<Import>(ref reader, importCount);
+                    return new File(module, imports, Array<Declaration>(ref reader, count - 2 - importCount));
+                }
+
+            case Constructor.NormalModule:
+                Arity(ref reader, count, 1);
+                return new Module.NormalModule(Read<DefaultModuleData>(ref reader));
+
+            case Constructor.PortModule:
+                Arity(ref reader, count, 1);
+                return new Module.PortModule(Read<DefaultModuleData>(ref reader));
+
+            case Constructor.EffectModule:
+                Arity(ref reader, count, 1);
+                return new Module.EffectModule(Read<EffectModuleData>(ref reader));
+
+            case Constructor.DefaultModuleData:
+                {
+                    Arity(ref reader, count, 1, minimum: true);
+                    var exposing = Read<Exposing>(ref reader);
+                    return new DefaultModuleData(Array<string>(ref reader, count - 1), exposing);
+                }
+
+            case Constructor.EffectModuleData:
+                {
+                    Arity(ref reader, count, 3, minimum: true);
+                    var exposing = Read<Exposing>(ref reader);
+                    var command = Optional<string>(ref reader);
+                    var subscription = Optional<string>(ref reader);
+                    return new EffectModuleData(Array<string>(ref reader, count - 3), exposing, command, subscription);
+                }
+
+            case Constructor.Import:
+                {
+                    Arity(ref reader, count, 2, minimum: true);
+                    var alias = Optional<string[]>(ref reader);
+                    var exposing = Optional<Exposing>(ref reader);
+                    return new Import(Array<string>(ref reader, count - 2), alias, exposing);
+                }
+
+            case Constructor.ModuleName:
+                return Array<string>(ref reader, count);
+
+            case Constructor.All:
+                Arity(ref reader, count, 0);
+                return new Exposing.All();
+
+            case Constructor.Explicit:
+                return new Exposing.Explicit(Array<TopLevelExpose>(ref reader, count));
+
+            case Constructor.InfixExpose:
+                Arity(ref reader, count, 1);
+                return new TopLevelExpose.InfixExpose(Read<string>(ref reader));
+
+            case Constructor.FunctionExpose:
+                Arity(ref reader, count, 1);
+                return new TopLevelExpose.FunctionExpose(Read<string>(ref reader));
+
+            case Constructor.TypeOrAliasExpose:
+                Arity(ref reader, count, 1);
+                return new TopLevelExpose.TypeOrAliasExpose(Read<string>(ref reader));
+
+            case Constructor.TypeExpose:
+                Arity(ref reader, count, 1);
+                return new TopLevelExpose.TypeExpose(Read<ExposedType>(ref reader));
+
+            case Constructor.ExposedType:
+                Arity(ref reader, count, 2);
+                var exposedName = Read<string>(ref reader);
+                var constructors = Count(ref reader, 1);
+                return new ExposedType(exposedName, constructors == 1);
 
             case Constructor.Function:
                 {

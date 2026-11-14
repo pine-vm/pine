@@ -3,6 +3,7 @@ using Pine.Core.Elm.Syntax;
 using Pine.Core.Elm.Syntax.Abstract;
 using Pine.Core.Elm.Syntax.Interpreter;
 using Pine.Core.Encodings;
+using System;
 using System.Collections.Generic;
 using System.Numerics;
 using Xunit;
@@ -13,11 +14,11 @@ namespace Pine.Core.Tests.Elm.Syntax.Abstract;
 using InfixDirection = Core.Elm.Syntax.Concrete.InfixDirection;
 
 /// <summary>
-/// Tests verifying that the JSON encoding and decoding of the abstract Elm syntax model
-/// (see <see cref="ElmSyntaxAbstractJson"/>) round-trips every kind of node reachable from
+/// Tests verifying that the binary encoding and decoding of the abstract Elm syntax model
+/// (see <see cref="ElmSyntaxAbstractBinary"/>) round-trips every kind of node reachable from
 /// <see cref="File"/>, and that the prepared interpreter representation round-trips as well.
 /// </summary>
-public class JsonRoundtripTests
+public class ModelBinaryRoundtripTests
 {
     private static Expression.IntegerLiteral IntExpr(int value) =>
         new(value, IntegerEncoding.EncodeSignedInteger(value));
@@ -44,13 +45,27 @@ public class JsonRoundtripTests
     /// </summary>
     private static void AssertRoundtrip<T>(T value)
     {
-        var json = ElmSyntaxAbstractJson.ToJsonString(value);
+        var bytes = ElmSyntaxAbstractTestHelper.Encode(value!);
+        using var decoder = new ElmSyntaxAbstractBinary.Decoder(bytes);
 
-        var back = ElmSyntaxAbstractJson.FromJsonString<T>(json);
+        object back =
+            value switch
+            {
+                Expression => decoder.ReadExpression(),
+                Pattern => decoder.ReadPattern(),
+                TypeAnnotation => decoder.ReadTypeAnnotation(),
+                Declaration => decoder.ReadDeclaration(),
+                Module => decoder.ReadModule(),
+                Exposing => decoder.ReadExposing(),
+                Import => decoder.ReadImport(),
+
+                _ =>
+                throw new NotImplementedException("Unexpected roundtrip node: " + typeof(T).Name)
+            };
 
         back.Should().Be(value);
-
-        ElmSyntaxAbstractJson.ToJsonString(back).Should().Be(json);
+        decoder.BytesRead.Should().Be(bytes.Length);
+        ElmSyntaxAbstractTestHelper.Encode(back).Should().Equal(bytes);
     }
 
     [Fact]
@@ -416,13 +431,12 @@ public class JsonRoundtripTests
 
         var file = ConvertFromConcrete.FromFile(parsed);
 
-        var json = ElmSyntaxAbstractJson.FileToJsonString(file);
-
-        var back = ElmSyntaxAbstractJson.FileFromJsonString(json);
+        var bytes = ElmSyntaxAbstractTestHelper.Encode(file);
+        var back = ElmSyntaxAbstractBinary.DecodeFile(bytes, out var consumed);
 
         back.Should().Be(file);
-
-        ElmSyntaxAbstractJson.FileToJsonString(back).Should().Be(json);
+        consumed.Should().Be(bytes.Length);
+        ElmSyntaxAbstractTestHelper.Encode(back).Should().Equal(bytes);
     }
 
     [Fact]
@@ -432,9 +446,8 @@ public class JsonRoundtripTests
             ElmSyntaxInterpreter.PrepareModules([SampleModuleText])
             .Extract(err => throw new System.Exception("Failed to prepare modules: " + err));
 
-        var json = ElmSyntaxInterpreterPreparedJson.ToJsonString(prepared);
-
-        var back = ElmSyntaxInterpreterPreparedJson.FromJsonString(json);
+        var bytes = ElmSyntaxAbstractTestHelper.Encode(prepared);
+        var back = ElmSyntaxInterpreterPreparedBinary.DecodePrepared(bytes, out _);
 
         // The Prepared record does not provide structural equality on its dictionary, so compare entries.
         back.Declarations.Should().HaveCount(prepared.Declarations.Count);
@@ -451,8 +464,7 @@ public class JsonRoundtripTests
         GetPreparedLiteral(back, "Sample", "floaty").Value.ListItemsOrNull().Should().NotBeNull();
         GetPreparedLiteral(back, "Sample", "letter").Value.IsBlob().Should().BeTrue();
 
-        // Re-encoding the decoded value yields identical JSON.
-        ElmSyntaxInterpreterPreparedJson.ToJsonString(back).Should().Be(json);
+        ElmSyntaxAbstractTestHelper.Encode(back).Should().Equal(bytes);
     }
 
     [Fact]
@@ -484,9 +496,8 @@ public class JsonRoundtripTests
             ElmSyntaxInterpreter.PrepareModules([ModuleA, ModuleB])
             .Extract(err => throw new System.Exception("Failed to prepare modules: " + err));
 
-        var json = ElmSyntaxInterpreterPreparedJson.ToJsonString(prepared);
-
-        var back = ElmSyntaxInterpreterPreparedJson.FromJsonString(json);
+        var bytes = ElmSyntaxAbstractTestHelper.Encode(prepared);
+        var back = ElmSyntaxInterpreterPreparedBinary.DecodePrepared(bytes, out _);
 
         back.Declarations.Should().HaveCount(prepared.Declarations.Count);
 
@@ -499,7 +510,7 @@ public class JsonRoundtripTests
             decodedDeclaration!.GetType().Should().Be(entry.Value.GetType());
         }
 
-        ElmSyntaxInterpreterPreparedJson.ToJsonString(back).Should().Be(json);
+        ElmSyntaxAbstractTestHelper.Encode(back).Should().Equal(bytes);
     }
 
     [Fact]
@@ -517,11 +528,11 @@ public class JsonRoundtripTests
             ElmSyntaxInterpreter.PrepareModules([ModuleText])
             .Extract(err => throw new System.Exception("Failed to prepare modules: " + err));
 
-        var json = ElmSyntaxInterpreterPreparedJson.ToJsonString(prepared);
-        var back = ElmSyntaxInterpreterPreparedJson.FromJsonString(json);
+        var bytes = ElmSyntaxAbstractTestHelper.Encode(prepared);
+        var back = ElmSyntaxInterpreterPreparedBinary.DecodePrepared(bytes, out _);
 
         GetPreparedLiteral(back, "Numbers", "answer").Value.IntegerOrNull.Should().Be(new BigInteger(42));
-        ElmSyntaxInterpreterPreparedJson.ToJsonString(back).Should().Be(json);
+        ElmSyntaxAbstractTestHelper.Encode(back).Should().Equal(bytes);
     }
 
     [Fact]
@@ -531,9 +542,8 @@ public class JsonRoundtripTests
             new ElmSyntaxInterpreter.Prepared(
                 new Dictionary<Core.CodeAnalysis.DeclQualifiedName, ElmSyntaxInterpreter.PreparedDeclaration>());
 
-        var json = ElmSyntaxInterpreterPreparedJson.ToJsonString(prepared);
-
-        var back = ElmSyntaxInterpreterPreparedJson.FromJsonString(json);
+        var bytes = ElmSyntaxAbstractTestHelper.Encode(prepared);
+        var back = ElmSyntaxInterpreterPreparedBinary.DecodePrepared(bytes, out _);
 
         back.Declarations.Should().BeEmpty();
     }

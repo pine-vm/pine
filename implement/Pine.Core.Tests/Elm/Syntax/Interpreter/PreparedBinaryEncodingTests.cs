@@ -581,4 +581,31 @@ public partial class PreparedBinaryEncodingTests
         length.Should().Be(1_000_104);
         allocated.Should().BeLessThan(8192);
     }
+
+    [Fact]
+    public void Prepared_source_cache_encoding_allocates_only_owned_output_for_large_payloads()
+    {
+        static PreparedSourceDeclaration Source(char character)
+        {
+            var code = new string(character, 1_000_000);
+
+            return
+                new(
+                    new Declaration.FunctionDeclaration(
+                        new(null, new("shader", [], new AstExpression.GLSLExpression(code)))),
+                    Function("shader", new Expr.GLSLExpression(code)));
+        }
+
+        var source = Source('x');
+        var codec = PreparedSourceDeclaration.Codec;
+        _ = codec.Encode(source);
+        var before = GC.GetAllocatedBytesForCurrentThread();
+        var bytes = codec.Encode(source);
+        var allocated = GC.GetAllocatedBytesForCurrentThread() - before;
+        allocated.Should().BeLessThan(bytes.Length + 8192L);
+
+        _ = codec.Encode(Source('y'));
+        codec.Decode(bytes).Syntax.Should().Be(source.Syntax, "pooled scratch must not back retained output");
+        codec.Encode(Source('x')).ToArray().Should().Equal(bytes.ToArray());
+    }
 }

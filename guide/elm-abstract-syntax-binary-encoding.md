@@ -1,13 +1,14 @@
 # Binary Elm syntax and SCC storage
 
 `Pine.Core.Elm.Syntax.Abstract.ElmSyntaxAbstractBinary` is independent of
-canonicalization, compilation, and SCC models. It encodes expressions, type
-annotations, and declarations, including local bindings and patterns.
+canonicalization, compilation, and SCC models. It replaces the former syntax
+JSON serializer and encodes complete files, module/import/exposing metadata,
+expressions, type annotations, declarations, local bindings and patterns.
 
 ## Syntax sessions and embedding
 
 `Encode` accepts either a `Stream` or an `Action<ReadOnlySpan<byte>>`, and a single
-expression, declaration, or counted declaration batch. The stream remains open.
+file, expression, declaration, or counted declaration batch. The stream remains open.
 `ComputeHash(Declaration)` streams exactly the standalone declaration encoding
 into SHA-256, with weak, identity-keyed memoization of immutable declarations.
 It does not build an intermediate byte array or JSON document.
@@ -42,8 +43,15 @@ var consumed = decoder.BytesRead;
 The enclosing format determines the root kinds. Decoding consumes only those
 roots, not trailing enclosing bytes. Start the decoder at the embedded sequence's
 first byte and advance the enclosing reader by `BytesRead`. The standalone
-`DecodeExpression`, `DecodeDeclaration`, and `DecodeDeclarations` helpers also
+`DecodeFile`, `DecodeExpression`, `DecodeDeclaration`, and `DecodeDeclarations` helpers also
 report their consumed extent. A new encoder/decoder starts an independent scope.
+
+Sessions also expose `WriteFile`/`ReadFile`, `WriteModule`/`ReadModule`,
+`WriteImport`/`ReadImport`, `WriteExposing`/`ReadExposing`,
+`WriteTopLevelExpose`/`ReadTopLevelExpose`, and `WritePattern`/`ReadPattern`.
+File encoding shares retained syntax across all declarations. Module variants,
+import order, explicit exposing order, and null versus empty optional values
+are preserved, not normalized.
 
 ## Syntax wire format: Pine constructors, no version header
 
@@ -89,6 +97,13 @@ Environments follow the retained .NET model, not the canonical value shape:
 
 | Constructor | Shallow environment |
 | --- | --- |
+| File | module, importCount, imports..., declarations... |
+| DefaultModuleData | exposing list, module name components... |
+| EffectModuleData | exposing list, optional command, optional subscription, module name components... |
+| Import | optional alias, optional exposing list, module name components... |
+| ModuleName | alias components... |
+| Explicit | exposed items... |
+| ExposedType | name, exposesConstructors (integer 0 or 1) |
 | Application | function, arguments... |
 | LambdaExpression | body, patterns... |
 | CaseExpression | scrutinee, retained cases... |
@@ -127,11 +142,11 @@ See [the reusable strategy spec](binary-tree-encoding-via-pine.md) and the
 
 ## Prepared interpreter syntax
 
-`Pine.Core.Elm.Syntax.Interpreter.ElmSyntaxInterpreterPreparedBinary` adds an
-opt-in codec for `ElmSyntaxInterpreter.Prepared`, `PreparedDeclaration`,
-`PreparedExpression`, and `PreparedSourceDeclaration`. It does not replace
-`ElmSyntaxInterpreterPreparedJson`, `PreparedSourceDeclaration.Codec`, or the
-existing JSON-derived preparation cache keys.
+`Pine.Core.Elm.Syntax.Interpreter.ElmSyntaxInterpreterPreparedBinary` encodes
+`ElmSyntaxInterpreter.Prepared`, `PreparedDeclaration`, `PreparedExpression`,
+and `PreparedSourceDeclaration`. It replaces prepared JSON serialization and
+backs `PreparedSourceDeclaration.Codec`, including persistent test-discovery
+preparation caches.
 
 The stream/action `Encode` overloads leave streams open. Standalone
 `DecodePrepared`, `DecodeDeclaration`, `DecodeExpression`, and
@@ -178,6 +193,10 @@ identity or prior heap sharing. Structural hashes are weakly memoized by
 expression identity to avoid repeatedly hashing deep subtrees; dictionary
 iteration and memoization do not determine the wire order. Inputs must remain
 immutable, as with the abstract codec.
+Large string hashes are also weakly memoized, avoiding repeated scans of shared
+source/prepared shader payloads. Cache and compiler-document encoding use pooled
+scratch buffers, but returned bytes always own their storage; decoders never
+retain pooled scratch.
 
 Structural reuse can merge equivalent prepared expression instances. Treat a
 decoded source/prepared pair as a shared template: call `Rebind` before attaching
@@ -188,8 +207,36 @@ not serialized separately.
 Malformed counts, duplicate app keys, unknown constructors, wrong retained
 types, invalid references, and excessive nesting fail explicitly. The same
 512-level and available-stack checks and immutable-input ownership contract
-apply as for abstract syntax. This new format is not a JSON compatibility reader;
-switching persistence to it requires regenerating/versioning affected keys.
+apply as for abstract syntax. Optional payload kinds are validated, including
+the distinction between `Nothing` and a malformed `Just Nothing`.
+
+## Migration and runtime costs
+
+The syntax and prepared JSON APIs and their legacy JSON fallback are removed.
+There is no automatic conversion of old persisted JSON. Preparation storage now
+uses the `prepared-declarations-v3-binary` subtree. `PreparedDeclarationInput`
+hashes the UTF-8 bytes `pine-unreduced-prepared-declaration-v3-binary`, a NUL
+byte, then the 32-byte standalone binary syntax digest, using SHA-256. The final
+digest is weakly memoized by immutable syntax identity; warm lookups neither
+serialize syntax nor allocate payloads.
+
+Canonicalization's SCC member tie-breaker uses ordinal binary digest order
+instead of rendering syntax as JSON. `CompilerModelJson` remains a compiler-model
+document format, but its source-declaration leaves are base64 binary syntax,
+with complete-entry validation. Its general Pine/integer/name JSON converters
+live in `Pine.Core.Json`, not the syntax codec. Old compiler-model documents with
+JSON source declarations must also be regenerated.
+
+Specialized decoding avoids JSON reflection and temporary canonical Pine trees.
+Reference dictionaries reuse their bounded storage and perform one hash lookup
+per new entry. Streaming hashes avoid intermediate byte arrays; cache encoding
+allocates its owned output rather than a growing series of payload-sized arrays.
+These are not guarantees that every tree is smaller or faster: constructor
+envelopes can outweigh JSON for short or mostly distinct nodes. Warmed
+source/prepared probes on three large compiler declarations showed lower
+encoding/decoding time and allocations than JSON; synthetic wide/repeated/deep
+trees and a million-character ASCII shader were checked separately. Performance
+still depends on tree shape, sharing, cache warmth and the host runtime.
 
 ## SCC blobs
 

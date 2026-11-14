@@ -15,7 +15,7 @@ using Xunit;
 
 using AbstractDeclaration = Pine.Core.Elm.Syntax.Abstract.Declaration;
 using AbstractExpression = Pine.Core.Elm.Syntax.Abstract.Expression;
-using AbstractJson = Pine.Core.Elm.Syntax.Abstract.ElmSyntaxAbstractJson;
+using BinaryTestHelper = Pine.Core.Tests.Elm.Syntax.Abstract.ElmSyntaxAbstractTestHelper;
 using AbstractModule = Pine.Core.Elm.Syntax.Abstract.Module;
 using ConvertFromAbstractConcrete = Pine.Core.Elm.Syntax.Abstract.ConvertFromConcrete;
 using ElmInterpreter = Pine.Core.Elm.Syntax.Interpreter.ElmSyntaxInterpreter;
@@ -24,9 +24,6 @@ namespace Pine.Core.Tests.Elm.Syntax.Interpreter;
 
 public class PreparedSyntaxTests
 {
-    private sealed record LegacyPreparedJson(
-        IReadOnlyDictionary<DeclQualifiedName, AbstractDeclaration> Declarations);
-
     private static DeclQualifiedName Name(string moduleName, string declarationName) =>
         DeclQualifiedName.Create([moduleName], declarationName);
 
@@ -113,9 +110,6 @@ public class PreparedSyntaxTests
                         "BuildLegacyDeclarations does not handle declaration variant: " + declaration.GetType().Name),
                 });
     }
-
-    private static string BuildLegacyPreparedJson(string moduleText) =>
-        AbstractJson.ToJsonString(new LegacyPreparedJson(BuildLegacyDeclarations(moduleText)));
 
     [Theory]
     [InlineData("9007199254740993.0", "1")]
@@ -601,7 +595,7 @@ public class PreparedSyntaxTests
     }
 
     [Fact]
-    public void Prepared_json_roundtrip_preserves_case_dispatch_and_semantics()
+    public void Prepared_binary_roundtrip_preserves_case_dispatch_and_semantics()
     {
         const string ModuleText =
             """
@@ -626,8 +620,8 @@ public class PreparedSyntaxTests
 
         var prepared = Prepare(ModuleText);
 
-        var json = ElmSyntaxInterpreterPreparedJson.ToJsonString(prepared);
-        var roundtripped = ElmSyntaxInterpreterPreparedJson.FromJsonString(json);
+        var bytes = BinaryTestHelper.Encode(prepared);
+        var roundtripped = ElmSyntaxInterpreterPreparedBinary.DecodePrepared(bytes, out _);
 
         GetLiteral(roundtripped, "intValue").Value.IntegerOrNull.Should().Be(new BigInteger(42));
 
@@ -649,11 +643,11 @@ public class PreparedSyntaxTests
 
         Evaluate(roundtripped, "Test.classify \"0\"").Should().Be("\"zero\"");
         Evaluate(roundtripped, "Test.classify \"9\"").Should().Be("\"many\"");
-        ElmSyntaxInterpreterPreparedJson.ToJsonString(roundtripped).Should().Be(json);
+        BinaryTestHelper.Encode(roundtripped).Should().Equal(bytes);
     }
 
     [Fact]
-    public void Prepared_json_legacy_abstract_declarations_load_as_prepared_shape_and_preserve_semantics()
+    public void Prepared_binary_retains_preparation_of_abstract_declarations_and_semantics()
     {
         const string ModuleText =
             """
@@ -673,7 +667,10 @@ public class PreparedSyntaxTests
                         "many"
             """;
 
-        var prepared = ElmSyntaxInterpreterPreparedJson.FromJsonString(BuildLegacyPreparedJson(ModuleText));
+        var prepared =
+            ElmSyntaxInterpreterPreparedBinary.DecodePrepared(
+                BinaryTestHelper.Encode(new ElmInterpreter.Prepared(BuildLegacyDeclarations(ModuleText))),
+                out _);
 
         prepared.Declarations[Name("Test", "literalValue")]
             .Should().BeOfType<ElmInterpreter.PreparedDeclaration.FunctionDeclaration>()

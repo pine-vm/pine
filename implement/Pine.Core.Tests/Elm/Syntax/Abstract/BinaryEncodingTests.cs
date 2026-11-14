@@ -22,7 +22,7 @@ using PineValue = Pine.Core.PineLanguage.PineValue;
 
 namespace Pine.Core.Tests.Elm.Syntax.Abstract;
 
-public class BinaryEncodingTests
+public partial class BinaryEncodingTests
 {
     private static Expression Integer(BigInteger value) =>
         new Expression.IntegerLiteral(value, IntegerEncoding.EncodeSignedInteger(value));

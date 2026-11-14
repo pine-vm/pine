@@ -31,6 +31,7 @@ internal static class SyntaxElmValueEncoding
         {
             ElmValue elm => elm,
             string text => ElmValue.StringInstance(text),
+            bool boolean => boolean ? ElmValue.TrueValue : ElmValue.FalseValue,
             int integer => ElmValue.Integer(integer),
             BigInteger integer => ElmValue.Integer(integer),
             InfixDirection.Left => Tag("Left"),
@@ -38,6 +39,40 @@ internal static class SyntaxElmValueEncoding
             InfixDirection.Non => Tag("Non"),
             DeclQualifiedName name => Record(("moduleName", name.Namespaces), ("name", name.DeclName)),
             QualifiedNameRef name => Record(("moduleName", name.ModuleName), ("name", name.Name)),
+
+            File file =>
+            Record(
+                ("moduleDefinition", file.ModuleDefinition),
+                ("imports", file.Imports),
+                ("declarations", file.Declarations)),
+
+            Module.NormalModule module => Tag("NormalModule", module.ModuleData),
+            Module.PortModule module => Tag("PortModule", module.ModuleData),
+            Module.EffectModule module => Tag("EffectModule", module.ModuleData),
+
+            DefaultModuleData module =>
+            Record(("moduleName", module.ModuleName), ("exposingList", module.ExposingList)),
+
+            EffectModuleData module =>
+            Record(
+                ("moduleName", module.ModuleName),
+                ("exposingList", module.ExposingList),
+                ("command", module.Command is { } command ? Tag("Just", command) : Tag("Nothing")),
+                ("subscription", module.Subscription is { } subscription ? Tag("Just", subscription) : Tag("Nothing"))),
+
+            Import import =>
+            Record(
+                ("moduleName", import.ModuleName),
+                ("moduleAlias", import.ModuleAlias is { } alias ? Tag("Just", alias) : Tag("Nothing")),
+                ("exposingList", import.ExposingList is { } exposing ? Tag("Just", exposing) : Tag("Nothing"))),
+
+            Exposing.All => Tag("All"),
+            Exposing.Explicit exposing => Tag("Explicit", exposing.Exposes),
+            TopLevelExpose.InfixExpose expose => Tag("InfixExpose", expose.Name),
+            TopLevelExpose.FunctionExpose expose => Tag("FunctionExpose", expose.Name),
+            TopLevelExpose.TypeOrAliasExpose expose => Tag("TypeOrAliasExpose", expose.Name),
+            TopLevelExpose.TypeExpose expose => Tag("TypeExpose", expose.ExposedType),
+            ExposedType expose => Record(("name", expose.Name), ("exposesConstructors", expose.ExposesConstructors)),
 
             FunctionStruct function =>
             Record(

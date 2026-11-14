@@ -12,6 +12,45 @@ internal static class BinaryEncoding
 {
     private static readonly UTF8Encoding s_utf8 = new(false, true);
 
+    internal sealed class PooledBuffer : IDisposable
+    {
+        private byte[]? _buffer = ArrayPool<byte>.Shared.Rent(4096);
+
+        private int _length;
+
+        public ReadOnlySpan<byte> WrittenSpan =>
+            (_buffer ?? throw new ObjectDisposedException(nameof(PooledBuffer))).AsSpan(0, _length);
+
+        public void Write(ReadOnlySpan<byte> bytes)
+        {
+            var buffer = _buffer ?? throw new ObjectDisposedException(nameof(PooledBuffer));
+            var required = checked(_length + bytes.Length);
+
+            if (required > buffer.Length)
+            {
+                var capacity = Math.Max(required, (int)Math.Min(Array.MaxLength, (long)buffer.Length * 2));
+                var next = ArrayPool<byte>.Shared.Rent(capacity);
+                buffer.AsSpan(0, _length).CopyTo(next);
+                _buffer = next;
+                ArrayPool<byte>.Shared.Return(buffer);
+                buffer = next;
+            }
+
+            bytes.CopyTo(buffer.AsSpan(_length));
+            _length = required;
+        }
+
+        public void Dispose()
+        {
+            if (_buffer is not { } buffer)
+                return;
+
+            _buffer = null;
+            _length = 0;
+            ArrayPool<byte>.Shared.Return(buffer);
+        }
+    }
+
     internal sealed class Writer(Action<ReadOnlySpan<byte>> write) : IDisposable
     {
         private byte[]? _buffer = ArrayPool<byte>.Shared.Rent(4096);

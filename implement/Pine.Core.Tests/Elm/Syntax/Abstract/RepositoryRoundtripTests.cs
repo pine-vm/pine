@@ -200,13 +200,13 @@ public class RepositoryRoundtripTests
         Core.Elm.Syntax.Abstract.File first,
         Core.Elm.Syntax.Abstract.File second)
     {
-        var firstJson = ElmSyntaxAbstractJson.FileToJsonString(first);
-        var secondJson = ElmSyntaxAbstractJson.FileToJsonString(second);
+        var firstBinary = ElmSyntaxAbstractTestHelper.Encode(first);
+        var secondBinary = ElmSyntaxAbstractTestHelper.Encode(second);
         var commonLength = 0;
 
-        while (commonLength < firstJson.Length &&
-            commonLength < secondJson.Length &&
-            firstJson[commonLength] == secondJson[commonLength])
+        while (commonLength < firstBinary.Length &&
+            commonLength < secondBinary.Length &&
+            firstBinary[commonLength] == secondBinary[commonLength])
         {
             commonLength++;
         }
@@ -215,11 +215,13 @@ public class RepositoryRoundtripTests
         var contextStart = Math.Max(0, commonLength - ContextLength);
 
         return
-            "Abstract syntax differs at JSON offset " + commonLength +
+            "Abstract syntax differs at binary offset " + commonLength +
             ". First: " +
-            firstJson.Substring(contextStart, Math.Min(ContextLength * 2, firstJson.Length - contextStart)) +
+            Convert.ToHexString(
+                firstBinary.AsSpan(contextStart, Math.Min(ContextLength * 2, firstBinary.Length - contextStart))) +
             ". Second: " +
-            secondJson.Substring(contextStart, Math.Min(ContextLength * 2, secondJson.Length - contextStart));
+            Convert.ToHexString(
+                secondBinary.AsSpan(contextStart, Math.Min(ContextLength * 2, secondBinary.Length - contextStart)));
     }
 
     private static string FindRepositoryRoot()

@@ -14,6 +14,9 @@ namespace Pine.Core.Elm.ElmCompilerInDotnet;
 
 public partial class Canonicalization
 {
+    private static readonly IComparer<ReadOnlyMemory<byte>> s_syntaxHashOrder =
+        Comparer<ReadOnlyMemory<byte>>.Create(static (left, right) => left.Span.SequenceCompareTo(right.Span));
+
     private sealed record SourceSlot(DeclQualifiedName Reference, DeclQualifiedName? Owner,
         IReadOnlyList<DeclQualifiedName> Dependencies, InterfaceDefinition? Interface = null);
 
@@ -409,8 +412,8 @@ public partial class Canonicalization
                 [
                 .. members.OrderBy(item => item.DeclName, StringComparer.Ordinal)
                 .ThenBy(
-                    item => Abstract.ElmSyntaxAbstractJson.ToJsonString(preparations[item].Canonical.Syntax),
-                    StringComparer.Ordinal)
+                    item => Abstract.ElmSyntaxAbstractBinary.ComputeHash(preparations[item].Canonical.Syntax),
+                    s_syntaxHashOrder)
                 ];
 
             var localSlots =

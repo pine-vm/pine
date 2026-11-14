@@ -10,11 +10,13 @@ using Pine.Core.Files;
 using Pine.Core.IO;
 using Pine.Core.Tests.Elm.LanguageServer;
 using System;
+using System.Buffers.Binary;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Collections.Immutable;
 using System.Diagnostics.CodeAnalysis;
 using System.Linq;
+using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
 using System.Threading;
@@ -482,5 +484,64 @@ public class ElmTestDiscoveryCacheTests
 
         PreparedDeclarationInput.FromConcrete(DeclQualifiedName.Create(["Other"], "root"), Parse("root = 1"))
             .ComputeHash().ToArray().Should().Equal(input.ComputeHash().ToArray());
+    }
+
+    [Fact]
+    public void Prepared_binary_cache_isolated_from_JSON_entries_and_reused_by_a_fresh_memory_tier()
+    {
+        var input =
+            PreparedDeclarationInput.FromConcrete(DeclQualifiedName.Create(["Main"], "root"), Parse("root = [ 1, 1 ]"));
+
+        var original = PreparedSourceDeclaration.Prepare(input.Syntax);
+        var directory = ImmutableList.Create("migration");
+        var store = new FileStoreFromConcurrentDictionary();
+        var hex = Convert.ToHexStringLower(input.ComputeHash().Span);
+
+        store.SetFileContent(
+            directory.Add("prepared-declarations-v2").Add(hex[..2]).Add(hex[2..]),
+            "{}"u8.ToArray());
+
+        var cache = ElmTestDiscoveryCaches.CreateInMemory(store, directory);
+        cache.PreparedDeclarations.TryGetValue(input, out _).Should().BeFalse();
+        cache.PreparedDeclarations.Set(input, original);
+
+        var fresh = ElmTestDiscoveryCaches.CreateInMemory(store, directory);
+        fresh.PreparedDeclarations.TryGetValue(input, out var decoded).Should().BeTrue();
+        decoded!.Syntax.Should().Be(input.Syntax);
+
+        PreparedSourceDeclaration.Codec.Encode(decoded).ToArray().Should()
+            .Equal(PreparedSourceDeclaration.Codec.Encode(original).ToArray());
+
+        var entry =
+            store.GetFileContent(
+            directory.Add("prepared-declarations-v3-binary").Add(hex[..2]).Add(hex[2..]))!.Value;
+
+        BinaryPrimitives.ReadInt32BigEndian(entry.Span[64..]).Should().Be(6, "the cache payload is a binary Eval");
+    }
+
+    [Fact]
+    public void Prepared_hash_is_domain_separated_binary_and_warm_lookup_allocates_no_payload()
+    {
+        var input =
+            PreparedDeclarationInput.FromConcrete(DeclQualifiedName.Create(["Main"], "root"), Parse("root = 42"));
+
+        var syntaxHash = Core.Elm.Syntax.Abstract.ElmSyntaxAbstractBinary.ComputeHash(input.Syntax);
+
+        var expected =
+            SHA256.HashData(
+                [.. "pine-unreduced-prepared-declaration-v3-binary\0"u8, .. syntaxHash.Span]);
+
+        input.ComputeHash().ToArray().Should().Equal(expected);
+
+        for (var index = 0; index < 100; ++index)
+            _ = input.ComputeHash();
+
+        var before = GC.GetAllocatedBytesForCurrentThread();
+
+        for (var index = 0; index < 1000; ++index)
+            _ = input.ComputeHash();
+
+        var allocated = GC.GetAllocatedBytesForCurrentThread() - before;
+        allocated.Should().BeLessThan(1024);
     }
 }

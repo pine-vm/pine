@@ -273,8 +273,9 @@ public class PreparedExpressionRenderingTests
         PreparedExpressionRendering.Render(ExpressionFor(prepared, "unit")).Should().Be("[]");
 
         var back =
-            ElmSyntaxInterpreterPreparedJson.FromJsonString(
-                ElmSyntaxInterpreterPreparedJson.ToJsonString(prepared));
+            ElmSyntaxInterpreterPreparedBinary.DecodePrepared(
+                Core.Tests.Elm.Syntax.Abstract.ElmSyntaxAbstractTestHelper.Encode(prepared),
+                out _);
 
         PreparedExpressionRendering.Render(ExpressionFor(back, "empty")).Should().Be("[]");
         PreparedExpressionRendering.Render(ExpressionFor(back, "unit")).Should().Be("[]");

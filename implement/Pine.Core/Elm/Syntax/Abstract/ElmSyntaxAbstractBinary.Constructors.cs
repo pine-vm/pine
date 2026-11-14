@@ -204,6 +204,49 @@ public static partial class ElmSyntaxAbstractBinary
             Constructor.RecordUpdateExpression => Tag("RecordUpdateExpression", At(0), Tail(1)),
             Constructor.GLSLExpression => Tag("GLSLExpression", At(0)),
 
+            Constructor.File =>
+            Record(
+                ("moduleDefinition", At(0)),
+                ("imports", Slice(Number(2), At(1))),
+                ("declarations", Skip(Add(At(1), 2)))),
+
+            Constructor.NormalModule => Tag("NormalModule", At(0)),
+            Constructor.PortModule => Tag("PortModule", At(0)),
+            Constructor.EffectModule => Tag("EffectModule", At(0)),
+            Constructor.DefaultModuleData => Record(("moduleName", Tail(1)), ("exposingList", At(0))),
+
+            Constructor.EffectModuleData =>
+            Record(
+                ("moduleName", Tail(3)),
+                ("exposingList", At(0)),
+                ("command", At(1)),
+                ("subscription", At(2))),
+
+            Constructor.Import =>
+            Record(("moduleName", Tail(2)), ("moduleAlias", At(0)), ("exposingList", At(1))),
+
+            Constructor.ModuleName =>
+            Expr.ConditionalInst(
+                Literal(PineKernelValues.FalseValue),
+                environment,
+                Literal(StringEncoding.ValueFromString("ModuleName"))),
+
+            Constructor.All => Tag("All"),
+            Constructor.Explicit => Tag("Explicit", environment),
+            Constructor.InfixExpose => Tag("InfixExpose", At(0)),
+            Constructor.FunctionExpose => Tag("FunctionExpose", At(0)),
+            Constructor.TypeOrAliasExpose => Tag("TypeOrAliasExpose", At(0)),
+            Constructor.TypeExpose => Tag("TypeExpose", At(0)),
+
+            Constructor.ExposedType =>
+            Record(
+                ("name", At(0)),
+                ("exposesConstructors",
+                Expr.ConditionalInst(
+                    Builtin("equal", At(1), Number(1)),
+                    Literal(PineKernelValues.FalseValue),
+                    Literal(PineKernelValues.TrueValue)))),
+
             _ =>
             throw new NotImplementedException("Unknown syntax constructor: " + constructor)
         };

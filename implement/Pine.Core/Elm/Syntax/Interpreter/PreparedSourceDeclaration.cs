@@ -7,7 +7,6 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Runtime.CompilerServices;
 using System.Security.Cryptography;
-using System.Text.Json;
 using System.Text.Json.Serialization;
 
 using Engine = Pine.Core.Elm.Syntax.Interpreter.ElmSyntaxInterpreter;
@@ -30,7 +29,7 @@ public sealed record PreparedDeclarationInput(Abstract.Declaration Syntax)
 
     private sealed record Digest(ReadOnlyMemory<byte> Bytes);
 
-    private static readonly ConditionalWeakTable<Abstract.Declaration, Digest> s_syntaxHashes = [];
+    private static readonly ConditionalWeakTable<Abstract.Declaration, Digest> s_hashes = [];
 
     /// <summary>
     /// Noncached compatibility projection from the caller's CST to anonymous preparation input.
@@ -72,26 +71,17 @@ public sealed record PreparedDeclarationInput(Abstract.Declaration Syntax)
     /// environment/configuration inputs: operator lowering and closed-expression reduction are disabled.
     /// Bump the domain version when preparation semantics or the serialized model change.
     /// </summary>
-    public ReadOnlyMemory<byte> ComputeHash()
-    {
-        var syntaxHash =
-            s_syntaxHashes.GetValue(
-                Syntax,
-                syntax => new(
-                    SHA256.HashData(
-                        JsonSerializer.SerializeToUtf8Bytes(
-                            syntax,
-                            Abstract.ElmSyntaxAbstractJson.JsonSerializerOptions))));
-
-        return
-            SHA256.HashData(
-                JsonSerializer.SerializeToUtf8Bytes(
-                    new[]
-                    {
-                        "pine-unreduced-prepared-declaration-v2",
-                        Convert.ToHexStringLower(syntaxHash.Bytes.Span)
-                    }));
-    }
+    public ReadOnlyMemory<byte> ComputeHash() =>
+        s_hashes.GetValue(
+            Syntax,
+            static syntax =>
+            {
+                ReadOnlySpan<byte> domain = "pine-unreduced-prepared-declaration-v3-binary\0"u8;
+                Span<byte> input = stackalloc byte[domain.Length + 32];
+                domain.CopyTo(input);
+                Abstract.ElmSyntaxAbstractBinary.ComputeHash(syntax).Span.CopyTo(input[domain.Length..]);
+                return new(SHA256.HashData(input));
+            }).Bytes;
 }
 
 /// <summary>
@@ -133,18 +123,7 @@ public sealed class PreparedSourceDeclaration(
     public PreparedSourceDeclaration Rebind(Func<DeclQualifiedName, DeclQualifiedName> bindings) =>
         PreparedSourceRebinding.Apply(this, bindings);
 
-    /// <summary>Lossless codec reusing the interpreter's prepared/abstract syntax serialization.</summary>
-    public static ICacheCodec<PreparedSourceDeclaration> Codec { get; } = new DeclarationCodec();
-
-    private sealed class DeclarationCodec : ICacheCodec<PreparedSourceDeclaration>
-    {
-        public ReadOnlyMemory<byte> Encode(PreparedSourceDeclaration value) =>
-            JsonSerializer.SerializeToUtf8Bytes(value, ElmSyntaxInterpreterPreparedJson.JsonSerializerOptions);
-
-        public PreparedSourceDeclaration Decode(ReadOnlyMemory<byte> bytes) =>
-            JsonSerializer.Deserialize<PreparedSourceDeclaration>(
-                bytes.Span,
-                ElmSyntaxInterpreterPreparedJson.JsonSerializerOptions) ??
-            throw new JsonException("Expected a prepared source declaration.");
-    }
+    /// <summary>Lossless binary storage of the original syntax and retained preparation.</summary>
+    public static ICacheCodec<PreparedSourceDeclaration> Codec { get; } =
+        ElmSyntaxInterpreterPreparedBinary.SourceDeclarationCodec;
 }

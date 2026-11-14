@@ -7,6 +7,7 @@ using System.Diagnostics.CodeAnalysis;
 using System.IO;
 using System.Numerics;
 using System.Runtime.CompilerServices;
+using System.Runtime.InteropServices;
 using System.Text;
 using System.Threading;
 
@@ -704,7 +705,9 @@ public static partial class ValueEncodingBinaryDeterministic
                 :
                 new(referenceComparer);
 
-            if (entries.TryGetValue(key, out var address))
+            ref var address = ref CollectionsMarshal.GetValueRefOrAddDefault(entries, key, out var exists);
+
+            if (exists)
             {
                 var relative = address - (BytesWritten + TagSize);
 
@@ -716,7 +719,7 @@ public static partial class ValueEncodingBinaryDeterministic
                 return true;
             }
 
-            entries.Add(key, BytesWritten);
+            address = BytesWritten;
             return false;
         }
 

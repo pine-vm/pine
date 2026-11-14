@@ -1,11 +1,9 @@
 using Pine.Core.CodeAnalysis;
 using Pine.Core.Elm.Syntax.Abstract;
 using Pine.Core.Internal;
-using Pine.Core.Json;
 using Pine.Core.PineLanguage;
 using System.Collections.Generic;
 using System.Linq;
-using System.Text.Json.Serialization;
 
 using ModuleName = System.Collections.Generic.IReadOnlyList<string>;
 using AbstractCase = Pine.Core.Elm.Syntax.Abstract.Case;
@@ -23,7 +21,6 @@ namespace Pine.Core.Elm.Syntax.Interpreter;
 
 public partial class ElmSyntaxInterpreter
 {
-    [JsonConverter(typeof(JsonConverterForChoiceType))]
     public abstract record PreparedDeclaration
     {
         public sealed record FunctionDeclaration(
@@ -56,7 +53,6 @@ public partial class ElmSyntaxInterpreter
         IReadOnlyList<AbstractPattern> Arguments,
         PreparedExpression Expression);
 
-    [JsonConverter(typeof(JsonConverterForChoiceType))]
     public abstract record PreparedExpression
     {
         public sealed record ValueLiteral(
@@ -156,7 +152,6 @@ public partial class ElmSyntaxInterpreter
             : PreparedExpression;
     }
 
-    [JsonConverter(typeof(JsonConverterForChoiceType))]
     public abstract record PreparedLetDeclaration
     {
         public sealed record LetFunction(
@@ -177,7 +172,6 @@ public partial class ElmSyntaxInterpreter
     public record PreparedCaseDispatch(
         IReadOnlyList<PreparedCaseDispatchSegment> Steps);
 
-    [JsonConverter(typeof(JsonConverterForChoiceType))]
     public abstract record PreparedCaseDispatchSegment
     {
         public sealed record ConstantValuePatterns(

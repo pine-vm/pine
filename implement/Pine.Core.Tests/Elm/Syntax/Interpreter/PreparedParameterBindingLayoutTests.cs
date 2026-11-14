@@ -1,13 +1,11 @@
 using AwesomeAssertions;
 using Pine.Core.Elm;
 using Pine.Core.Elm.Syntax.Abstract;
-using Pine.Core.Elm.Syntax.Interpreter;
 using Pine.Core.Internal;
 using System;
 using System.Collections.Generic;
 using System.Collections.Immutable;
 using System.Linq;
-using System.Text.Json;
 using Xunit;
 
 using ElmInterpreter = Pine.Core.Elm.Syntax.Interpreter.ElmSyntaxInterpreter;
@@ -277,7 +275,7 @@ public class PreparedParameterBindingLayoutTests
     }
 
     [Fact]
-    public void Preparing_binding_layouts_does_not_change_prepared_equality_hashing_or_json()
+    public void Preparing_binding_layouts_does_not_change_prepared_equality_hashing_or_binary()
     {
         Pattern[] patterns = [new Pattern.VarPattern("value")];
 
@@ -291,8 +289,10 @@ public class PreparedParameterBindingLayoutTests
         var equalLambda = lambda with { };
         var originalHash = function.GetHashCode();
 
-        var originalJson =
-            JsonSerializer.Serialize(function, ElmSyntaxInterpreterPreparedJson.JsonSerializerOptions);
+        var declaration =
+            new ElmInterpreter.PreparedDeclaration.FunctionDeclaration(new(null, function));
+
+        var originalBytes = Core.Tests.Elm.Syntax.Abstract.ElmSyntaxAbstractTestHelper.Encode(declaration);
 
         var layout = BindingLayout.ForPatterns(patterns);
         layout.BindArguments(Environment.Empty, [Integer(1)]);
@@ -303,8 +303,8 @@ public class PreparedParameterBindingLayoutTests
         lambda.Should().Be(equalLambda);
         function.GetHashCode().Should().Be(originalHash);
 
-        JsonSerializer.Serialize(function, ElmSyntaxInterpreterPreparedJson.JsonSerializerOptions)
-            .Should().Be(originalJson);
+        Core.Tests.Elm.Syntax.Abstract.ElmSyntaxAbstractTestHelper.Encode(declaration)
+            .Should().Equal(originalBytes);
     }
 
     [Fact]

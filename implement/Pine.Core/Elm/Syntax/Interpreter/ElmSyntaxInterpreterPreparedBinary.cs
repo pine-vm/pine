@@ -1,4 +1,5 @@
 using Pine.Core.Caching;
+using Pine.Core.Encodings;
 using System;
 using System.Collections.Generic;
 using System.IO;
@@ -103,7 +104,7 @@ public static partial class ElmSyntaxInterpreterPreparedBinary
     }
 
     /// <summary>
-    /// Complete-entry binary cache codec. This does not change the existing JSON-backed cache.
+    /// Complete-entry binary cache codec shared with <see cref="PreparedSourceDeclaration.Codec"/>.
     /// </summary>
     public static ICacheCodec<PreparedSourceDeclaration> SourceDeclarationCodec { get; } = new SourceCodec();
 
@@ -111,9 +112,9 @@ public static partial class ElmSyntaxInterpreterPreparedBinary
     {
         public ReadOnlyMemory<byte> Encode(PreparedSourceDeclaration value)
         {
-            using var stream = new MemoryStream();
-            ElmSyntaxInterpreterPreparedBinary.Encode(stream, value);
-            return stream.ToArray();
+            using var buffer = new BinaryEncoding.PooledBuffer();
+            ElmSyntaxInterpreterPreparedBinary.Encode(buffer.Write, value);
+            return buffer.WrittenSpan.ToArray();
         }
 
         public PreparedSourceDeclaration Decode(ReadOnlyMemory<byte> bytes)

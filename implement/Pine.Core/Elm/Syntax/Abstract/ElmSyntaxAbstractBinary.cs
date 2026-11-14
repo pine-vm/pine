@@ -54,6 +54,25 @@ public static partial class ElmSyntaxAbstractBinary
         encoder.WriteDeclarations(declarations);
     }
 
+    /// <summary>Writes a complete file in an independent reference scope.</summary>
+    public static void Encode(Action<ReadOnlySpan<byte>> write, File file)
+    {
+        using var encoder = new Encoder(write);
+        encoder.WriteFile(file);
+    }
+
+    /// <summary>Writes a complete file without closing the stream.</summary>
+    public static void Encode(Stream stream, File file) => Encode(stream.Write, file);
+
+    /// <summary>Reads a complete file and reports its consumed extent for embedding.</summary>
+    public static File DecodeFile(ReadOnlyMemory<byte> source, out int bytesRead)
+    {
+        using var decoder = new Decoder(source);
+        var result = decoder.ReadFile();
+        bytesRead = decoder.BytesRead;
+        return result;
+    }
+
     /// <summary>Writes one expression without closing the stream.</summary>
     public static void Encode(Stream stream, Expression expression) => Encode(stream.Write, expression);
 
@@ -103,12 +122,14 @@ public static partial class ElmSyntaxAbstractBinary
         UnitExpr, StringLiteral, CharLiteral, IntegerLiteral, FloatLiteral, Negation, ListExpr,
         Identifier, IfBlock, PrefixOperator, Application, OperatorApplication, TupledExpression,
         LambdaExpression, CaseExpression, LetExpression, RecordExpr, RecordAccess,
-        RecordAccessFunction, RecordUpdateExpression, GLSLExpression
+        RecordAccessFunction, RecordUpdateExpression, GLSLExpression,
+        File, NormalModule, PortModule, EffectModule, DefaultModuleData, EffectModuleData,
+        Import, ModuleName, All, Explicit, InfixExpose, FunctionExpose, TypeOrAliasExpose, TypeExpose, ExposedType
     }
 
     /// <summary>Streaming writer; disposing releases bounded, reusable reference dictionaries.</summary>
     /// <remarks>Starts an independent reference scope.</remarks>
-    public sealed class Encoder(Action<ReadOnlySpan<byte>> write) : IDisposable
+    public sealed partial class Encoder(Action<ReadOnlySpan<byte>> write) : IDisposable
     {
         private ValueEncodingBinaryDeterministic.TreeEncoder<object> _writer = new(write, reuseReferences: true);
 
@@ -387,7 +408,8 @@ public static partial class ElmSyntaxAbstractBinary
                 WritePattern(patterns[index]);
         }
 
-        internal void WritePattern(Pattern pattern)
+        /// <summary>Writes a pattern in the current reference scope.</summary>
+        public void WritePattern(Pattern pattern)
         {
             switch (pattern)
             {

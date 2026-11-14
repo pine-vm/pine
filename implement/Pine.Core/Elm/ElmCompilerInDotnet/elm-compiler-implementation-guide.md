@@ -961,6 +961,11 @@ and function identities. Immutable sequences have explicit JSON support. Program
 maps are encoded as entry sequences so structural keys are not converted to
 generated string names. Derived encodings of labels are excluded: a field has one
 authoritative name, and its Pine encoding is computed from that name.
+Abstract source-declaration metadata is stored as base64 binary syntax, not as
+a second JSON representation of the AST. Decoding validates the complete binary
+entry and preserves cached Pine payloads. General JSON value converters live in
+`Pine.Core.Json`; syntax persistence and preparation cache keys use
+`ElmSyntaxAbstractBinary` and `ElmSyntaxInterpreterPreparedBinary`.
 
 ## Elm Compiler Intermediate Representation
 

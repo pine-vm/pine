@@ -1,9 +1,12 @@
 using AwesomeAssertions;
 using Pine.Core.Elm.Syntax;
 using Pine.Core.Elm.Syntax.Abstract;
+using Pine.Core.Elm.Syntax.Interpreter;
 using Pine.Core.Tests.Elm.ElmCompilerInDotnet.Inlining;
 using System;
 using System.Linq;
+
+using MemoryStream = System.IO.MemoryStream;
 
 namespace Pine.Core.Tests.Elm.Syntax.Abstract;
 
@@ -13,6 +16,70 @@ namespace Pine.Core.Tests.Elm.Syntax.Abstract;
 /// </summary>
 public static class ElmSyntaxAbstractTestHelper
 {
+    public static byte[] Encode(object value)
+    {
+        using var stream = new MemoryStream();
+        using var syntax = new ElmSyntaxAbstractBinary.Encoder(stream.Write);
+
+        switch (value)
+        {
+            case File file:
+                syntax.WriteFile(file);
+                break;
+
+            case Module module:
+                syntax.WriteModule(module);
+                break;
+
+            case Import import:
+                syntax.WriteImport(import);
+                break;
+
+            case Exposing exposing:
+                syntax.WriteExposing(exposing);
+                break;
+
+            case TopLevelExpose expose:
+                syntax.WriteTopLevelExpose(expose);
+                break;
+
+            case Declaration declaration:
+                syntax.WriteDeclaration(declaration);
+                break;
+
+            case Expression expression:
+                syntax.WriteExpression(expression);
+                break;
+
+            case TypeAnnotation annotation:
+                syntax.WriteTypeAnnotation(annotation);
+                break;
+
+            case Pattern pattern:
+                syntax.WritePattern(pattern);
+                break;
+
+            case ElmSyntaxInterpreter.Prepared prepared:
+                ElmSyntaxInterpreterPreparedBinary.Encode(stream, prepared);
+                break;
+
+            case ElmSyntaxInterpreter.PreparedDeclaration declaration:
+                ElmSyntaxInterpreterPreparedBinary.Encode(stream, declaration);
+                break;
+
+            case ElmSyntaxInterpreter.PreparedExpression expression:
+                ElmSyntaxInterpreterPreparedBinary.Encode(stream, expression);
+                break;
+
+            default:
+                throw new NotImplementedException(nameof(Encode) + " does not handle node: " + value.GetType().Name);
+        }
+
+        return stream.ToArray();
+    }
+
+    private static string BinaryKey(object value) => Convert.ToHexString(Encode(value));
+
     public static File AssertModulePreservedAcrossRenderedSyntax(string moduleText)
     {
         var firstConcrete =
@@ -56,13 +123,13 @@ public static class ElmSyntaxAbstractTestHelper
                 .. file.Imports
                 .Select(NormalizeImportForSemanticComparison)
                 .OrderBy(
-                    ElmSyntaxAbstractJson.ToJsonString,
+                    BinaryKey,
                     StringComparer.Ordinal)
             ],
             Declarations =
             [
                 .. file.Declarations.OrderBy(
-                    ElmSyntaxAbstractJson.ToJsonString,
+                    BinaryKey,
                     StringComparer.Ordinal)
             ],
         };
@@ -83,7 +150,7 @@ public static class ElmSyntaxAbstractTestHelper
                 new Exposing.Explicit(
                     [
                     .. explicitExposing.Exposes.OrderBy(
-                        ElmSyntaxAbstractJson.ToJsonString,
+                        BinaryKey,
                         StringComparer.Ordinal)
                     ]),
 

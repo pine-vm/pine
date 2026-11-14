@@ -266,4 +266,33 @@ public class ModelTests
         foreach (var (id, artifact) in expected)
             actual[id].Should().Be(artifact);
     }
+
+    [Fact]
+    public void Compiler_JSON_source_declarations_use_lossless_binary_and_reject_incomplete_entries()
+    {
+        var options = Model.CompilerModelJson.CreateOptions();
+
+        Declaration declaration =
+            new Declaration.ChoiceTypeDeclaration(
+                new("Item", [], [new("One", Core.PineLanguage.PineValue.Blob([7, 8, 9]), [])]));
+
+        var json = JsonSerializer.Serialize(declaration, options);
+        var bytes = JsonSerializer.Deserialize<byte[]>(json)!;
+
+        Core.Elm.Syntax.Abstract.ElmSyntaxAbstractBinary.DecodeDeclaration(bytes, out var consumed)
+            .Should().Be(declaration);
+
+        consumed.Should().Be(bytes.Length);
+        JsonSerializer.Deserialize<Declaration>(json, options).Should().Be(declaration);
+
+        foreach (var malformed in new[]
+        {
+            "{}", "\"not base64\"", JsonSerializer.Serialize(new byte[8]),
+            JsonSerializer.Serialize(bytes.Append((byte)0).ToArray())
+        })
+        {
+            Action decode = () => JsonSerializer.Deserialize<Declaration>(malformed, options);
+            decode.Should().Throw<JsonException>();
+        }
+    }
 }

@@ -797,7 +797,29 @@ public class DeclarationUnitTests
         var cache = new Canonicalization.DeclarationCache();
         var fork = await Fork("sensitive-owner/package", "1.0.17", 42, cache);
         var unit = fork.Canonical.UnitExports[Name("Main", "root")].Unit;
-        var text = JsonSerializer.Serialize(unit, AST.ElmSyntaxAbstractJson.JsonSerializerOptions);
+        using var encoded = new System.IO.MemoryStream();
+        var visited = new HashSet<SccModel>();
+
+        ReadOnlyMemory<byte> Capture(SccModel model)
+        {
+            if (visited.Add(model))
+            {
+                SccEncodingBinary.Encode(
+                    encoded,
+                    model,
+                    declaration =>
+                    {
+                        AST.ElmSyntaxAbstractBinary.Encode(encoded, declaration);
+                        return AST.ElmSyntaxAbstractBinary.ComputeHash(declaration);
+                    },
+                    Capture);
+            }
+
+            return model.FingerprintBytes;
+        }
+
+        Capture(unit);
+        var text = Encoding.UTF8.GetString(encoded.ToArray());
 
         text.Should().NotContain("sensitive-owner").And.NotContain("1.0.17").And.NotContain("PinePackage")
             .And.NotContain(".elm").And.NotContain("SourcePath").And.NotContain("Range");

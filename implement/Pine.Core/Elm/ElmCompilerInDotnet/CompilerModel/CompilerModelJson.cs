@@ -1,8 +1,10 @@
 using Pine.Core.Elm.Syntax.Abstract;
+using Pine.Core.Encodings;
 using Pine.Core.Json;
 using System;
 using System.Collections.Generic;
 using System.Collections.Immutable;
+using System.IO;
 using System.Linq;
 using System.Text.Json;
 using System.Text.Json.Serialization;
@@ -15,10 +17,45 @@ public static class CompilerModelJson
     /// <summary>Builds options for immutable model values and their source-name and Pine-value leaves.</summary>
     public static JsonSerializerOptions CreateOptions()
     {
-        var options = ElmSyntaxAbstractJson.BuildJsonSerializerOptions();
+        var options = new JsonSerializerOptions { MaxDepth = 1000, NewLine = "\n" };
+        options.Converters.Add(new PineValueJsonConverter());
+        options.Converters.Add(new BigIntegerJsonConverter());
+        options.Converters.Add(new DeclQualifiedNameJsonConverter());
+        options.Converters.Add(new SyntaxDeclarationConverter());
         options.Converters.Add(new ClosedRecordConverter());
         options.Converters.Add(new StructuralTypeConverter());
         return options;
+    }
+
+    private sealed class SyntaxDeclarationConverter : JsonConverter<Declaration>
+    {
+        public override Declaration Read(
+            ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)
+        {
+            if (reader.TokenType is not JsonTokenType.String || !reader.TryGetBytesFromBase64(out var bytes))
+                throw new JsonException("Expected a base64 binary source declaration.");
+
+            try
+            {
+                var declaration = ElmSyntaxAbstractBinary.DecodeDeclaration(bytes, out var consumed);
+
+                if (consumed != bytes.Length)
+                    throw new JsonException("Trailing bytes after binary source declaration.");
+
+                return declaration;
+            }
+            catch (InvalidDataException error)
+            {
+                throw new JsonException("Invalid binary source declaration.", error);
+            }
+        }
+
+        public override void Write(Utf8JsonWriter writer, Declaration value, JsonSerializerOptions options)
+        {
+            using var buffer = new BinaryEncoding.PooledBuffer();
+            ElmSyntaxAbstractBinary.Encode(buffer.Write, value);
+            writer.WriteBase64StringValue(buffer.WrittenSpan);
+        }
     }
 
     private sealed class StructuralTypeConverter : JsonConverter<StructuralType>

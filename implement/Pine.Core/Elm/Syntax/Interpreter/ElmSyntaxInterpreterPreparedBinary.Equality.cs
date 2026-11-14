@@ -14,10 +14,21 @@ public static partial class ElmSyntaxInterpreterPreparedBinary
     {
         internal static readonly PreparedExpressionComparer Instance = new();
 
-        private sealed record ExpressionHash(int Value);
+        private sealed record StructuralHash(int Value);
 
         // Avoid rehashing every descendant at each level, without retaining prepared trees.
-        private readonly ConditionalWeakTable<Expr, ExpressionHash> _expressionHashes = new();
+        private readonly ConditionalWeakTable<Expr, StructuralHash> _expressionHashes = new();
+
+        private readonly ConditionalWeakTable<string, StructuralHash> _largeStringHashes = new();
+
+        private int StringHash(string text) =>
+            text.Length < 4096
+            ?
+            StringComparer.Ordinal.GetHashCode(text)
+            :
+            _largeStringHashes.GetValue(
+                text,
+                static text => new(StringComparer.Ordinal.GetHashCode(text))).Value;
 
         public new bool Equals(object? x, object? y)
         {
@@ -192,6 +203,13 @@ public static partial class ElmSyntaxInterpreterPreparedBinary
                     expression,
                     static expression => new(Instance.HashExpression(expression))).Value,
 
+                // Source and prepared GLSL bodies share large strings, not necessarily expression identities.
+                Abstract.Expression.GLSLExpression glsl =>
+                HashCode.Combine(glsl.GetType(), StringHash(glsl.ShaderCode)),
+
+                string text =>
+                StringHash(text),
+
                 Engine.PreparedFunctionStruct function =>
                 HashCode.Combine(function.Signature, GetHashCode(function.Declaration)),
 
@@ -276,7 +294,7 @@ public static partial class ElmSyntaxInterpreterPreparedBinary
                     Expr.RecordUpdateExpression update =>
                     HashCode.Combine(update.RecordName, HashSequence(update.Fields)),
 
-                    Expr.GLSLExpression glsl => StringComparer.Ordinal.GetHashCode(glsl.Code),
+                    Expr.GLSLExpression glsl => StringHash(glsl.Code),
 
                     _ =>
                     throw new NotImplementedException(
