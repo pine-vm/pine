@@ -149,7 +149,7 @@ public static class LanguageServicePrecompiledLeaves
         end = Math.Max(start, end);
         (start, end) = TrimOffsets(charsSpan, start, end);
 
-        var unwrappedChars = chars.Bytes.Slice(start, end - start);
+        var unwrappedChars = chars.Bytes[start..end];
 
         return StringValueInProcess(unwrappedChars);
     }

@@ -189,7 +189,7 @@ public static class CoreStringPrecompiledLeaves
 
             if (slice.Span.SequenceEqual(separator.Bytes.Span))
             {
-                result.Add(StringValueInProcess(chars.Bytes.Slice(lastStart, offset - lastStart)));
+                result.Add(StringValueInProcess(chars.Bytes[lastStart..offset]));
                 offset += separator.Bytes.Length;
                 lastStart = offset;
             }
@@ -239,7 +239,7 @@ public static class CoreStringPrecompiledLeaves
                     8 <= chars.Bytes.Length - offset &&
                     System.Buffers.Binary.BinaryPrimitives.ReadInt32BigEndian(chars.Bytes.Span[(offset + 4)..]) is 0x0a)
                 {
-                    result.Add(StringValueInProcess(chars.Bytes.Slice(currentLineStart, offset - currentLineStart)));
+                    result.Add(StringValueInProcess(chars.Bytes[currentLineStart..offset]));
                     offset += 8;
                     currentLineStart = offset;
                     continue;
@@ -247,7 +247,7 @@ public static class CoreStringPrecompiledLeaves
 
                 if (nextChar is 0x0a or 0x0d)
                 {
-                    result.Add(StringValueInProcess(chars.Bytes.Slice(currentLineStart, offset - currentLineStart)));
+                    result.Add(StringValueInProcess(chars.Bytes[currentLineStart..offset]));
                     offset += 4;
                     currentLineStart = offset;
                     continue;

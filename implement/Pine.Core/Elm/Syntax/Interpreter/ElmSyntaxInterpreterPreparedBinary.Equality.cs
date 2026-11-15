@@ -17,9 +17,9 @@ public static partial class ElmSyntaxInterpreterPreparedBinary
         private sealed record StructuralHash(int Value);
 
         // Avoid rehashing every descendant at each level, without retaining prepared trees.
-        private readonly ConditionalWeakTable<Expr, StructuralHash> _expressionHashes = new();
+        private readonly ConditionalWeakTable<Expr, StructuralHash> _expressionHashes = [];
 
-        private readonly ConditionalWeakTable<string, StructuralHash> _largeStringHashes = new();
+        private readonly ConditionalWeakTable<string, StructuralHash> _largeStringHashes = [];
 
         private int StringHash(string text) =>
             text.Length < 4096

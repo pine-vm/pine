@@ -106,10 +106,10 @@ public partial class ElmSyntaxInterpreter
         /// <summary>Uses the same builtin mode as the evaluation whose results will be stored.</summary>
         public ApplicationCacheModel(Prepared program, bool enableDefaultBuiltins = true)
         {
-            this._program = new(program.Declarations.ToImmutableDictionary());
-            this._enableDefaultBuiltins = enableDefaultBuiltins;
-            _operators = BuildInfixOperatorMap(this._program.Declarations);
-            _resolverIndex = GetDeclarationResolverIndex(this._program.Declarations);
+            _program = new(program.Declarations.ToImmutableDictionary());
+            _enableDefaultBuiltins = enableDefaultBuiltins;
+            _operators = BuildInfixOperatorMap(_program.Declarations);
+            _resolverIndex = GetDeclarationResolverIndex(_program.Declarations);
         }
 
         /// <summary>Models a declared function together with its complete executable dependencies.</summary>
