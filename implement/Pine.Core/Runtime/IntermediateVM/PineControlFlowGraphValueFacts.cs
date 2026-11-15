@@ -9,57 +9,47 @@ namespace Pine.Core.Runtime.IntermediateVM;
 
 public sealed partial record PineControlFlowGraph
 {
-    private abstract record ValueConstraint
+    private readonly record struct ValueFacts(
+        PineValue? ExactValue,
+        int? ExplicitLength,
+        ImmutableArray<KeyValuePair<int, PineValue>> Elements)
     {
-        public sealed record Exact(PineValue Value) : ValueConstraint;
+        public static ValueFacts Unknown => new(null, null, []);
 
-        public sealed record ListLength(int Length) : ValueConstraint;
-
-        public sealed record ListElement(int Index, PineValue Value) : ValueConstraint;
-    }
-
-    private sealed record ValueFacts(ImmutableHashSet<ValueConstraint> Constraints)
-    {
-        public static ValueFacts Unknown { get; } = new([]);
+        public bool IsUnknown => ExactValue is null && ExplicitLength is null && Elements.IsDefaultOrEmpty;
 
         public static ValueFacts ForLiteral(PineValue value) =>
-            new(ImmutableHashSet<ValueConstraint>.Empty.Add(new ValueConstraint.Exact(value)));
+            new(value, null, []);
 
         public static ValueFacts ForConstructedList(
             PineValue.ListValue prefix,
             ImmutableArray<PineVirtualValueId> inputs,
             IReadOnlyDictionary<PineVirtualValueId, ValueFacts> values)
         {
-            var constraints =
-                ImmutableHashSet<ValueConstraint>.Empty
-                .Add(new ValueConstraint.ListLength(prefix.Items.Length + inputs.Length));
+            var elements = ImmutableArray.CreateBuilder<KeyValuePair<int, PineValue>>();
 
             for (var index = 0; index < prefix.Items.Length; index++)
             {
-                constraints = constraints.Add(new ValueConstraint.ListElement(index, prefix.Items.Span[index]));
+                elements.Add(new(index, prefix.Items.Span[index]));
             }
 
             for (var index = 0; index < inputs.Length; index++)
             {
                 if (values.GetValueOrDefault(inputs[index], Unknown).ExactValue is { } item)
                 {
-                    constraints =
-                        constraints.Add(new ValueConstraint.ListElement(prefix.Items.Length + index, item));
+                    elements.Add(new(prefix.Items.Length + index, item));
                 }
             }
 
-            return new(constraints);
+            return new(null, prefix.Items.Length + inputs.Length, elements.ToImmutable());
         }
-
-        public PineValue? ExactValue =>
-            Constraints.OfType<ValueConstraint.Exact>().FirstOrDefault()?.Value;
 
         public int? KnownListLength =>
             ExactValue is PineValue.ListValue list
             ?
             list.Items.Length
             :
-            Constraints.OfType<ValueConstraint.ListLength>().FirstOrDefault()?.Length;
+            ExplicitLength;
 
         public PineValue? KnownListElement(int index)
         {
@@ -73,9 +63,25 @@ public sealed partial record PineControlFlowGraph
                 return PineValue.EmptyList;
             }
 
-            return
-                Constraints.OfType<ValueConstraint.ListElement>()
-                .FirstOrDefault(element => element.Index == index)?.Value;
+            var low = 0;
+            var high = Elements.Length - 1;
+
+            while (low <= high)
+            {
+                var middle = low + (high - low) / 2;
+                var element = Elements[middle];
+
+                if (element.Key == index)
+                    return element.Value;
+
+                if (element.Key < index)
+                    low = middle + 1;
+
+                else
+                    high = middle - 1;
+            }
+
+            return null;
         }
 
         public bool? EqualsLiteral(PineValue literal)
@@ -98,9 +104,9 @@ public sealed partial record PineControlFlowGraph
                 return false;
             }
 
-            foreach (var element in Constraints.OfType<ValueConstraint.ListElement>())
+            foreach (var element in Elements)
             {
-                if (!element.Value.Equals(list.Items.Span[element.Index]))
+                if (!element.Value.Equals(list.Items.Span[element.Key]))
                 {
                     return false;
                 }
@@ -108,7 +114,7 @@ public sealed partial record PineControlFlowGraph
 
             return
                 length is 0 ||
-                Constraints.OfType<ValueConstraint.ListElement>().Count() == length
+                Elements.Length == length
                 ?
                 true
                 :
@@ -117,42 +123,86 @@ public sealed partial record PineControlFlowGraph
 
         public ValueFacts Meet(ValueFacts other)
         {
-            var common = Constraints.Intersect(other.Constraints);
+            if (IsUnknown || other.IsUnknown)
+                return Unknown;
 
-            if (KnownListLength is not { } length || other.KnownListLength != length)
+            var exact = ExactValue is { } value && value.Equals(other.ExactValue) ? value : null;
+
+            var length =
+                KnownListLength is { } knownLength && other.KnownListLength == knownLength
+                ?
+                knownLength
+                :
+                ExplicitLength is { } explicitLength && other.ExplicitLength == explicitLength
+                ?
+                (int?)explicitLength
+                :
+                null;
+
+            ImmutableArray<KeyValuePair<int, PineValue>>.Builder? common = null;
+            var left = 0;
+            var right = 0;
+
+            // Only explicitly retained elements participate, including their agreement with an exact list.
+            // Expanding both exact lists here would introduce proofs the previous meet did not retain.
+            while (left < Elements.Length || right < other.Elements.Length)
             {
-                return new(common);
-            }
+                var takeLeft =
+                    right == other.Elements.Length ||
+                    left < Elements.Length && Elements[left].Key <= other.Elements[right].Key;
 
-            common = common.Add(new ValueConstraint.ListLength(length));
+                var element = takeLeft ? Elements[left++] : other.Elements[right++];
+                var sameIndex = takeLeft && right < other.Elements.Length && element.Key == other.Elements[right].Key;
 
-            if (ExactValue is PineValue.ListValue list)
-            {
-                foreach (var element in other.Constraints.OfType<ValueConstraint.ListElement>())
+                var matches =
+                    sameIndex && element.Value.Equals(other.Elements[right].Value) ||
+                    length is not null &&
+                    (takeLeft
+                    ?
+                    other.ExactValue is PineValue.ListValue otherList &&
+                    otherList.Items.Span[element.Key].Equals(element.Value)
+                    :
+                    ExactValue is PineValue.ListValue list &&
+                    list.Items.Span[element.Key].Equals(element.Value));
+
+                if (sameIndex)
                 {
-                    if (list.Items.Span[element.Index].Equals(element.Value))
+                    if (length is not null && ExactValue is PineValue.ListValue exactList &&
+                        exactList.Items.Span[element.Key].Equals(other.Elements[right].Value))
                     {
-                        common = common.Add(element);
+                        matches = true;
+                        element = other.Elements[right];
                     }
+
+                    right++;
                 }
+
+                if (matches)
+                    (common ??= ImmutableArray.CreateBuilder<KeyValuePair<int, PineValue>>()).Add(element);
             }
 
-            if (other.ExactValue is PineValue.ListValue otherList)
-            {
-                foreach (var element in Constraints.OfType<ValueConstraint.ListElement>())
-                {
-                    if (otherList.Items.Span[element.Index].Equals(element.Value))
-                    {
-                        common = common.Add(element);
-                    }
-                }
-            }
-
-            return new(common);
+            return new(exact, length, common?.ToImmutable() ?? []);
         }
 
-        public bool SameFacts(ValueFacts other) =>
-            Constraints.SetEquals(other.Constraints);
+        public bool SameFacts(ValueFacts other)
+        {
+            if (!Equals(ExactValue, other.ExactValue) || ExplicitLength != other.ExplicitLength ||
+                Elements.Length != other.Elements.Length)
+            {
+                return false;
+            }
+
+            for (var index = 0; index < Elements.Length; index++)
+            {
+                if (Elements[index].Key != other.Elements[index].Key ||
+                    !Elements[index].Value.Equals(other.Elements[index].Value))
+                {
+                    return false;
+                }
+            }
+
+            return true;
+        }
     }
 
     private sealed record ValueFlowState(
@@ -164,10 +214,13 @@ public sealed partial record PineControlFlowGraph
     /// then removes equality branches whose outcome is known on every incoming path.
     /// </summary>
     public PineControlFlowGraph ForwardProvenEqualityBranches()
-    {
-        Validate();
+        => ForwardProvenEqualityBranches(null);
 
-        return ForwardProvenEqualityBranches(AnalyzeValueFlow());
+    private PineControlFlowGraph ForwardProvenEqualityBranches(OptimizationContext? context)
+    {
+        Validate(context);
+
+        return ForwardProvenEqualityBranches(context?.GetValueFlow(this) ?? AnalyzeValueFlow(), context);
     }
 
     private ValueFlowState?[] AnalyzeValueFlow()
@@ -214,7 +267,7 @@ public sealed partial record PineControlFlowGraph
                         previous.Locals.GetValueOrDefault(local, ValueFacts.Unknown)
                         .Meet(locals.GetValueOrDefault(local, ValueFacts.Unknown));
 
-                    if (!facts.Constraints.IsEmpty)
+                    if (!facts.IsUnknown)
                     {
                         mergedLocals.Add(local, facts);
                     }
@@ -245,11 +298,14 @@ public sealed partial record PineControlFlowGraph
     /// of known values and replace initialized local reads with their proven literals.
     /// </summary>
     public PineControlFlowGraph FoldKnownLiteralValues(int parameterCount)
-    {
-        Validate();
+        => FoldKnownLiteralValues(parameterCount, null);
 
-        var states = AnalyzeValueFlow();
-        var initializedAtEntry = DefinitelyInitializedLocals(parameterCount);
+    private PineControlFlowGraph FoldKnownLiteralValues(int parameterCount, OptimizationContext? context)
+    {
+        Validate(context);
+
+        var states = context?.GetValueFlow(this) ?? AnalyzeValueFlow();
+        var initializedAtEntry = DefinitelyInitializedLocals(parameterCount, context);
         var changed = false;
 
         var blocks =
@@ -261,7 +317,7 @@ public sealed partial record PineControlFlowGraph
                         return block;
                     }
 
-                    var initialized = new HashSet<int>(initializedAtEntry[block.Id.Value] ?? []);
+                    var initialized = initializedAtEntry[block.Id.Value]?.Clone() ?? default;
                     var operations = new OperationBuilder(block.Operations);
 
                     TraceValueFacts(
@@ -327,7 +383,7 @@ public sealed partial record PineControlFlowGraph
                                 operations.Add(operation);
                             }
 
-                            AddWrittenLocals(instruction, initialized);
+                            AddWrittenLocals(instruction, ref initialized);
                         });
 
                     return operations.Build(block);
@@ -339,11 +395,11 @@ public sealed partial record PineControlFlowGraph
         }
 
         var result = this with { Blocks = blocks };
-        result.Validate();
+        result.Validate(context);
         return result;
     }
 
-    private PineControlFlowGraph ForwardProvenEqualityBranches(ValueFlowState?[] states)
+    private PineControlFlowGraph ForwardProvenEqualityBranches(ValueFlowState?[] states, OptimizationContext? context)
     {
         var changed = false;
 
@@ -495,8 +551,8 @@ public sealed partial record PineControlFlowGraph
         }
 
         var result = this with { Blocks = blocks };
-        result.Validate();
-        return result.RemoveUnreachableBlocks();
+        result.Validate(context);
+        return result.RemoveUnreachableBlocks(context);
     }
 
     private static (

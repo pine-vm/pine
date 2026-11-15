@@ -12,6 +12,9 @@ public sealed partial record PineControlFlowGraph
     /// same block and the source retains its value until the last read.
     /// </summary>
     public PineControlFlowGraph EliminateLocalCopies()
+        => EliminateLocalCopies(null);
+
+    private PineControlFlowGraph EliminateLocalCopies(OptimizationContext? context)
     {
         var blocks = Blocks;
 
@@ -125,7 +128,7 @@ public sealed partial record PineControlFlowGraph
         }
 
         var result = blocks == Blocks ? this : this with { Blocks = blocks };
-        result.Validate();
+        result.Validate(context);
         return result;
     }
 
@@ -138,6 +141,9 @@ public sealed partial record PineControlFlowGraph
     /// Fuses local reads followed by a constant list projection before assigning jump offsets.
     /// </summary>
     public PineControlFlowGraph FuseLocalListProjections()
+        => FuseLocalListProjections(null);
+
+    private PineControlFlowGraph FuseLocalListProjections(OptimizationContext? context)
     {
         var blocks =
             RewriteBlocks(
@@ -177,7 +183,7 @@ public sealed partial record PineControlFlowGraph
                 });
 
         var result = blocks == Blocks ? this : this with { Blocks = blocks };
-        result.Validate();
+        result.Validate(context);
         return result;
     }
 
@@ -186,8 +192,11 @@ public sealed partial record PineControlFlowGraph
     /// locals, so ordinary local liveness can remove individual unused destinations.
     /// </summary>
     public PineControlFlowGraph FuseLiteralLocalStores()
+        => FuseLiteralLocalStores(null);
+
+    private PineControlFlowGraph FuseLiteralLocalStores(OptimizationContext? context)
     {
-        Validate();
+        Validate(context);
 
         var changed = false;
 
@@ -268,7 +277,7 @@ public sealed partial record PineControlFlowGraph
         }
 
         var result = this with { Blocks = blocks };
-        result.Validate();
+        result.Validate(context);
         return result;
     }
 
@@ -279,15 +288,18 @@ public sealed partial record PineControlFlowGraph
     /// increments with updates to just the affected locals.
     /// </summary>
     public PineControlFlowGraph FuseDescendingLocalIntegerAdditions(int parameterCount)
-    {
-        Validate();
+        => FuseDescendingLocalIntegerAdditions(parameterCount, null);
 
-        var initializedAtEntry = DefinitelyInitializedLocals(parameterCount);
+    private PineControlFlowGraph FuseDescendingLocalIntegerAdditions(int parameterCount, OptimizationContext? context)
+    {
+        Validate(context);
+
+        var initializedAtEntry = DefinitelyInitializedLocals(parameterCount, context);
         ImmutableArray<PineBasicBlock>.Builder? blocks = null;
 
         foreach (var block in Blocks)
         {
-            var initialized = new HashSet<int>(initializedAtEntry[block.Id.Value] ?? []);
+            var initialized = initializedAtEntry[block.Id.Value]?.Clone() ?? default;
             var operations = new OperationBuilder(block.Operations);
             var blockChanged = false;
 
@@ -335,7 +347,7 @@ public sealed partial record PineControlFlowGraph
                                     update.Increment!.Value);
 
                             operations.Add(new PineControlFlowOperation(instruction, [], []));
-                            AddWrittenLocals(instruction, initialized);
+                            AddWrittenLocals(instruction, ref initialized);
                         }
 
                         index++;
@@ -345,7 +357,7 @@ public sealed partial record PineControlFlowGraph
                 }
 
                 operations.Add(store);
-                AddWrittenLocals(store.Instruction, initialized);
+                AddWrittenLocals(store.Instruction, ref initialized);
             }
 
             if (blockChanged)
@@ -361,7 +373,7 @@ public sealed partial record PineControlFlowGraph
         }
 
         var result = this with { Blocks = blocks.ToImmutable() };
-        result.Validate();
+        result.Validate(context);
         return result;
     }
 
@@ -371,7 +383,7 @@ public sealed partial record PineControlFlowGraph
         int highest,
         int count,
         ImmutableArray<PineVirtualValueId> discarded,
-        HashSet<int> initialized,
+        LocalSet initialized,
         out int start,
         out List<LocalUpdateSource> updates)
     {
@@ -435,6 +447,9 @@ public sealed partial record PineControlFlowGraph
     /// Fuses a local increment and its immediately discarded stack result into one local update.
     /// </summary>
     public PineControlFlowGraph FuseLocalIntegerAdditions()
+        => FuseLocalIntegerAdditions(null);
+
+    private PineControlFlowGraph FuseLocalIntegerAdditions(OptimizationContext? context)
     {
         var blocks =
             RewriteBlocks(
@@ -487,7 +502,7 @@ public sealed partial record PineControlFlowGraph
                 });
 
         var result = blocks == Blocks ? this : this with { Blocks = blocks };
-        result.Validate();
+        result.Validate(context);
         return result;
     }
 

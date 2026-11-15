@@ -51,7 +51,11 @@ public abstract record PineControlFlowTerminator
     /// <summary>
     /// Returns the value at the top of the evaluation stack.
     /// </summary>
-    public sealed record Return : PineControlFlowTerminator;
+    public sealed record Return : PineControlFlowTerminator
+    {
+        /// <summary>A shared, stateless return terminator.</summary>
+        public static readonly Return Instance = new();
+    }
 
     /// <summary>
     /// Transfers control and the block arguments to one successor.
@@ -145,7 +149,7 @@ public sealed partial record PineControlFlowGraph(
         if (builder.Emit(fragment, entry) is { } end)
         {
             GraphBuilder.Pop(end, 1);
-            end.Terminator = new PineControlFlowTerminator.Return();
+            end.Terminator = PineControlFlowTerminator.Return.Instance;
         }
 
         var graph =
@@ -181,17 +185,22 @@ public sealed partial record PineControlFlowGraph(
 
         public BlockUnderConstruction StartBlock(int parameterCount)
         {
-            var parameters = ImmutableArray.CreateBuilder<PineVirtualValueId>(parameterCount);
+            var parameters =
+                parameterCount == 0
+                ?
+                null
+                :
+                ImmutableArray.CreateBuilder<PineVirtualValueId>(parameterCount);
 
             for (var i = 0; i < parameterCount; i++)
             {
-                parameters.Add(NewValue());
+                parameters!.Add(NewValue());
             }
 
             var block =
                 new BlockUnderConstruction(
                     new PineBlockId(_blocks.Count),
-                    parameters.MoveToImmutable());
+                    parameters?.MoveToImmutable() ?? []);
 
             _blocks.Add(block);
 
@@ -434,6 +443,9 @@ public sealed partial record PineControlFlowGraph(
     /// blocks exposed by the new fall-through edges.
     /// </summary>
     public PineControlFlowGraph RemoveRedundantForwardJumps()
+        => RemoveRedundantForwardJumps(null);
+
+    private PineControlFlowGraph RemoveRedundantForwardJumps(OptimizationContext? context)
     {
         var graph = this;
 
@@ -459,7 +471,8 @@ public sealed partial record PineControlFlowGraph(
                         return block;
                     });
 
-            var next = (blocks == graph.Blocks ? graph : graph with { Blocks = blocks }).RemoveEmptyForwardingBlocks();
+            var next =
+                (blocks == graph.Blocks ? graph : graph with { Blocks = blocks }).RemoveEmptyForwardingBlocks(context);
 
             if (!adjacentJumpRemoved && next.Blocks.Length == graph.Blocks.Length)
             {
@@ -475,6 +488,9 @@ public sealed partial record PineControlFlowGraph(
     /// redirecting their predecessors to the forwarding target.
     /// </summary>
     public PineControlFlowGraph RemoveEmptyForwardingBlocks()
+        => RemoveEmptyForwardingBlocks(null);
+
+    private PineControlFlowGraph RemoveEmptyForwardingBlocks(OptimizationContext? context)
     {
         var forwardTargets = new Dictionary<PineBlockId, PineBlockId>();
 
@@ -521,7 +537,7 @@ public sealed partial record PineControlFlowGraph(
             TryRemapBlockIds(rewrittenBlocks) ??
             throw new InvalidOperationException("Entry block was removed.");
 
-        result.Validate();
+        result.Validate(context);
         return result;
     }
 
@@ -529,6 +545,9 @@ public sealed partial record PineControlFlowGraph(
     /// Removes blocks with no path from the entry, preserving the layout of the remaining blocks.
     /// </summary>
     public PineControlFlowGraph RemoveUnreachableBlocks()
+        => RemoveUnreachableBlocks(null);
+
+    private PineControlFlowGraph RemoveUnreachableBlocks(OptimizationContext? context)
     {
         var reachable = new HashSet<PineBlockId> { Entry };
         var pending = new Stack<PineBlockId>();
@@ -554,7 +573,7 @@ public sealed partial record PineControlFlowGraph(
             TryRemapBlockIds([.. Blocks.Where(block => reachable.Contains(block.Id))]) ??
             throw new InvalidOperationException("Entry block was removed.");
 
-        result.Validate();
+        result.Validate(context);
         return result;
     }
 
@@ -562,41 +581,45 @@ public sealed partial record PineControlFlowGraph(
     /// Replaces explicit jumps to blocks that consist only of a return with a return.
     /// </summary>
     public PineControlFlowGraph ForwardJumpsToReturn()
-    {
-        var blocks = Blocks.ToArray();
-        var changed = false;
+        => ForwardJumpsToReturn(null);
 
-        for (var blockIndex = blocks.Length - 1; blockIndex >= 0; blockIndex--)
+    private PineControlFlowGraph ForwardJumpsToReturn(OptimizationContext? context)
+    {
+        ImmutableArray<PineBasicBlock>.Builder? blocks = null;
+
+        for (var blockIndex = Blocks.Length - 1; blockIndex >= 0; blockIndex--)
         {
-            if (blocks[blockIndex].Terminator is PineControlFlowTerminator.Jump
+            var block = blocks?[blockIndex] ?? Blocks[blockIndex];
+
+            if (block.Terminator is PineControlFlowTerminator.Jump
                 {
                     IsFallThrough: false,
                     Target: var target
                 } &&
-                blocks[target.Value] is
+                (blocks?[target.Value] ?? Blocks[target.Value]) is
                 {
                     Operations.IsEmpty: true,
                     Terminator: PineControlFlowTerminator.Return
                 })
             {
-                blocks[blockIndex] =
-                    blocks[blockIndex] with
-                    {
-                        Terminator = new PineControlFlowTerminator.Return()
-                    };
+                blocks ??= Blocks.ToBuilder();
 
-                changed = true;
+                blocks[blockIndex] =
+                    block with
+                    {
+                        Terminator = PineControlFlowTerminator.Return.Instance
+                    };
             }
         }
 
-        if (!changed)
+        if (blocks is null)
         {
             return this;
         }
 
-        var graph = new PineControlFlowGraph(Entry, [.. blocks]);
+        var graph = this with { Blocks = blocks.ToImmutable() };
 
-        graph.Validate();
+        graph.Validate(context);
 
         return graph;
     }
@@ -606,7 +629,7 @@ public sealed partial record PineControlFlowGraph(
     /// </summary>
     public void Validate()
     {
-        if (Blocks.IsEmpty || Entry.Value < 0 || Entry.Value >= Blocks.Length)
+        if (Blocks.IsDefaultOrEmpty || Entry.Value < 0 || Entry.Value >= Blocks.Length)
         {
             throw new InvalidOperationException("Control-flow graph has no valid entry block.");
         }
@@ -620,18 +643,25 @@ public sealed partial record PineControlFlowGraph(
             }
         }
 
-        var blockById = Blocks.ToDictionary(block => block.Id);
+        var valuesInScope = new HashSet<PineVirtualValueId>();
+        HashSet<PineValue>? caseLiterals = null;
 
         foreach (var block in Blocks)
         {
-            var valuesInScope = block.Parameters.ToHashSet();
+            valuesInScope.Clear();
+
+            foreach (var parameter in block.Parameters)
+                valuesInScope.Add(parameter);
 
             foreach (var operation in block.Operations)
             {
-                if (operation.Inputs.Any(input => !valuesInScope.Contains(input)))
+                foreach (var input in operation.Inputs)
                 {
-                    throw new InvalidOperationException(
-                        $"Block {block.Id.Value} uses a virtual value before its definition.");
+                    if (!valuesInScope.Contains(input))
+                    {
+                        throw new InvalidOperationException(
+                            $"Block {block.Id.Value} uses a virtual value before its definition.");
+                    }
                 }
 
                 foreach (var result in operation.Results)
@@ -652,7 +682,8 @@ public sealed partial record PineControlFlowGraph(
                         $"Switch in block {block.Id.Value} has no cases.");
                 }
 
-                var caseLiterals = new HashSet<PineValue>();
+                caseLiterals ??= [];
+                caseLiterals.Clear();
 
                 foreach (var switchCase in switchTerminator.Cases)
                 {
@@ -666,11 +697,13 @@ public sealed partial record PineControlFlowGraph(
 
             foreach (var (target, arguments) in Successors(block.Terminator))
             {
-                if (!blockById.TryGetValue(target, out var targetBlock))
+                if ((uint)target.Value >= (uint)Blocks.Length)
                 {
                     throw new InvalidOperationException(
                         $"Block {block.Id.Value} targets missing block {target.Value}.");
                 }
+
+                var targetBlock = Blocks[target.Value];
 
                 if (arguments.Length != targetBlock.Parameters.Length)
                 {
@@ -693,10 +726,13 @@ public sealed partial record PineControlFlowGraph(
     /// immediately following Boolean conditional.
     /// </summary>
     public PineControlFlowGraph ForwardConstantBooleanBranches()
+        => ForwardConstantBooleanBranches(null);
+
+    private PineControlFlowGraph ForwardConstantBooleanBranches(OptimizationContext? context)
     {
         var graph = this;
 
-        while (graph.TryForwardConstantBooleanBranch() is { } optimized)
+        while (graph.TryForwardConstantBooleanBranch(context) is { } optimized)
         {
             graph = optimized;
         }
@@ -704,9 +740,9 @@ public sealed partial record PineControlFlowGraph(
         return graph;
     }
 
-    private PineControlFlowGraph? TryForwardConstantBooleanBranch()
+    private PineControlFlowGraph? TryForwardConstantBooleanBranch(OptimizationContext? context)
     {
-        var predecessors = BuildPredecessors();
+        var predecessors = context?.GetPredecessors(this) ?? BuildPredecessors();
 
         foreach (var conditionalBlock in Blocks)
         {
@@ -819,7 +855,7 @@ public sealed partial record PineControlFlowGraph(
 
             try
             {
-                candidate.Validate();
+                candidate.Validate(context);
             }
             catch (InvalidOperationException)
             {

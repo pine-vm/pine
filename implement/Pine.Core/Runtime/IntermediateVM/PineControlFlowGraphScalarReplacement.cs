@@ -48,8 +48,11 @@ public sealed partial record PineControlFlowGraph
     /// An unobserved empty-list placeholder keeps the evaluation stack and block edges unchanged.
     /// </summary>
     public PineControlFlowGraph ReplaceNonEscapingLists(int parameterCount)
+        => ReplaceNonEscapingLists(parameterCount, null);
+
+    private PineControlFlowGraph ReplaceNonEscapingLists(int parameterCount, OptimizationContext? context)
     {
-        Validate();
+        Validate(context);
 
         var candidates = new List<ListCandidate>();
         var candidateByResult = new Dictionary<PineVirtualValueId, int>();
@@ -445,10 +448,7 @@ public sealed partial record PineControlFlowGraph
                         return true;
                     }
 
-                    var writes = new HashSet<int>();
-                    AddWrittenLocals(instruction, writes);
-
-                    if (writes.Contains(local))
+                    if (WrittenLocals(instruction).Contains(local))
                     {
                         overwritten = true;
                         break;
@@ -754,8 +754,8 @@ public sealed partial record PineControlFlowGraph
                     return operations.Build(block);
                 });
 
-        var result = new PineControlFlowGraph(Entry, rewritten);
-        result.Validate();
+        var result = rewritten == Blocks ? this : this with { Blocks = rewritten };
+        result.Validate(context);
         return result;
     }
 

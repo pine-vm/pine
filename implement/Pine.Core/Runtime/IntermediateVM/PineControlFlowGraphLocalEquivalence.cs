@@ -22,8 +22,11 @@ public sealed partial record PineControlFlowGraph
     /// same equality proof as locals; writes invalidate only proofs involving changed slots.
     /// </summary>
     public PineControlFlowGraph ForwardEquivalentLocalReads()
+        => ForwardEquivalentLocalReads(null);
+
+    private PineControlFlowGraph ForwardEquivalentLocalReads(OptimizationContext? context)
     {
-        Validate();
+        Validate(context);
 
         var states = new LocalEquivalenceState?[Blocks.Length];
         states[Entry.Value] = new([], []);
@@ -110,7 +113,7 @@ public sealed partial record PineControlFlowGraph
         }
 
         var result = this with { Blocks = blocks };
-        result.Validate();
+        result.Validate(context);
         return result;
     }
 

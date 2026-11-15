@@ -1,5 +1,4 @@
 using System.Collections.Generic;
-using System.Linq;
 
 namespace Pine.Core.Runtime.IntermediateVM;
 
@@ -11,16 +10,19 @@ public sealed partial record PineControlFlowGraph
     /// to disappear while retaining any inputs that still need to execute.
     /// </summary>
     public PineControlFlowGraph EliminateDiscardedStackValues(int parameterCount)
-    {
-        Validate();
+        => EliminateDiscardedStackValues(parameterCount, null);
 
-        var initializedAtEntry = DefinitelyInitializedLocals(parameterCount);
+    private PineControlFlowGraph EliminateDiscardedStackValues(int parameterCount, OptimizationContext? context)
+    {
+        Validate(context);
+
+        var initializedAtEntry = DefinitelyInitializedLocals(parameterCount, context);
 
         var blocks =
             RewriteBlocks(
                 block =>
                 {
-                    var initialized = new HashSet<int>(initializedAtEntry[block.Id.Value] ?? []);
+                    var initialized = initializedAtEntry[block.Id.Value]?.Clone() ?? default;
                     var operations = new OperationBuilder(block.Operations);
 
                     foreach (var operation in block.Operations)
@@ -61,18 +63,18 @@ public sealed partial record PineControlFlowGraph
                         }
 
                         operations.Add(operation);
-                        AddWrittenLocals(instruction, initialized);
+                        AddWrittenLocals(instruction, ref initialized);
                     }
 
                     return operations.Build(block);
                 });
 
         var result = blocks == Blocks ? this : this with { Blocks = blocks };
-        result.Validate();
+        result.Validate(context);
         return result;
     }
 
-    private static bool IsDiscardable(StackInstruction instruction, HashSet<int> initialized) =>
+    private static bool IsDiscardable(StackInstruction instruction, in LocalSet initialized) =>
         instruction.Kind switch
         {
             StackInstructionKind.Head_Generic or
@@ -96,10 +98,10 @@ public sealed partial record PineControlFlowGraph
 
             // A missing local raises an error in the VM, so an uninitialized read cannot disappear.
             StackInstructionKind.Local_Get =>
-            instruction.LocalIndices.All(initialized.Contains),
+            initialized.ContainsAll(instruction.LocalIndices),
 
             StackInstructionKind.Local_Get_Skip_Head_Const =>
-            instruction.LocalIndices.All(initialized.Contains) &&
+            initialized.ContainsAll(instruction.LocalIndices) &&
             instruction.SkipCount is not null &&
             !instruction.LocalIndices.IsDefaultOrEmpty,
 
@@ -107,23 +109,38 @@ public sealed partial record PineControlFlowGraph
             false
         };
 
-    private HashSet<int>?[] DefinitelyInitializedLocals(int parameterCount)
+    private LocalSet?[] DefinitelyInitializedLocals(int parameterCount, OptimizationContext? context = null) =>
+        context?.GetInitializedLocals(this, parameterCount) ?? ComputeDefinitelyInitializedLocals(parameterCount);
+
+    private LocalSet?[] ComputeDefinitelyInitializedLocals(int parameterCount, GraphSummary? summary = null)
     {
-        var atEntry = new HashSet<int>?[Blocks.Length];
-        atEntry[Entry.Value] = [.. Enumerable.Range(0, parameterCount)];
+        System.ArgumentOutOfRangeException.ThrowIfNegative(parameterCount);
+        var atEntry = new LocalSet?[Blocks.Length];
+        var parameters = new LocalSet();
+
+        for (var local = 0; local < parameterCount; local++)
+            parameters.Add(local);
+
+        atEntry[Entry.Value] = parameters;
 
         var pending = new Queue<PineBlockId>();
-        var queued = new HashSet<PineBlockId> { Entry };
+        var queued = new bool[Blocks.Length];
+        queued[Entry.Value] = true;
         pending.Enqueue(Entry);
+        var initialized = new LocalSet();
 
         while (pending.TryDequeue(out var id))
         {
-            queued.Remove(id);
-            var initialized = new HashSet<int>(atEntry[id.Value]!);
+            queued[id.Value] = false;
+            initialized.CopyFrom(atEntry[id.Value]!.Value);
 
-            foreach (var operation in Blocks[id.Value].Operations)
+            if (summary is not null)
+                initialized.UnionWith(summary.Blocks[id.Value].Written);
+
+            else
             {
-                AddWrittenLocals(operation.Instruction, initialized);
+                foreach (var operation in Blocks[id.Value].Operations)
+                    AddWrittenLocals(operation.Instruction, ref initialized);
             }
 
             foreach (var (target, _) in Successors(Blocks[id.Value].Terminator))
@@ -135,22 +152,19 @@ public sealed partial record PineControlFlowGraph
 
                 var previous = atEntry[target.Value];
 
-                var incoming =
-                    previous is null
-                    ?
-                    new HashSet<int>(initialized)
-                    :
-                    [.. previous.Intersect(initialized)];
-
-                if (previous is not null && previous.SetEquals(incoming))
+                if (previous is { } incoming)
                 {
-                    continue;
+                    if (!incoming.IntersectWith(initialized))
+                        continue;
+
+                    atEntry[target.Value] = incoming;
                 }
+                else
+                    atEntry[target.Value] = initialized.Clone();
 
-                atEntry[target.Value] = incoming;
-
-                if (queued.Add(target))
+                if (!queued[target.Value])
                 {
+                    queued[target.Value] = true;
                     pending.Enqueue(target);
                 }
             }

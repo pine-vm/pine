@@ -1,5 +1,6 @@
 using Pine.Core.PineLanguage;
 using System;
+using System.Collections.Frozen;
 using System.Collections.Generic;
 using System.Collections.Immutable;
 using System.Numerics;
@@ -53,6 +54,38 @@ public abstract record PineControlFlowNode
     /// </summary>
     public sealed record Operation : PineControlFlowNode
     {
+        private static readonly FrozenDictionary<StackInstruction, Operation> s_shared = CreateShared();
+
+        private static FrozenDictionary<StackInstruction, Operation> CreateShared()
+        {
+            StackInstruction[] instructions =
+                [
+                    StackInstruction.Pop, StackInstruction.Length, StackInstruction.Reverse,
+                    StackInstruction.Head_Generic, StackInstruction.Concat_Generic, StackInstruction.Equal_Generic,
+                    StackInstruction.Negate, StackInstruction.Int_Add_Binary, StackInstruction.Int_Add_Generic,
+                    StackInstruction.Int_Mul_Binary, StackInstruction.Int_Mul_Generic, StackInstruction.Skip_Binary,
+                    StackInstruction.Bit_Not, StackInstruction.Bit_And_Generic, StackInstruction.Skip_Head_Binary,
+                    StackInstruction.Skip_Generic, StackInstruction.Take_Generic, StackInstruction.Take_Binary,
+                    StackInstruction.Concat_Binary, StackInstruction.Equal_Binary, StackInstruction.Not_Equal_Binary,
+                    StackInstruction.Is_List_Value, StackInstruction.Is_Blob_Value, StackInstruction.Int_Is_Sorted_Asc_Generic,
+                    StackInstruction.Int_Less_Than_Binary, StackInstruction.Int_Less_Than_Or_Equal_Binary,
+                    StackInstruction.Eval_Binary, StackInstruction.Bit_And_Binary, StackInstruction.Bit_Or_Generic,
+                    StackInstruction.Bit_Or_Binary, StackInstruction.Bit_Xor_Generic, StackInstruction.Bit_Xor_Binary,
+                    StackInstruction.Bit_Shift_Left_Binary, StackInstruction.Bit_Shift_Left_Generic,
+                    StackInstruction.Bit_Shift_Right_Binary, StackInstruction.Bit_Shift_Right_Generic,
+                    StackInstruction.Slice_Skip_Var_Take_Var, StackInstruction.Logical_And_Binary
+                ];
+
+            return
+                instructions.ToFrozenDictionary<StackInstruction, StackInstruction, Operation>(
+                    instruction => instruction,
+                    instruction => new Operation(instruction),
+                    ReferenceEqualityComparer.Instance);
+        }
+
+        internal static Operation FromInstruction(StackInstruction instruction) =>
+            s_shared.TryGetValue(instruction, out var shared) ? shared : new(instruction);
+
         /// <summary>
         /// Creates an operation node, rejecting instructions that transfer control within the frame.
         /// </summary>
@@ -103,7 +136,11 @@ public abstract record PineControlFlowNode
     /// Transfers control to the start of the frame (loop back-edge). The evaluation stack must be empty.
     /// No node may follow in the same fragment.
     /// </summary>
-    public sealed record JumpToEntry : PineControlFlowNode;
+    public sealed record JumpToEntry : PineControlFlowNode
+    {
+        /// <summary>A shared, stateless loop transfer.</summary>
+        public static readonly JumpToEntry Instance = new();
+    }
 
     /// <summary>
     /// Whether the instruction kind transfers control within a frame and therefore needs a structural model.
@@ -139,21 +176,22 @@ public sealed record PineControlFlowFragment(
     /// Appends a single straight-line operation.
     /// </summary>
     public PineControlFlowFragment AppendOperation(StackInstruction instruction) =>
-        Append(new PineControlFlowNode.Operation(instruction));
+        Append(PineControlFlowNode.Operation.FromInstruction(instruction));
 
     /// <summary>
     /// Appends a sequence of straight-line operations.
     /// </summary>
     public PineControlFlowFragment AppendOperations(IEnumerable<StackInstruction> instructions)
     {
-        var builder = Nodes.ToBuilder();
+        ImmutableList<PineControlFlowNode>.Builder? builder = null;
 
         foreach (var instruction in instructions)
         {
-            builder.Add(new PineControlFlowNode.Operation(instruction));
+            builder ??= Nodes.ToBuilder();
+            builder.Add(PineControlFlowNode.Operation.FromInstruction(instruction));
         }
 
-        return new PineControlFlowFragment(builder.ToImmutable());
+        return builder is null ? this : new PineControlFlowFragment(builder.ToImmutable());
     }
 
     /// <summary>
@@ -166,7 +204,7 @@ public sealed record PineControlFlowFragment(
     /// Appends all nodes of another fragment.
     /// </summary>
     public PineControlFlowFragment Append(PineControlFlowFragment other) =>
-        new(Nodes.AddRange(other.Nodes));
+        other.Nodes.IsEmpty ? this : Nodes.IsEmpty ? other : new(Nodes.AddRange(other.Nodes));
 
     /// <summary>
     /// The instruction of the last node if that node is a straight-line operation, otherwise null.
@@ -184,11 +222,17 @@ public sealed record PineControlFlowFragment(
     /// </summary>
     public PineControlFlowFragment ReplaceLastOperation(StackInstruction instruction)
     {
-        if (LastOperationOrNull is null)
+        if (LastOperationOrNull is not { } last)
         {
             throw new InvalidOperationException("Fragment does not end with a straight-line operation.");
         }
 
-        return new PineControlFlowFragment(Nodes.SetItem(Nodes.Count - 1, new PineControlFlowNode.Operation(instruction)));
+        return
+            ReferenceEquals(last, instruction)
+            ?
+            this
+            :
+            new PineControlFlowFragment(
+                Nodes.SetItem(Nodes.Count - 1, PineControlFlowNode.Operation.FromInstruction(instruction)));
     }
 }

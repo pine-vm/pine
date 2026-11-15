@@ -12,10 +12,13 @@ public sealed partial record PineControlFlowGraph
     /// corresponding locals (or are not stored at all), and removes their discarded pushes.
     /// </summary>
     public PineControlFlowGraph EliminateRedundantLocalWrites(int parameterCount)
-    {
-        Validate();
+        => EliminateRedundantLocalWrites(parameterCount, null);
 
-        var initializedAtEntry = DefinitelyInitializedLocals(parameterCount);
+    private PineControlFlowGraph EliminateRedundantLocalWrites(int parameterCount, OptimizationContext? context)
+    {
+        Validate(context);
+
+        var initializedAtEntry = DefinitelyInitializedLocals(parameterCount, context);
         ImmutableArray<PineBasicBlock>.Builder? blocks = null;
 
         foreach (var block in Blocks)
@@ -178,7 +181,7 @@ public sealed partial record PineControlFlowGraph
         }
 
         var result = this with { Blocks = blocks.ToImmutable() };
-        result.Validate();
+        result.Validate(context);
         return result;
     }
 }
