@@ -124,7 +124,7 @@ public sealed partial record PineControlFlowGraph
             }
         }
 
-        var result = this with { Blocks = blocks };
+        var result = blocks == Blocks ? this : this with { Blocks = blocks };
         result.Validate();
         return result;
     }
@@ -140,10 +140,10 @@ public sealed partial record PineControlFlowGraph
     public PineControlFlowGraph FuseLocalListProjections()
     {
         var blocks =
-            Blocks.Select(
+            RewriteBlocks(
                 block =>
                 {
-                    var operations = ImmutableArray.CreateBuilder<PineControlFlowOperation>();
+                    var operations = new OperationBuilder(block.Operations);
 
                     for (var index = 0; index < block.Operations.Length; index++)
                     {
@@ -173,10 +173,10 @@ public sealed partial record PineControlFlowGraph
                         operations.Add(get);
                     }
 
-                    return block with { Operations = operations.ToImmutable() };
-                }).ToImmutableArray();
+                    return operations.Build(block);
+                });
 
-        var result = this with { Blocks = blocks };
+        var result = blocks == Blocks ? this : this with { Blocks = blocks };
         result.Validate();
         return result;
     }
@@ -192,10 +192,10 @@ public sealed partial record PineControlFlowGraph
         var changed = false;
 
         var blocks =
-            Blocks.Select(
+            RewriteBlocks(
                 block =>
                 {
-                    var operations = ImmutableArray.CreateBuilder<PineControlFlowOperation>();
+                    var operations = new OperationBuilder(block.Operations);
 
                     for (var index = 0; index < block.Operations.Length; index++)
                     {
@@ -215,7 +215,8 @@ public sealed partial record PineControlFlowGraph
                             operations.Count >= count)
                         {
                             var literalProducers =
-                                operations.Skip(operations.Count - count).ToArray();
+                                Enumerable.Range(operations.Count - count, count)
+                                .Select(position => operations[position]).ToArray();
 
                             if (literalProducers.Select(
                                 (producer, position) =>
@@ -258,9 +259,8 @@ public sealed partial record PineControlFlowGraph
                         operations.Add(store);
                     }
 
-                    return block with { Operations = operations.ToImmutable() };
-                })
-            .ToImmutableArray();
+                    return operations.Build(block);
+                });
 
         if (!changed)
         {
@@ -283,13 +283,12 @@ public sealed partial record PineControlFlowGraph
         Validate();
 
         var initializedAtEntry = DefinitelyInitializedLocals(parameterCount);
-        var changed = false;
-        var blocks = Blocks.ToBuilder();
+        ImmutableArray<PineBasicBlock>.Builder? blocks = null;
 
         foreach (var block in Blocks)
         {
             var initialized = new HashSet<int>(initializedAtEntry[block.Id.Value] ?? []);
-            var operations = ImmutableArray.CreateBuilder<PineControlFlowOperation>();
+            var operations = new OperationBuilder(block.Operations);
             var blockChanged = false;
 
             for (var index = 0; index < block.Operations.Length; index++)
@@ -340,7 +339,6 @@ public sealed partial record PineControlFlowGraph
                         }
 
                         index++;
-                        changed = true;
                         blockChanged = true;
                         continue;
                     }
@@ -352,11 +350,12 @@ public sealed partial record PineControlFlowGraph
 
             if (blockChanged)
             {
-                blocks[block.Id.Value] = block with { Operations = operations.ToImmutable() };
+                blocks ??= Blocks.ToBuilder();
+                blocks[block.Id.Value] = operations.Build(block);
             }
         }
 
-        if (!changed)
+        if (blocks is null)
         {
             return this;
         }
@@ -438,10 +437,10 @@ public sealed partial record PineControlFlowGraph
     public PineControlFlowGraph FuseLocalIntegerAdditions()
     {
         var blocks =
-            Blocks.Select(
+            RewriteBlocks(
                 block =>
                 {
-                    var operations = ImmutableArray.CreateBuilder<PineControlFlowOperation>();
+                    var operations = new OperationBuilder(block.Operations);
 
                     for (var index = 0; index < block.Operations.Length; index++)
                     {
@@ -484,10 +483,10 @@ public sealed partial record PineControlFlowGraph
                         operations.Add(block.Operations[index]);
                     }
 
-                    return block with { Operations = operations.ToImmutable() };
-                }).ToImmutableArray();
+                    return operations.Build(block);
+                });
 
-        var result = this with { Blocks = blocks };
+        var result = blocks == Blocks ? this : this with { Blocks = blocks };
         result.Validate();
         return result;
     }

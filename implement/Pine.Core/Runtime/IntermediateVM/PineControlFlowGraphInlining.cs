@@ -39,17 +39,53 @@ public sealed partial record PineControlFlowGraph
         var baseStack = call.Arguments[..^1];
         var baseDepth = baseStack.Length;
 
-        var nextValue =
-            Blocks
-            .SelectMany(
-                block =>
-                block.Parameters
-                .Concat(block.Operations.SelectMany(operation => operation.Inputs.Concat(operation.Results)))
-                .Concat(Successors(block.Terminator).SelectMany(edge => edge.Arguments))
-                .Concat(block.Terminator is PineControlFlowTerminator.Invoke invoke ? invoke.Inputs : []))
-            .Select(value => value.Value)
-            .DefaultIfEmpty(-1)
-            .Max() + 1;
+        static int MaxValueId(PineControlFlowGraph graph)
+        {
+            var maximum = -1;
+
+            void Include(ImmutableArray<PineVirtualValueId> values)
+            {
+                foreach (var value in values)
+                    maximum = Math.Max(maximum, value.Value);
+            }
+
+            foreach (var block in graph.Blocks)
+            {
+                Include(block.Parameters);
+
+                foreach (var operation in block.Operations)
+                {
+                    Include(operation.Inputs);
+                    Include(operation.Results);
+                }
+
+                foreach (var (_, arguments) in Successors(block.Terminator))
+                    Include(arguments);
+
+                switch (block.Terminator)
+                {
+                    case PineControlFlowTerminator.Invoke invoke:
+                        Include(invoke.Inputs);
+                        break;
+
+                    case PineControlFlowTerminator.Return:
+                    case PineControlFlowTerminator.Jump:
+                    case PineControlFlowTerminator.ConditionalJump:
+                    case PineControlFlowTerminator.Switch:
+                    case PineControlFlowTerminator.TailInvoke:
+                        break;
+
+                    default:
+                        throw new NotImplementedException(
+                            "MaxValueId does not handle terminator variant: " +
+                            block.Terminator.GetType().Name);
+                }
+            }
+
+            return maximum;
+        }
+
+        var nextValue = MaxValueId(this) + 1;
 
         var localOffset =
             Blocks
@@ -61,17 +97,7 @@ public sealed partial record PineControlFlowGraph
 
         var valueOffset = nextValue;
 
-        nextValue +=
-            callee.Blocks
-            .SelectMany(
-                block =>
-                block.Parameters
-                .Concat(block.Operations.SelectMany(operation => operation.Inputs.Concat(operation.Results)))
-                .Concat(Successors(block.Terminator).SelectMany(edge => edge.Arguments))
-                .Concat(block.Terminator is PineControlFlowTerminator.Invoke invoke ? invoke.Inputs : []))
-            .Select(value => value.Value)
-            .DefaultIfEmpty(-1)
-            .Max() + 1;
+        nextValue += MaxValueId(callee) + 1;
 
         var localBase = Math.Max(localOffset, callerParameterCount);
         var oldToNew = new Dictionary<PineBlockId, PineBlockId>();

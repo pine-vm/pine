@@ -16,18 +16,16 @@ public sealed partial record PineControlFlowGraph
         Validate();
 
         var initializedAtEntry = DefinitelyInitializedLocals(parameterCount);
-        var changed = false;
-        var blocks = Blocks.ToBuilder();
+        ImmutableArray<PineBasicBlock>.Builder? blocks = null;
 
         foreach (var block in Blocks)
         {
-            var initialized = new HashSet<int>(initializedAtEntry[block.Id.Value] ?? []);
-            var initializedBefore = new HashSet<int>[block.Operations.Length];
+            var initializedAtBlockEntry = initializedAtEntry[block.Id.Value];
+            var firstWrite = new Dictionary<int, int>();
             var producerByValue = new Dictionary<PineVirtualValueId, int>();
 
             for (var index = 0; index < block.Operations.Length; index++)
             {
-                initializedBefore[index] = [.. initialized];
                 var operation = block.Operations[index];
 
                 foreach (var value in operation.Results)
@@ -35,8 +33,13 @@ public sealed partial record PineControlFlowGraph
                     producerByValue[value] = index;
                 }
 
-                AddWrittenLocals(operation.Instruction, initialized);
+                foreach (var local in WrittenLocals(operation.Instruction))
+                    firstWrite.TryAdd(local, index);
             }
+
+            bool InitializedBefore(int local, int index) =>
+                initializedAtBlockEntry?.Contains(local) is true ||
+                firstWrite.TryGetValue(local, out var writtenAt) && writtenAt < index;
 
             var removed = new HashSet<int>();
             var replacements = new Dictionary<int, PineControlFlowOperation>();
@@ -82,7 +85,7 @@ public sealed partial record PineControlFlowGraph
                         instruction.Kind is not StackInstructionKind.Local_Get ||
                         instruction.LocalIndices.Length is not 1 ||
                         instruction.SingleLocalIndex != destination ||
-                        !initializedBefore[producerIndex].Contains(destination)
+                        !InitializedBefore(destination, producerIndex)
                         :
                         instruction.Kind switch
                         {
@@ -90,7 +93,7 @@ public sealed partial record PineControlFlowGraph
 
                             StackInstructionKind.Local_Get =>
                             instruction.LocalIndices is not [var source] ||
-                            !initializedBefore[producerIndex].Contains(source),
+                            !InitializedBefore(source, producerIndex),
 
                             _ =>
                             true
@@ -113,7 +116,6 @@ public sealed partial record PineControlFlowGraph
                     continue;
                 }
 
-                changed = true;
                 removed.UnionWith(removable);
                 var remainingStoreCount = count - Math.Max(0, removable.Count - unstored);
                 var remainingPopCount = popCount - removable.Count;
@@ -155,6 +157,8 @@ public sealed partial record PineControlFlowGraph
                 continue;
             }
 
+            blocks ??= Blocks.ToBuilder();
+
             blocks[block.Id.Value] =
                 block with
                 {
@@ -168,7 +172,7 @@ public sealed partial record PineControlFlowGraph
                 };
         }
 
-        if (!changed)
+        if (blocks is null)
         {
             return this;
         }

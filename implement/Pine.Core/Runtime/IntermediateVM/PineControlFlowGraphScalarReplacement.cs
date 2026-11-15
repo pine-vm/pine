@@ -409,9 +409,16 @@ public sealed partial record PineControlFlowGraph
             return false;
         }
 
-        bool CanReachFromSuccessors(PineBlockId source, PineBlockId target) =>
-            Successors(Blocks[source.Value].Terminator)
-            .Any(edge => CanReach(edge.Target, target));
+        bool CanReachFromSuccessors(PineBlockId source, PineBlockId target)
+        {
+            foreach (var (successor, _) in Successors(Blocks[source.Value].Terminator))
+            {
+                if (CanReach(successor, target))
+                    return true;
+            }
+
+            return false;
+        }
 
         bool LocalMayBeReadAfter(PineBlockId block, int operationIndex, int local)
         {
@@ -613,10 +620,10 @@ public sealed partial record PineControlFlowGraph
             .Max();
 
         var rewritten =
-            Blocks.Select(
+            RewriteBlocks(
                 block =>
                 {
-                    var operations = ImmutableArray.CreateBuilder<PineControlFlowOperation>();
+                    var operations = new OperationBuilder(block.Operations);
 
                     for (var index = 0; index < block.Operations.Length; index++)
                     {
@@ -744,9 +751,8 @@ public sealed partial record PineControlFlowGraph
                         operations.Add(operation);
                     }
 
-                    return block with { Operations = operations.ToImmutable() };
-                })
-            .ToImmutableArray();
+                    return operations.Build(block);
+                });
 
         var result = new PineControlFlowGraph(Entry, rewritten);
         result.Validate();

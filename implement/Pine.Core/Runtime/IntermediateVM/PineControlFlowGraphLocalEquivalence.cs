@@ -76,7 +76,7 @@ public sealed partial record PineControlFlowGraph
         var changed = false;
 
         var blocks =
-            Blocks.Select(
+            RewriteBlocks(
                 block =>
                 {
                     if (states[block.Id.Value] is not { } state)
@@ -84,7 +84,7 @@ public sealed partial record PineControlFlowGraph
                         return block;
                     }
 
-                    var operations = block.Operations.ToBuilder();
+                    var operations = new OperationBuilder(block.Operations, includeAll: true);
 
                     TraceLocalEquivalence(
                         block,
@@ -101,9 +101,8 @@ public sealed partial record PineControlFlowGraph
                             changed = true;
                         });
 
-                    return block with { Operations = operations.ToImmutable() };
-                })
-            .ToImmutableArray();
+                    return operations.Build(block);
+                });
 
         if (!changed)
         {

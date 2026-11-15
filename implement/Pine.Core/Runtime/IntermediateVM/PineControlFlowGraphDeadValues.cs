@@ -1,5 +1,4 @@
 using System.Collections.Generic;
-using System.Collections.Immutable;
 using System.Linq;
 
 namespace Pine.Core.Runtime.IntermediateVM;
@@ -16,52 +15,59 @@ public sealed partial record PineControlFlowGraph
         Validate();
 
         var initializedAtEntry = DefinitelyInitializedLocals(parameterCount);
-        var blocks = Blocks.ToBuilder();
 
-        foreach (var block in Blocks)
-        {
-            var initialized = new HashSet<int>(initializedAtEntry[block.Id.Value] ?? []);
-            var operations = ImmutableArray.CreateBuilder<PineControlFlowOperation>();
-
-            foreach (var operation in block.Operations)
-            {
-                var instruction = operation.Instruction;
-
-                if (instruction.Kind is StackInstructionKind.Pop && instruction.PopCount is > 0)
+        var blocks =
+            RewriteBlocks(
+                block =>
                 {
-                    var discarded = operation.Inputs;
+                    var initialized = new HashSet<int>(initializedAtEntry[block.Id.Value] ?? []);
+                    var operations = new OperationBuilder(block.Operations);
 
-                    while (!discarded.IsEmpty &&
-                        operations.Count > 0 &&
-                        operations[^1] is { Results.Length: 1 } producer &&
-                        producer.Results[0] == discarded[^1] &&
-                        IsDiscardable(producer.Instruction, initialized))
+                    foreach (var operation in block.Operations)
                     {
-                        operations.RemoveAt(operations.Count - 1);
-                        discarded = [.. discarded[..^1], .. producer.Inputs];
-                    }
+                        var instruction = operation.Instruction;
 
-                    if (!discarded.IsEmpty)
-                    {
-                        operations.Add(
-                            operation with
+                        if (instruction.Kind is StackInstructionKind.Pop && instruction.PopCount is > 0)
+                        {
+                            var discarded = operation.Inputs;
+                            var removedProducer = false;
+
+                            while (!discarded.IsEmpty &&
+                                operations.Count > 0 &&
+                                operations[^1] is { Results.Length: 1 } producer &&
+                                producer.Results[0] == discarded[^1] &&
+                                IsDiscardable(producer.Instruction, initialized))
                             {
-                                Instruction = StackInstruction.PopMultiple(discarded.Length),
-                                Inputs = discarded
-                            });
+                                operations.RemoveAt(operations.Count - 1);
+                                removedProducer = true;
+                                discarded = [.. discarded[..^1], .. producer.Inputs];
+                            }
+
+                            if (!removedProducer && discarded.Length == instruction.PopCount)
+                            {
+                                operations.Add(operation);
+                            }
+                            else if (!discarded.IsEmpty)
+                            {
+                                operations.Add(
+                                    operation with
+                                    {
+                                        Instruction = StackInstruction.PopMultiple(discarded.Length),
+                                        Inputs = discarded
+                                    });
+                            }
+
+                            continue;
+                        }
+
+                        operations.Add(operation);
+                        AddWrittenLocals(instruction, initialized);
                     }
 
-                    continue;
-                }
+                    return operations.Build(block);
+                });
 
-                operations.Add(operation);
-                AddWrittenLocals(instruction, initialized);
-            }
-
-            blocks[block.Id.Value] = block with { Operations = operations.ToImmutable() };
-        }
-
-        var result = this with { Blocks = blocks.ToImmutable() };
+        var result = blocks == Blocks ? this : this with { Blocks = blocks };
         result.Validate();
         return result;
     }

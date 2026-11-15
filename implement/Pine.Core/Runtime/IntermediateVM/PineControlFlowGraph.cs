@@ -440,25 +440,26 @@ public sealed partial record PineControlFlowGraph(
         while (true)
         {
             var adjacentJumpRemoved = false;
-            var blocks = graph.Blocks.ToBuilder();
 
-            for (var index = 0; index < blocks.Count; index++)
-            {
-                var block = blocks[index];
-
-                if (block.Terminator is PineControlFlowTerminator.Jump
+            var blocks =
+                graph.RewriteBlocks(
+                    block =>
                     {
-                        IsFallThrough: false,
-                        Target: var target
-                    } jump &&
-                    target.Value == block.Id.Value + 1)
-                {
-                    blocks[index] = block with { Terminator = jump with { IsFallThrough = true } };
-                    adjacentJumpRemoved = true;
-                }
-            }
+                        if (block.Terminator is PineControlFlowTerminator.Jump
+                            {
+                                IsFallThrough: false,
+                                Target: var target
+                            } jump &&
+                            target.Value == block.Id.Value + 1)
+                        {
+                            adjacentJumpRemoved = true;
+                            return block with { Terminator = jump with { IsFallThrough = true } };
+                        }
 
-            var next = (graph with { Blocks = blocks.ToImmutable() }).RemoveEmptyForwardingBlocks();
+                        return block;
+                    });
+
+            var next = (blocks == graph.Blocks ? graph : graph with { Blocks = blocks }).RemoveEmptyForwardingBlocks();
 
             if (!adjacentJumpRemoved && next.Blocks.Length == graph.Blocks.Length)
             {
@@ -1270,42 +1271,76 @@ public sealed partial record PineControlFlowGraph(
         return result.MoveToImmutable();
     }
 
-    private static IEnumerable<(PineBlockId Target, ImmutableArray<PineVirtualValueId> Arguments)>
-        Successors(PineControlFlowTerminator terminator)
+    private static SuccessorEnumerable Successors(PineControlFlowTerminator terminator) => new(terminator);
+
+    private readonly struct SuccessorEnumerable(PineControlFlowTerminator terminator)
     {
-        switch (terminator)
+        public Enumerator GetEnumerator() => new(terminator);
+
+        public struct Enumerator(PineControlFlowTerminator terminator)
         {
-            case PineControlFlowTerminator.Return:
-            case PineControlFlowTerminator.TailInvoke:
-                yield break;
+            private int _index;
 
-            case PineControlFlowTerminator.Jump jump:
-                yield return (jump.Target, jump.Arguments);
-                yield break;
+            public (PineBlockId Target, ImmutableArray<PineVirtualValueId> Arguments) Current { get; private set; }
 
-            case PineControlFlowTerminator.ConditionalJump conditional:
-                yield return (conditional.FallThrough, conditional.FallThroughArguments);
-                yield return (conditional.Branch, conditional.BranchArguments);
-                yield break;
-
-            case PineControlFlowTerminator.Switch switchTerminator:
-                yield return (switchTerminator.FallThrough, switchTerminator.Arguments);
-
-                foreach (var switchCase in switchTerminator.Cases)
+            public bool MoveNext()
+            {
+                switch (terminator)
                 {
-                    yield return (switchCase.Target, switchTerminator.Arguments);
+                    case PineControlFlowTerminator.Return:
+                    case PineControlFlowTerminator.TailInvoke:
+                        return false;
+
+                    case PineControlFlowTerminator.Jump jump:
+                        if (_index > 0)
+                            return false;
+
+                        Current = (jump.Target, jump.Arguments);
+                        break;
+
+                    case PineControlFlowTerminator.ConditionalJump conditional:
+                        if (_index > 1)
+                            return false;
+
+                        Current =
+                            _index == 0
+                            ?
+                            (conditional.FallThrough, conditional.FallThroughArguments)
+                            :
+                            (conditional.Branch, conditional.BranchArguments);
+
+                        break;
+
+                    case PineControlFlowTerminator.Switch switchTerminator:
+                        if (_index > switchTerminator.Cases.Length)
+                            return false;
+
+                        Current =
+                            (_index == 0
+                            ?
+                            switchTerminator.FallThrough
+                            :
+                            switchTerminator.Cases[_index - 1].Target,
+                            switchTerminator.Arguments);
+
+                        break;
+
+                    case PineControlFlowTerminator.Invoke invoke:
+                        if (_index > 0)
+                            return false;
+
+                        Current = (invoke.Continuation, invoke.Arguments);
+                        break;
+
+                    default:
+                        throw new NotImplementedException(
+                            "Successors does not handle terminator variant: " +
+                            terminator.GetType().Name);
                 }
 
-                yield break;
-
-            case PineControlFlowTerminator.Invoke invoke:
-                yield return (invoke.Continuation, invoke.Arguments);
-                yield break;
-
-            default:
-                throw new NotImplementedException(
-                    "Successors does not handle terminator variant: " +
-                    terminator.GetType().Name);
+                _index++;
+                return true;
+            }
         }
     }
 

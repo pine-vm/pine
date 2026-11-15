@@ -42,6 +42,105 @@ public class PineControlFlowGraphTests
         .LowerToStackInstructions();
 
     [Fact]
+    public void Unchanged_operation_rewrites_reuse_the_graph_and_blocks()
+    {
+        var graph = PineControlFlowGraph.FromFragment(Ops(StackInstruction.Local_Get(0)));
+
+        graph.EliminateDeadLocalStores().Should().BeSameAs(graph);
+        graph.EliminateDiscardedStackValues(1).Should().BeSameAs(graph);
+        graph.EliminateRedundantLocalWrites(1).Should().BeSameAs(graph);
+        graph.EliminateLocalCopies().Should().BeSameAs(graph);
+        graph.ForwardEquivalentLocalReads().Should().BeSameAs(graph);
+        graph.FuseLocalListProjections().Should().BeSameAs(graph);
+        graph.FuseLiteralLocalStores().Should().BeSameAs(graph);
+        graph.FuseDescendingLocalIntegerAdditions(1).Should().BeSameAs(graph);
+        graph.FuseLocalIntegerAdditions().Should().BeSameAs(graph);
+        graph.FoldKnownLiteralValues(1).Should().BeSameAs(graph);
+    }
+
+    [Fact]
+    public void Dead_store_rewrite_retains_untouched_branch_blocks()
+    {
+        var selected = PineValue.Blob([6]);
+        var fallback = PineValue.Blob([7]);
+
+        var graph =
+            PineControlFlowGraph.FromFragment(
+                new PineControlFlowFragment(
+                    [
+                    new PineControlFlowNode.Operation(StackInstruction.Local_Get(0)),
+                    Conditional(
+                        PineValueInProcess.CreateBool(true).Evaluate(),
+                        Ops(StackInstruction.Push_Literal(fallback)),
+                        Ops(
+                            StackInstruction.Local_Set_Literal(2, PineValue.EmptyList),
+                            StackInstruction.Push_Literal(selected)))
+                    ]));
+
+        var optimized = graph.EliminateDeadLocalStores();
+
+        foreach (var block in graph.Blocks)
+        {
+            if (block.Operations.Any(operation => operation.Instruction.Kind is StackInstructionKind.Local_Set_Literal))
+            {
+                optimized.Blocks[block.Id.Value].Should().NotBeSameAs(block);
+            }
+            else
+            {
+                optimized.Blocks[block.Id.Value].Should().BeSameAs(block);
+            }
+        }
+
+        Evaluate(optimized, PineValueInProcess.CreateBool(true).Evaluate()).Should().Be(selected);
+        Evaluate(optimized, PineValueInProcess.CreateBool(false).Evaluate()).Should().Be(fallback);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void Redundant_write_initialization_is_checked_before_the_producer(bool writeBeforeRead)
+    {
+        var value = PineValue.Blob([8]);
+
+        var instructions =
+            writeBeforeRead
+            ?
+            new[]
+            {
+                StackInstruction.Local_Set_Literal(2, value),
+                StackInstruction.Local_Get(2),
+                StackInstruction.Local_Set_Descending(2, 1),
+                StackInstruction.Pop,
+                StackInstruction.Push_Literal(value)
+            }
+            :
+            new[]
+            {
+                StackInstruction.Local_Get(2),
+                StackInstruction.Local_Set_Descending(2, 1),
+                StackInstruction.Pop,
+                StackInstruction.Local_Set_Literal(2, value),
+                StackInstruction.Push_Literal(value)
+            };
+
+        var graph = PineControlFlowGraph.FromFragment(Ops(instructions));
+        var optimized = graph.EliminateRedundantLocalWrites(0);
+
+        if (writeBeforeRead)
+        {
+            optimized.LowerToStackInstructions().Should().Equal(
+                StackInstruction.Local_Set_Literal(2, value),
+                StackInstruction.Push_Literal(value),
+                StackInstruction.Return);
+        }
+        else
+        {
+            optimized.Should().BeSameAs(graph);
+            optimized.LowerToStackInstructions().Should().Equal(graph.LowerToStackInstructions());
+        }
+    }
+
+    [Fact]
     public void Sequential_local_stores_and_pops_fuse_in_stack_order()
     {
         var first = PineValue.Blob([11]);

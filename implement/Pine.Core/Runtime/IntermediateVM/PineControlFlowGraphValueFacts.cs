@@ -253,7 +253,7 @@ public sealed partial record PineControlFlowGraph
         var changed = false;
 
         var blocks =
-            Blocks.Select(
+            RewriteBlocks(
                 block =>
                 {
                     if (states[block.Id.Value] is not { } state)
@@ -262,7 +262,7 @@ public sealed partial record PineControlFlowGraph
                     }
 
                     var initialized = new HashSet<int>(initializedAtEntry[block.Id.Value] ?? []);
-                    var operations = ImmutableArray.CreateBuilder<PineControlFlowOperation>();
+                    var operations = new OperationBuilder(block.Operations);
 
                     TraceValueFacts(
                         block,
@@ -330,9 +330,8 @@ public sealed partial record PineControlFlowGraph
                             AddWrittenLocals(instruction, initialized);
                         });
 
-                    return block with { Operations = operations.ToImmutable() };
-                })
-            .ToImmutableArray();
+                    return operations.Build(block);
+                });
 
         if (!changed)
         {
@@ -349,7 +348,7 @@ public sealed partial record PineControlFlowGraph
         var changed = false;
 
         var blocks =
-            Blocks.Select(
+            RewriteBlocks(
                 block =>
                 {
                     if (states[block.Id.Value] is not { } state)
@@ -488,8 +487,7 @@ public sealed partial record PineControlFlowGraph
                             Operations = operations.ToImmutable(),
                             Terminator = new PineControlFlowTerminator.Jump(target, arguments, fallThrough)
                         };
-                })
-            .ToImmutableArray();
+                });
 
         if (!changed)
         {

@@ -84,11 +84,11 @@ public sealed partial record PineControlFlowGraph
         var changed = false;
 
         var blocks =
-            Blocks.Select(
+            RewriteBlocks(
                 block =>
                 {
                     var live = new HashSet<int>(liveOut[block.Id.Value]);
-                    var operations = block.Operations.ToBuilder();
+                    var operations = new OperationBuilder(block.Operations, includeAll: true);
 
                     for (var index = operations.Count - 1; index >= 0; index--)
                     {
@@ -169,8 +169,8 @@ public sealed partial record PineControlFlowGraph
                             live.Add(read);
                     }
 
-                    return block with { Operations = operations.ToImmutable() };
-                }).ToImmutableArray();
+                    return operations.Build(block);
+                });
 
         if (!changed)
         {
@@ -192,11 +192,15 @@ public sealed partial record PineControlFlowGraph
 
     private static void AddWrittenLocals(StackInstruction instruction, HashSet<int> written)
     {
-        if (instruction.Kind is StackInstructionKind.Local_Set or
-            StackInstructionKind.Local_Set_Literal or StackInstructionKind.Local_Int_Add_Const)
-        {
-            foreach (var slot in instruction.LocalIndices)
-                written.Add(slot);
-        }
+        foreach (var slot in WrittenLocals(instruction))
+            written.Add(slot);
     }
+
+    private static ImmutableArray<int> WrittenLocals(StackInstruction instruction) =>
+        instruction.Kind is StackInstructionKind.Local_Set or
+            StackInstructionKind.Local_Set_Literal or StackInstructionKind.Local_Int_Add_Const
+        ?
+        instruction.LocalIndices
+        :
+        [];
 }
