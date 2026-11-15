@@ -25,7 +25,7 @@ public class ExpressionEncodingTests
             .Should().Be(expression);
 
         new Core.CodeAnalysis.PineVMParseCache()
-            .ParseExpression(encoded2024)
+            .ParseExpression(ExpressionEncoding.EncodeExpressionAsValue(expression))
             .Extract(error => throw new System.Exception(error))
             .Should().Be(expression);
 

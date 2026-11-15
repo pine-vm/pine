@@ -77,6 +77,30 @@ public record StaticFunctionInterface
         return FromPathsSorted([.. envPaths]);
     }
 
+    internal static StaticFunctionInterface FromExpression(Runtime.InternalExpression.Expression expression)
+    {
+        var seen = new HashSet<Runtime.InternalExpression.Expression>();
+        var pending = new Stack<Runtime.InternalExpression.Expression>();
+        var paths = new List<ReadOnlyMemory<int>>();
+        pending.Push(expression);
+
+        while (pending.TryPop(out var node))
+        {
+            if (!node.ReferencesEnvironment || !seen.Add(node))
+                continue;
+
+            if (Runtime.InternalExpression.ExpressionAnalysis.TryParseExprAsPathInEnv(node) is { } path)
+            {
+                paths.Add(new([.. path]));
+                continue;
+            }
+
+            Runtime.InternalExpression.Expression.PushChildren(node, pending);
+        }
+
+        return FromPathsSorted([.. FilterUnpackedParams(paths).Select(path => (IReadOnlyList<int>)[.. path.Span])]);
+    }
+
     /// <summary>
     /// Enumerates the distinct environment paths referenced by the expression while removing entries that are redundant because of broader paths.
     /// </summary>
@@ -85,9 +109,11 @@ public record StaticFunctionInterface
     public static IEnumerable<ReadOnlyMemory<int>> UnpackedParamsFiltered(
         Expression rootExpression)
     {
-        IReadOnlyList<ReadOnlyMemory<int>> unfiltered =
-            [.. EnumerateUnpackedParamsDistinct(rootExpression)];
+        return FilterUnpackedParams([.. EnumerateUnpackedParamsDistinct(rootExpression)]);
+    }
 
+    private static IEnumerable<ReadOnlyMemory<int>> FilterUnpackedParams(IReadOnlyList<ReadOnlyMemory<int>> unfiltered)
+    {
         bool IsCoveredByOther(ReadOnlyMemory<int> path)
         {
             foreach (var otherPath in unfiltered)

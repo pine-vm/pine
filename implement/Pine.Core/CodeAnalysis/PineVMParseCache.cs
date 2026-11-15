@@ -5,6 +5,7 @@ using Pine.Core.Runtime.IntermediateVM;
 using System;
 using System.Collections.Concurrent;
 using System.Diagnostics;
+using System.Linq;
 
 namespace Pine.Core.CodeAnalysis;
 
@@ -13,6 +14,64 @@ namespace Pine.Core.CodeAnalysis;
 /// </summary>
 public class PineVMParseCache
 {
+    private readonly ConcurrentDictionary<PineValue, ValueResult<string, Runtime.InternalExpression.Expression>>
+        _internalExpressions = [];
+
+    internal readonly record struct InternalParseResult(Runtime.InternalExpression.Expression? Expression, string? Error)
+    {
+        public Result<string, Runtime.InternalExpression.Expression> ToPublicResult() =>
+            Expression is { } expression
+            ?
+            expression
+            :
+            Error ?? throw new InvalidOperationException("Empty internal parse result.");
+    }
+
+    internal Result<string, Runtime.InternalExpression.Expression> ParseInternalExpression(PineValue expressionValue) =>
+        ParseInternalExpressionWithoutResultAllocation(expressionValue).ToPublicResult();
+
+    internal InternalParseResult ParseInternalExpressionWithoutResultAllocation(PineValue expressionValue)
+    {
+        var profile = PineVMWorkProfile.Current;
+
+        if (profile is null)
+            return ParseInternalExpressionCore(expressionValue);
+
+        var hit = _internalExpressions.ContainsKey(expressionValue);
+        var count = hit ? 0 : InternalCount;
+        var bytes = GC.GetAllocatedBytesForCurrentThread();
+        var ticks = Stopwatch.GetTimestamp();
+        var parsed = ParseInternalExpressionCore(expressionValue);
+        var elapsed = Stopwatch.GetTimestamp() - ticks;
+        var allocated = GC.GetAllocatedBytesForCurrentThread() - bytes;
+
+        profile.DirectTemplates.Parsed(
+            parsed.Expression is { } expression
+            ?
+            Runtime.InternalExpression.ExpressionConversion.ToCanonicalCached(expression)
+            :
+            null,
+            hit,
+            hit ? 0 : InternalCount - count,
+            allocated,
+            elapsed);
+
+        return parsed;
+    }
+
+    private int InternalCount => _internalExpressions.Count;
+
+    private InternalParseResult ParseInternalExpressionCore(PineValue expressionValue)
+    {
+        var result =
+            Runtime.InternalExpression.ExpressionValueEncoding.ParseExpressionFromValueCached(
+                expressionValue,
+                fusePopularShapes: true,
+                _internalExpressions);
+
+        return result.IsOk ? new(result.Value, null) : new(null, result.Error);
+    }
+
     internal ExpressionTemplateProofCache TemplateProofs { get; } = new();
 
     /// <summary>Distinct parameterized constructor shapes, including uncertain shapes.</summary>
@@ -27,11 +86,11 @@ public class PineVMParseCache
         _parseExprCache = [];
 
     /// <summary>Number of cached expression values, including parsed subexpressions.</summary>
-    public int Count => _parseExprCache.Count;
+    public int Count => _parseExprCache.Keys.Union(_internalExpressions.Keys).Count();
 
     /// <summary>
     /// Parses the given <paramref name="expressionValue"/> into an <see cref="Expression"/> using
-    /// <see cref="ExpressionEncoding.ParseExpressionFromValue(PineValue)"/>, caching the result.
+    /// <see cref="ExpressionEncoding2026"/>, caching the result.
     /// </summary>
     /// <param name="expressionValue">The encoded Pine expression value to parse.</param>
     /// <returns>
@@ -41,7 +100,7 @@ public class PineVMParseCache
     /// </returns>
     /// <remarks>
     /// Uses the iterative post-order traversal
-    /// <see cref="ExpressionEncoding.ParseExpressionFromValueViaPostOrder"/>, backed directly by the
+    /// <see cref="ExpressionEncoding2026.ParseExpressionFromValueViaPostOrder"/>, backed directly by the
     /// cache dictionary, so that deeply nested encodings do not overflow the call stack while every
     /// distinct subexpression value is still parsed and cached at most once.
     /// </remarks>
@@ -56,7 +115,7 @@ public class PineVMParseCache
         var profile = PineVMWorkProfile.Current;
 
         if (profile is null)
-            return ExpressionEncoding.ParseExpressionFromValueViaPostOrder(expressionValue, _parseExprCache);
+            return ExpressionEncoding2026.ParseExpressionFromValueViaPostOrder(expressionValue, _parseExprCache);
 
         var hit = _parseExprCache.ContainsKey(expressionValue);
         var count = hit ? 0 : _parseExprCache.Count;
@@ -64,7 +123,7 @@ public class PineVMParseCache
         var ticks = Stopwatch.GetTimestamp();
 
         var parsed =
-            ExpressionEncoding.ParseExpressionFromValueViaPostOrder(
+            ExpressionEncoding2026.ParseExpressionFromValueViaPostOrder(
                 expressionValue,
                 _parseExprCache);
 

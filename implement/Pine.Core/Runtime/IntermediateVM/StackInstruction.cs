@@ -517,11 +517,71 @@ public enum StackInstructionKind
 /// mapped to compose the canonical single return value.
 /// </para>
 /// </summary>
-public record DirectInvocation(
-    Expression Expression,
-    PineValue ExpressionEncoded,
-    StaticFunctionInterface InvocationInterface)
+public record DirectInvocation
 {
+    private Expression? _canonicalExpression;
+
+    private InternalExpression.Expression? _internalExpression;
+
+    /// <summary>Canonical API view, reconstructed only when requested.</summary>
+    public Expression Expression
+    {
+        get => _canonicalExpression ??= Runtime.InternalExpression.ExpressionConversion.ToCanonicalCached(InternalExpression);
+        init { _canonicalExpression = value; _internalExpression = null; }
+    }
+
+    /// <summary>The stable encoded callee identity.</summary>
+    public PineValue ExpressionEncoded { get; init; }
+
+    /// <summary>The argument layout of the target frame.</summary>
+    public StaticFunctionInterface InvocationInterface { get; init; }
+
+    internal InternalExpression.Expression InternalExpression =>
+        _internalExpression ??= Runtime.InternalExpression.ExpressionConversion.FromCanonicalCached(Expression);
+
+    /// <summary>Creates an invocation from the public canonical model.</summary>
+    public DirectInvocation(
+        Expression Expression,
+        PineValue ExpressionEncoded,
+        StaticFunctionInterface InvocationInterface)
+    {
+        _canonicalExpression = Expression;
+        this.ExpressionEncoded = ExpressionEncoded;
+        this.InvocationInterface = InvocationInterface;
+    }
+
+    internal DirectInvocation(
+        InternalExpression.Expression expression,
+        PineValue expressionEncoded,
+        StaticFunctionInterface invocationInterface)
+    {
+        _internalExpression = expression;
+        ExpressionEncoded = expressionEncoded;
+        InvocationInterface = invocationInterface;
+    }
+
+    /// <inheritdoc/>
+    public virtual bool Equals(DirectInvocation? other) =>
+        ReferenceEquals(this, other) ||
+        other is not null && InternalExpression.Equals(other.InternalExpression) &&
+        ExpressionEncoded.Equals(other.ExpressionEncoded) && InvocationInterface.Equals(other.InvocationInterface) &&
+        Equals(_linkedStackFrameInstructions, other._linkedStackFrameInstructions);
+
+    /// <inheritdoc/>
+    public override int GetHashCode() =>
+        HashCode.Combine(InternalExpression, ExpressionEncoded, InvocationInterface, _linkedStackFrameInstructions);
+
+    /// <summary>Deconstructs the public canonical invocation contract.</summary>
+    public void Deconstruct(
+        out Expression Expression,
+        out PineValue ExpressionEncoded,
+        out StaticFunctionInterface InvocationInterface)
+    {
+        Expression = this.Expression;
+        ExpressionEncoded = this.ExpressionEncoded;
+        InvocationInterface = this.InvocationInterface;
+    }
+
     StackFrameInstructions? _linkedStackFrameInstructions;
 
     /// <summary>
@@ -1163,6 +1223,15 @@ public record StackInstruction(
     /// </summary>
     public static StackInstruction Invoke_StackFrame_Const(
         Expression expression,
+        PineValue expressionEncoded,
+        StaticFunctionInterface invocationInterface) =>
+        new(
+            StackInstructionKind.Invoke_StackFrame_Const,
+            TakeCount: invocationInterface.ParamsPaths.Count,
+            OptimizedInvocation: new DirectInvocation(expression, expressionEncoded, invocationInterface));
+
+    internal static StackInstruction Invoke_StackFrame_Const(
+        InternalExpression.Expression expression,
         PineValue expressionEncoded,
         StaticFunctionInterface invocationInterface) =>
         new(

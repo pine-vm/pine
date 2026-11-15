@@ -10,16 +10,137 @@ namespace Pine.Core.Runtime.IntermediateVM;
 /// Each frame holds the compiled instructions, input arguments, an evaluation stack for operand passing,
 /// local variable storage, and profiling counters.
 /// </summary>
-public record StackFrame(
-    PineValue? ExpressionValue,
-    Expression Expression,
-    StackFrameInstructions Instructions,
-    StackFrameInput InputValues,
-    Memory<PineValueInProcess?> StackValues,
-    Memory<PineValueInProcess> LocalsValues,
-    StackFrameProfilingBaseline ProfilingBaseline,
-    ApplyStepwise? Specialization)
+public record StackFrame
 {
+    private Expression? _canonicalExpression;
+
+    private InternalExpression.Expression? _internalExpression;
+
+    /// <summary>Original encoded callee identity, when available.</summary>
+    public PineValue? ExpressionValue { get; init; }
+
+    /// <summary>Public canonical view, materialized only for consumers that request it.</summary>
+    public Expression Expression
+    {
+        get => _canonicalExpression ??= Runtime.InternalExpression.ExpressionConversion.ToCanonicalCached(InternalExpression);
+        init { _canonicalExpression = value; _internalExpression = null; }
+    }
+
+    internal InternalExpression.Expression InternalExpression =>
+        _internalExpression ??= Runtime.InternalExpression.ExpressionConversion.FromCanonicalCached(Expression);
+
+    /// <summary>Compiled frame instructions.</summary>
+    public StackFrameInstructions Instructions { get; init; }
+
+    /// <summary>Arguments in the compiled frame layout.</summary>
+    public StackFrameInput InputValues { get; init; }
+
+    /// <summary>Operand storage.</summary>
+    public Memory<PineValueInProcess?> StackValues { get; init; }
+
+    /// <summary>Local variable storage.</summary>
+    public Memory<PineValueInProcess> LocalsValues { get; init; }
+
+    /// <summary>Counters at entry.</summary>
+    public StackFrameProfilingBaseline ProfilingBaseline { get; init; }
+
+    /// <summary>Optional stepwise specialization.</summary>
+    public ApplyStepwise? Specialization { get; init; }
+
+    /// <summary>Creates a frame from the public canonical expression representation.</summary>
+    public StackFrame(
+        PineValue? ExpressionValue,
+        Expression Expression,
+        StackFrameInstructions Instructions,
+        StackFrameInput InputValues,
+        Memory<PineValueInProcess?> StackValues,
+        Memory<PineValueInProcess> LocalsValues,
+        StackFrameProfilingBaseline ProfilingBaseline,
+        ApplyStepwise? Specialization)
+    {
+        this.ExpressionValue = ExpressionValue;
+        _canonicalExpression = Expression;
+        this.Instructions = Instructions;
+        this.InputValues = InputValues;
+        this.StackValues = StackValues;
+        this.LocalsValues = LocalsValues;
+        this.ProfilingBaseline = ProfilingBaseline;
+        this.Specialization = Specialization;
+    }
+
+    internal StackFrame(
+        PineValue? ExpressionValue,
+        InternalExpression.Expression Expression,
+        StackFrameInstructions Instructions,
+        StackFrameInput InputValues,
+        Memory<PineValueInProcess?> StackValues,
+        Memory<PineValueInProcess> LocalsValues,
+        StackFrameProfilingBaseline ProfilingBaseline,
+        ApplyStepwise? Specialization)
+    {
+        this.ExpressionValue = ExpressionValue;
+        _internalExpression = Expression;
+        this.Instructions = Instructions;
+        this.InputValues = InputValues;
+        this.StackValues = StackValues;
+        this.LocalsValues = LocalsValues;
+        this.ProfilingBaseline = ProfilingBaseline;
+        this.Specialization = Specialization;
+    }
+
+    /// <summary>Deconstructs the public canonical frame contract.</summary>
+    public void Deconstruct(
+        out PineValue? ExpressionValue,
+        out Expression Expression,
+        out StackFrameInstructions Instructions,
+        out StackFrameInput InputValues,
+        out Memory<PineValueInProcess?> StackValues,
+        out Memory<PineValueInProcess> LocalsValues,
+        out StackFrameProfilingBaseline ProfilingBaseline,
+        out ApplyStepwise? Specialization)
+    {
+        ExpressionValue = this.ExpressionValue;
+        Expression = this.Expression;
+        Instructions = this.Instructions;
+        InputValues = this.InputValues;
+        StackValues = this.StackValues;
+        LocalsValues = this.LocalsValues;
+        ProfilingBaseline = this.ProfilingBaseline;
+        Specialization = this.Specialization;
+    }
+
+    /// <inheritdoc/>
+    public virtual bool Equals(StackFrame? other) =>
+        other is not null && EqualityContract == other.EqualityContract &&
+        Equals(Expression, other.Expression) && Equals(ExpressionValue, other.ExpressionValue) &&
+        Equals(Instructions, other.Instructions) && Equals(InputValues, other.InputValues) &&
+        StackValues.Equals(other.StackValues) && LocalsValues.Equals(other.LocalsValues) &&
+        ProfilingBaseline.Equals(other.ProfilingBaseline) && Equals(Specialization, other.Specialization) &&
+        FrameIndex == other.FrameIndex && InstructionPointer == other.InstructionPointer &&
+        StackPointer == other.StackPointer && LoopIterationCount == other.LoopIterationCount &&
+        InstructionCount == other.InstructionCount;
+
+    /// <inheritdoc/>
+    public override int GetHashCode()
+    {
+        var hash = new HashCode();
+        hash.Add(EqualityContract);
+        hash.Add(Expression);
+        hash.Add(ExpressionValue);
+        hash.Add(Instructions);
+        hash.Add(InputValues);
+        hash.Add(StackValues);
+        hash.Add(LocalsValues);
+        hash.Add(ProfilingBaseline);
+        hash.Add(Specialization);
+        hash.Add(FrameIndex);
+        hash.Add(InstructionPointer);
+        hash.Add(StackPointer);
+        hash.Add(LoopIterationCount);
+        hash.Add(InstructionCount);
+        return hash.ToHashCode();
+    }
+
     /// <summary>
     /// Unique index assigned when this frame is pushed during an evaluation.
     /// </summary>

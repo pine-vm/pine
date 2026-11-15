@@ -158,7 +158,7 @@ public static class SetupVM
                 compilationEnvClasses: compilationEnvClasses,
                 disableReductionInCompilation: disableReductionInCompilation,
                 selectPrecompiled: null,
-                skipInlineForExpression: _ => false,
+                skipInlineForExpression: null,
                 enableTailRecursionOptimization: enableTailRecursionOptimization,
                 parseCache: parseCache,
                 precompiledLeaves: precompiledLeaves,

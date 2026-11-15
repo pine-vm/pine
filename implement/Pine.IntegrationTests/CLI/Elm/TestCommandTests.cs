@@ -168,10 +168,16 @@ public class TestCommandTests
     }
 
     [Theory]
-    [InlineData(true, true, 0)]
-    [InlineData(false, false, 0)]
-    [InlineData(false, true, 1)]
-    public void Debug_todo_reports_a_failed_test_only_when_reached(bool listTests, bool reached, int expectedExit)
+    [InlineData(true, true, 0, 80)]
+    [InlineData(false, false, 0, 80)]
+    [InlineData(false, true, 1, 80)]
+    [InlineData(false, true, 1, 120)]
+    [InlineData(false, true, 1, 240)]
+    public void Debug_todo_reports_a_failed_test_only_when_reached(
+        bool listTests,
+        bool reached,
+        int expectedExit,
+        int consoleWidth)
     {
         var directory =
             CreateTestProject(
@@ -193,6 +199,7 @@ public class TestCommandTests
                 """);
 
         var (console, output) = CreateConsole(AnsiSupport.No);
+        console.Profile.Width = consoleWidth;
 
         try
         {
@@ -220,8 +227,13 @@ public class TestCommandTests
 
                 if (reached)
                 {
-                    text.Should().Contain("unfinished").And.Contain("Debug.todo:").And.Contain(
-                        "a missing implementation");
+                    text.Should().Contain("unfinished");
+
+                    // Console wrapping must not change which diagnostic this assertion recognizes.
+                    var unwrappedText =
+                        string.Join(" ", text.Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries));
+
+                    unwrappedText.Should().Contain("Debug.todo: \"a missing implementation\"");
                 }
             }
         }
