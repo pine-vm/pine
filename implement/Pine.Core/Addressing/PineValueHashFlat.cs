@@ -1,6 +1,7 @@
 using Pine.Core.Encodings;
 using Pine.Core.PineLanguage;
 using System;
+using System.Buffers;
 using System.Security.Cryptography;
 
 namespace Pine.Core.Addressing;
@@ -18,14 +19,52 @@ public class PineValueHashFlat
         ComputeHashForValue(
         PineValue value)
     {
-        using var stream = new System.IO.MemoryStream();
+        const int BufferSize = 32 * 1024;
 
-        ValueEncodingBinaryDeterministic.Encode(stream, value);
+        using var hash = IncrementalHash.CreateHash(HashAlgorithmName.SHA256);
+        var buffer = ArrayPool<byte>.Shared.Rent(BufferSize);
+        var buffered = 0;
+        var maxBuffered = 0;
+        var encodingLength = 0;
 
-        var encodingBytes = stream.ToArray();
+        void Flush()
+        {
+            if (buffered > 0)
+            {
+                hash.AppendData(buffer.AsSpan(0, buffered));
+                buffered = 0;
+            }
+        }
 
-        var hashBytes = SHA256.HashData(encodingBytes);
+        void Write(ReadOnlySpan<byte> bytes)
+        {
+            encodingLength = checked(encodingLength + bytes.Length);
 
-        return (hashBytes, encodingBytes.Length);
+            if (bytes.Length >= BufferSize)
+            {
+                Flush();
+                hash.AppendData(bytes);
+                return;
+            }
+
+            if (bytes.Length > BufferSize - buffered)
+                Flush();
+
+            bytes.CopyTo(buffer.AsSpan(buffered));
+            buffered += bytes.Length;
+            maxBuffered = Math.Max(maxBuffered, buffered);
+        }
+
+        try
+        {
+            ValueEncodingBinaryDeterministic.Encode(Write, value);
+            Flush();
+            return (hash.GetHashAndReset(), encodingLength);
+        }
+        finally
+        {
+            buffer.AsSpan(0, maxBuffered).Clear();
+            ArrayPool<byte>.Shared.Return(buffer);
+        }
     }
 }

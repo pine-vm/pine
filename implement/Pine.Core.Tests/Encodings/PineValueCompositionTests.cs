@@ -6,13 +6,67 @@ using Pine.Core.Functional;
 using Pine.Core.PineLanguage;
 using System;
 using System.Collections.Immutable;
+using System.IO;
 using System.Linq;
+using System.Security.Cryptography;
 using Xunit;
 
 namespace Pine.Core.Tests.Encodings;
 
 public class PineValueCompositionTests
 {
+    [Fact]
+    public void Flat_hash_matches_whole_canonical_encoding_across_buffer_boundaries()
+    {
+        var lengths = new[] { 0, 1, 3, 7, 32755, 32759, 32764, 32768, 32769, 65539, 131072 };
+
+        foreach (var length in lengths)
+        {
+            var bytes = Enumerable.Range(0, length).Select(index => (byte)(index * 17)).ToArray();
+            var blob = PineValue.Blob(bytes).Should().BeOfType<PineValue.BlobValue>().Subject;
+            var subtree = PineValue.List([blob, PineValue.EmptyList, PineValue.Blob([1, 2, 3])]);
+
+            var equalSubtree =
+                PineValue.List([PineValue.Blob(bytes.ToArray()), PineValue.EmptyList, PineValue.Blob([1, 2, 3])]);
+
+            var value = PineValue.List([subtree, subtree, equalSubtree, blob, PineValue.EmptyBlob]);
+
+            using var encoded = new MemoryStream();
+            ValueEncodingBinaryDeterministic.Encode(encoded, value);
+            var canonicalBytes = encoded.ToArray();
+            var (digest, encodingLength) = PineValueHashFlat.ComputeHashForValue(value);
+
+            digest.ToArray().Should().Equal(SHA256.HashData(canonicalBytes));
+            encodingLength.Should().Be(canonicalBytes.Length);
+            blob.Bytes.ToArray().Should().Equal(bytes);
+        }
+
+        var deep = PineValue.EmptyList;
+
+        for (var depth = 0; depth < 2048; depth++)
+            deep = PineValue.List([deep]);
+
+        using var deepEncoding = new MemoryStream();
+        ValueEncodingBinaryDeterministic.Encode(deepEncoding, deep);
+        var deepHash = PineValueHashFlat.ComputeHashForValue(deep);
+        deepHash.hashBytes.ToArray().Should().Equal(SHA256.HashData(deepEncoding.ToArray()));
+        deepHash.encodingBytesLength.Should().Be((int)deepEncoding.Length);
+    }
+
+    [Fact]
+    public void Flat_hash_does_not_allocate_a_copy_of_a_large_blob_encoding()
+    {
+        var blob = PineValue.Blob(new byte[1024 * 1024 + 3]).Should().BeOfType<PineValue.BlobValue>().Subject;
+        _ = PineValueHashFlat.ComputeHashForValue(blob);
+        var before = GC.GetAllocatedBytesForCurrentThread();
+        var result = PineValueHashFlat.ComputeHashForValue(blob);
+        var allocated = GC.GetAllocatedBytesForCurrentThread() - before;
+        GC.KeepAlive(result);
+
+        allocated.Should().BeLessThan(64 * 1024);
+        result.encodingBytesLength.Should().Be(blob.Bytes.Length + 9);
+    }
+
     [Fact]
     public void Hash_composition()
     {
