@@ -15,7 +15,7 @@ namespace Pine.CLI;
 
 public partial class PineCliCommand
 {
-    public static string AppVersionId => "0.5.14";
+    public static string AppVersionId => "0.5.15";
 
     internal static int AdminInterfaceDefaultPort => 4000;
 
