@@ -3,11 +3,8 @@ using Pine.Core.Functional;
 using Pine.Core.PineLanguage;
 using System;
 using System.Collections.Generic;
-using System.Collections.Immutable;
-using System.Linq;
-using System.Numerics;
 
-using BuiltinFunctionSpecialized = Pine.Core.Internal.BuiltinFunctionSpecialized;
+using static Pine.Core.Runtime.InternalExpression.CanonicalExpressionAdapter;
 
 namespace Pine.Core.CodeAnalysis;
 
@@ -92,39 +89,17 @@ public class ReducePineExpression
     public static Result<string, PineValue> TryEvaluateExpressionIndependent(
         Expression expression,
         PineVMParseCache parseCache) =>
-        TryEvalIndependent(expression, parseCache).ToPublicResult();
+        Pine.Core.Runtime.InternalExpression.ExpressionReduction.TryEvaluateExpressionIndependent(
+            ToInternal(expression),
+            parseCache);
 
     internal static ValueEvalResult TryEvalIndependent(
         Expression expression,
         PineVMParseCache parseCache) =>
-        expression switch
-        {
-            Expression.Environment =>
-            ValueEvalResult.Err("Expression depends on environment"),
-
-            Expression.Litral literal =>
-            ValueEvalResult.Ok(literal.Value),
-
-            Expression.List list =>
-            TryEvalIndependent(list, parseCache),
-
-            Expression.Builtin builtinExpr =>
-            TryEvalIndependent(builtinExpr, parseCache),
-
-            Expression.Eval evalExpr =>
-            TryEvalIndependent(evalExpr, parseCache),
-
-            Expression.Conditional conditional =>
-            TryEvalIndependent(conditional, parseCache),
-
-            Expression.Label labelExpr =>
-            TryEvalIndependent(labelExpr.Tagged, parseCache),
-
-            _ =>
-            throw new NotImplementedException(
-                "TryEvalIndependent does not handle expression variant: " +
-                expression.GetType().Name)
-        };
+        AdaptValueResult(
+            Pine.Core.Runtime.InternalExpression.ExpressionReduction.TryEvalIndependent(
+                ToInternal(expression),
+                parseCache));
 
     /// <summary>
     /// Attempts to evaluate a list expression by evaluating each item independently.
@@ -136,33 +111,9 @@ public class ReducePineExpression
     public static Result<string, PineValue> TryEvaluateExpressionIndependent(
         Expression.List listExpr,
         PineVMParseCache parseCache) =>
-        TryEvalIndependent(listExpr, parseCache).ToPublicResult();
-
-    private static ValueEvalResult TryEvalIndependent(
-        Expression.List listExpr,
-        PineVMParseCache parseCache)
-    {
-        var itemsValues = new PineValue[listExpr.Items.Count];
-
-        for (var i = 0; i < listExpr.Items.Count; i++)
-        {
-            var itemResult =
-                TryEvalIndependent(
-                    listExpr.Items[i],
-                    parseCache);
-
-            if (itemResult.Value is { } itemValue)
-            {
-                itemsValues[i] = itemValue;
-            }
-            else
-            {
-                return itemResult;
-            }
-        }
-
-        return ValueEvalResult.Ok(PineValue.List(itemsValues));
-    }
+        Pine.Core.Runtime.InternalExpression.ExpressionReduction.TryEvaluateExpressionIndependent(
+            ToInternal(listExpr),
+            parseCache);
 
     /// <summary>
     /// Attempts to evaluate an Eval expression without a runtime environment.
@@ -172,131 +123,9 @@ public class ReducePineExpression
     public static Result<string, PineValue> TryEvaluateExpressionIndependent(
         Expression.Eval evalExpr,
         PineVMParseCache parseCache) =>
-        TryEvalIndependent(evalExpr, parseCache).ToPublicResult();
-
-    private static ValueEvalResult TryEvalIndependent(
-        Expression.Eval evalExpr,
-        PineVMParseCache parseCache)
-    {
-        var evalEnvResult =
-            TryEvalIndependent(
-                evalExpr.Environment,
-                parseCache);
-
-        if (evalEnvResult.Error is { } err)
-        {
-            return
-                ValueEvalResult.Err(
-                    "Failed evaluating env of eval expression: " + err);
-        }
-
-        if (evalEnvResult.Value is not { } envValue)
-        {
-            throw new InvalidOperationException(
-                "Independent evaluation result contains neither a value nor an error");
-        }
-
-        try
-        {
-            /*
-             * 2024-10-25: Disabled this approach after observing Stack overflow here.
-             * 
-            return
-                new PineVM.PineVM()
-                .EvaluateExpressionDefaultLessStack(
-                    evalExpr,
-                    PineValue.EmptyList,
-                    stackPrevValues: ReadOnlyMemory<PineValue>.Empty);
-            */
-        }
-        catch (ParseExpressionException)
-        {
-            /*
-            * A branch of a conditional expression might always fail to parse.
-            * This does not mean that the code would crash at runtime, since it is conditional.
-            * (The Elm compiler uses constructs like this to encode crashing branches with a custom error message.)
-            * */
-        }
-
-        var evalEncodedExprResult =
-            TryEvalIndependent(
-                evalExpr.Encoded,
-                parseCache);
-
-        if (evalEncodedExprResult.Error is { } encodedErr)
-        {
-            return
-                ValueEvalResult.Err(
-                    "Failed to evaluate encoded expression: " + encodedErr);
-        }
-
-        if (evalEncodedExprResult.Value is not { } encodedOk)
-        {
-            throw new InvalidOperationException(
-                "Independent evaluation result contains neither a value nor an error");
-        }
-
-        var parseResult =
-            parseCache.ParseExpressionWithoutResultAllocation(encodedOk);
-
-        if (parseResult.Error is { } parseErr)
-        {
-            return
-                ValueEvalResult.Err(
-                    "Failed to parse encoded expression: " + parseErr);
-        }
-
-        if (parseResult.Expression is not { } parseOk)
-        {
-            throw new InvalidOperationException(
-                "Expression parse result contains neither an expression nor an error");
-        }
-
-        if (!parseOk.ReferencesEnvironment)
-        {
-            return
-                TryEvalIndependent(parseOk, parseCache);
-        }
-
-        /*
-         * 2025-09-16: Disabled after observing Stack overflow here.
-         * 
-
-        Expression? Replacement(Expression expr)
-        {
-            if (expr is Expression.Environment)
-            {
-                return Expression.LiteralInstance(envValue);
-            }
-
-            return null;
-        }
-
-        var exprAfterInliningEnv =
-            TransformPineExpressionWithOptionalReplacement(
-                Replacement,
-                parseOk);
-
-        var evalInnerExprResult =
-            TryEvaluateExpressionIndependent(exprAfterInliningEnv.expr, parseCache);
-
-        if (evalInnerExprResult.IsErrOrNull() is { } innerErr)
-        {
-            return
-                "Failed to evaluate inner expression: " + innerErr;
-        }
-
-        if (evalInnerExprResult.IsOkOrNull() is not { } innerOk)
-        {
-            throw new NotImplementedException(
-                "Unexpected result type from evaluating inner expression: " + evalInnerExprResult);
-        }
-
-        return innerOk;
-        */
-
-        return ValueEvalResult.Err("Not following parse&eval");
-    }
+        Pine.Core.Runtime.InternalExpression.ExpressionReduction.TryEvaluateExpressionIndependent(
+            ToInternal(evalExpr),
+            parseCache);
 
     /// <summary>
     /// Attempts to evaluate a conditional expression independently.
@@ -308,43 +137,9 @@ public class ReducePineExpression
     public static Result<string, PineValue> TryEvaluateExpressionIndependent(
         Expression.Conditional conditionalExpr,
         PineVMParseCache parseCache) =>
-        TryEvalIndependent(conditionalExpr, parseCache).ToPublicResult();
-
-    private static ValueEvalResult TryEvalIndependent(
-        Expression.Conditional conditionalExpr,
-        PineVMParseCache parseCache)
-    {
-        var evalConditionResult =
-            TryEvalIndependent(
-                conditionalExpr.Condition,
-                parseCache);
-
-        if (evalConditionResult.Error is { } conditionErr)
-        {
-            return
-                ValueEvalResult.Err(
-                    "Failed to evaluate condition: " + conditionErr);
-        }
-
-        if (evalConditionResult.Value is not { } conditionOk)
-        {
-            throw new InvalidOperationException(
-                "Independent evaluation result contains neither a value nor an error");
-        }
-
-        if (conditionOk == PineKernelValues.TrueValue)
-        {
-            return
-                TryEvalIndependent(
-                    conditionalExpr.TrueBranch,
-                    parseCache);
-        }
-
-        return
-            TryEvalIndependent(
-                conditionalExpr.FalseBranch,
-                parseCache);
-    }
+        Pine.Core.Runtime.InternalExpression.ExpressionReduction.TryEvaluateExpressionIndependent(
+            ToInternal(conditionalExpr),
+            parseCache);
 
     /// <summary>
     /// Attempts to evaluate a built-in function application independently.
@@ -356,34 +151,9 @@ public class ReducePineExpression
     public static Result<string, PineValue> TryEvaluateExpressionIndependent(
         Expression.Builtin builtinExpr,
         PineVMParseCache parseCache) =>
-        TryEvalIndependent(builtinExpr, parseCache).ToPublicResult();
-
-    private static ValueEvalResult TryEvalIndependent(
-        Expression.Builtin builtinExpr,
-        PineVMParseCache parseCache)
-    {
-        var evalInputResult =
-            TryEvalIndependent(
-                builtinExpr.Input,
-                parseCache);
-
-        if (evalInputResult.Error is { } inputErr)
-        {
-            return
-                ValueEvalResult.Err(
-                    "Failed to evaluate built-in application input: " + inputErr);
-        }
-
-        if (evalInputResult.Value is not { } inputOk)
-        {
-            throw new InvalidOperationException(
-                "Independent evaluation result contains neither a value nor an error");
-        }
-
-        return
-            ValueEvalResult.Ok(
-                BuiltinFunction.ApplyFunctionGeneric(builtinExpr.Function, inputOk));
-    }
+        Pine.Core.Runtime.InternalExpression.ExpressionReduction.TryEvaluateExpressionIndependent(
+            ToInternal(builtinExpr),
+            parseCache);
 
     /// <summary>
     /// Searches for a local reduction opportunity in the given <paramref name="expression"/>.
@@ -397,926 +167,12 @@ public class ReducePineExpression
     public static Expression? SearchForExpressionReduction(
         Expression expression,
         PineValueClass? envConstraintId,
-        PineVMParseCache parseCache)
-    {
-        if (expression is Expression.Litral)
-            return null;
-
-        if (CodeAnalysis.TryParseAsLiteral(expression) is { } literalValue)
-        {
-            return Expression.LitralInst(literalValue);
-        }
-
-        if (envConstraintId is not null &&
-            CodeAnalysis.TryParseExprAsPathInEnv(expression) is { } parsedAsPath)
-        {
-            if (envConstraintId.TryGetValue(parsedAsPath) is { } fromEnvConstraint)
-            {
-                return Expression.LitralInst(fromEnvConstraint);
-            }
-        }
-
-        Expression? AttemptReduceViaEval()
-        {
-            if (expression.ReferencesEnvironment)
-            {
-                return null;
-            }
-
-            try
-            {
-                if (TryEvalIndependent(expression, parseCache).Value is { } okValue)
-                {
-                    return Expression.LitralInst(okValue);
-                }
-            }
-            catch (ParseExpressionException)
-            {
-                /*
-                 * A branch of a conditional expression might always fail to parse.
-                 * This does not mean that the code would crash at runtime, since it is conditional.
-                 * (The Elm compiler uses constructs like this to encode crashing branches with a custom error message.)
-                 * */
-            }
-
-            return null;
-        }
-
-        switch (expression)
-        {
-            case Expression.Builtin rootBuiltinExpr:
-
-                Expression.Builtin ContinueWithReducedInput(Expression newInput) =>
-                    Expression.BuiltinInst(
-                        function: rootBuiltinExpr.Function,
-                        input: newInput);
-
-                switch (rootBuiltinExpr.Function)
-                {
-                    case nameof(BuiltinFunction.equal):
-                        {
-                            if (rootBuiltinExpr.Input is Expression.List inputList)
-                            {
-                                if (TryReduceEqualityOfSingleFieldTags(inputList, parseCache) is { } reducedEquality)
-                                {
-                                    return reducedEquality;
-                                }
-
-                                if (envConstraintId is not null)
-                                {
-                                    var reducedArgumentsList =
-                                        inputList.Items
-                                        .Select(
-                                            origArg => SearchForExpressionReductionRecursive(
-                                                maxDepth: 5,
-                                                expression: origArg,
-                                                parseCache: parseCache,
-                                                envConstraintId: envConstraintId))
-                                        .ToImmutableArray();
-
-                                    var listLengthLowerBounds = new List<int>();
-
-                                    var listConcreteValues = new List<PineValue>();
-
-                                    foreach (var item in reducedArgumentsList)
-                                    {
-                                        foreach (var itemBounds in EnumerateInferListLengthBounds(item, envConstraintId, parseCache))
-                                        {
-                                            if (itemBounds.lower is { } lowerBound)
-                                            {
-                                                listLengthLowerBounds.Add(lowerBound);
-                                            }
-                                        }
-
-                                        if (item is Expression.Litral literal)
-                                        {
-                                            listConcreteValues.Add(literal.Value);
-                                        }
-                                    }
-
-                                    if (1 < listConcreteValues.Count)
-                                    {
-                                        for (var i = 1; i < listConcreteValues.Count; i++)
-                                        {
-                                            if (listConcreteValues[i] != listConcreteValues[0])
-                                            {
-                                                return Expression.LitralInst(PineKernelValues.FalseValue);
-                                            }
-                                        }
-                                    }
-
-                                    var listLengthLowerBound =
-                                        listLengthLowerBounds.Count is 0
-                                        ?
-                                        (int?)null
-                                        :
-                                        listLengthLowerBounds.Max();
-
-                                    int? prevItemFixedLength = null;
-
-                                    foreach (var item in inputList.Items)
-                                    {
-                                        int? itemFixedLength = null;
-
-                                        if (item is Expression.Litral equalArgLiteral)
-                                        {
-                                            if (equalArgLiteral.Value is PineValue.ListValue equalArgLiteralList)
-                                            {
-                                                itemFixedLength = equalArgLiteralList.Items.Length;
-                                            }
-                                        }
-
-                                        if (item is Expression.List equalArgList)
-                                        {
-                                            itemFixedLength = equalArgList.Items.Count;
-                                        }
-
-                                        if (itemFixedLength.HasValue)
-                                        {
-                                            if (itemFixedLength < listLengthLowerBound ||
-                                                (prevItemFixedLength.HasValue &&
-                                                itemFixedLength.Value != prevItemFixedLength.Value))
-                                            {
-                                                return Expression.LitralInst(PineKernelValues.FalseValue);
-                                            }
-
-                                            prevItemFixedLength = itemFixedLength;
-                                        }
-                                    }
-                                }
-                            }
-
-                            return AttemptReduceViaEval();
-                        }
-
-                    case nameof(BuiltinFunction.head):
-                        {
-                            if (ApplyBuiltinFunctionHeadToAllBranches(rootBuiltinExpr.Input) is { } reducedBranches)
-                            {
-                                return
-                                    SearchForExpressionReduction(reducedBranches, envConstraintId, parseCache)
-                                    ??
-                                    reducedBranches;
-                            }
-
-                            return AttemptReduceViaEval();
-                        }
-
-                    case nameof(BuiltinFunction.skip):
-                        {
-                            if (rootBuiltinExpr.Input is Expression.List inputList && inputList.Items.Count is 2)
-                            {
-                                var countExpr = inputList.Items[0];
-                                var seqExpr = inputList.Items[1];
-
-                                if (TryEvalIndependent(countExpr, parseCache).Value is
-                                    { } okSkipCountValue &&
-                                    BuiltinFunction.SignedIntegerFromValueRelaxed(okSkipCountValue) is { } okSkipCount)
-                                {
-                                    if (ApplyBuiltinFunctionSkipToAllBranches((int)(okSkipCount < 0 ? 0 : okSkipCount), seqExpr) is { } reducedSkip)
-                                    {
-                                        return
-                                            SearchForExpressionReduction(reducedSkip, envConstraintId, parseCache)
-                                            ??
-                                            reducedSkip;
-                                    }
-                                }
-
-                                return AttemptReduceViaEval();
-                            }
-
-                            return AttemptReduceViaEval();
-                        }
-
-                    case nameof(BuiltinFunction.take):
-                        {
-                            if (rootBuiltinExpr.Input is Expression.List takeInput && takeInput.Items.Count is 2)
-                            {
-                                var countExpr = takeInput.Items[0];
-                                var srcExpr = takeInput.Items[1];
-
-                                if (TryEvalIndependent(countExpr, parseCache).Value is
-                                    { } okTakeCountValue &&
-                                    BuiltinFunction.SignedIntegerFromValueRelaxed(okTakeCountValue) is { } okTakeCount)
-                                {
-                                    if (ApplyBuiltinFunctionTakeToAllBranches((int)okTakeCount, srcExpr) is { } reducedTake)
-                                    {
-                                        return
-                                            SearchForExpressionReduction(reducedTake, envConstraintId, parseCache)
-                                            ??
-                                            reducedTake;
-                                    }
-                                }
-
-                                return AttemptReduceViaEval();
-                            }
-
-                            return AttemptReduceViaEval();
-                        }
-
-                    case nameof(BuiltinFunction.reverse):
-                        {
-                            if (ApplyBuiltinFunctionReverseToAllBranches(rootBuiltinExpr.Input) is { } reducedRev)
-                            {
-                                return
-                                    SearchForExpressionReduction(reducedRev, envConstraintId, parseCache)
-                                    ??
-                                    reducedRev;
-                            }
-
-                            return AttemptReduceViaEval();
-                        }
-
-                    case nameof(BuiltinFunction.concat):
-                        {
-                            if (rootBuiltinExpr.Input is Expression.List inputList)
-                            {
-                                if (inputList.Items.Count is 0)
-                                {
-                                    return AttemptReduceViaEval();
-                                }
-
-                                if (inputList.Items.Count is 1)
-                                {
-                                    return inputList.Items[0];
-                                }
-
-                                var firstArgExpr = inputList.Items[0];
-
-                                /*
-                                if (firstArgExpr is Expression.ListExpression ||
-                                    firstArgExpr is Expression.LiteralExpression firstLiteral && firstLiteral.Value is PineValue.ListValue)
-                                */
-                                {
-                                    var nonEmptyItems = new List<Expression>(capacity: inputList.Items.Count);
-
-                                    for (var i = 0; i < inputList.Items.Count; ++i)
-                                    {
-                                        var argItem = inputList.Items[i];
-
-                                        if (argItem is Expression.List argList && argList.Items.Count is 0)
-                                            continue;
-
-                                        if (argItem is Expression.Litral argLiteral)
-                                        {
-                                            if (argLiteral.Value is PineValue.ListValue listValue &&
-                                                listValue.Items.Length is 0)
-                                            {
-                                                continue;
-                                            }
-                                        }
-
-                                        nonEmptyItems.Add(argItem);
-                                    }
-
-                                    if (nonEmptyItems.Count < inputList.Items.Count)
-                                    {
-                                        if (nonEmptyItems.Count is 0)
-                                        {
-                                            return Expression.LitralInst(PineValue.EmptyList);
-                                        }
-
-                                        if (nonEmptyItems.Count is 1)
-                                        {
-                                            return nonEmptyItems[0];
-                                        }
-
-                                        return
-                                            ContinueWithReducedInput(Expression.ListInst(nonEmptyItems));
-                                    }
-                                }
-
-                                var items = new List<Expression>();
-
-                                foreach (var argument in inputList.Items)
-                                {
-                                    if (argument is not Expression.List subList)
-                                    {
-                                        if (argument is Expression.Litral subLiteral &&
-                                            subLiteral.Value is PineValue.ListValue subLiteralList)
-                                        {
-                                            for (var i = 0; i < subLiteralList.Items.Length; i++)
-                                            {
-                                                items.Add(Expression.LitralInst(subLiteralList.Items.Span[i]));
-                                            }
-
-                                            continue;
-                                        }
-
-                                        return AttemptReduceViaEval();
-                                    }
-
-                                    items.AddRange(subList.Items);
-                                }
-
-                                return Expression.ListInst(items);
-                            }
-
-                            return AttemptReduceViaEval();
-                        }
-
-                    case nameof(BuiltinFunction.length):
-                        {
-                            if (rootBuiltinExpr.Input is Expression.List inputList)
-                            {
-                                return
-                                    Expression.LitralInst(
-                                        IntegerEncoding.EncodeSignedInteger(inputList.Items.Count));
-                            }
-
-                            if (rootBuiltinExpr.Input is Expression.Builtin lengthInputBuiltin)
-                            {
-                                if (lengthInputBuiltin.Function is nameof(BuiltinFunction.concat) &&
-                                    lengthInputBuiltin.Input is Expression.List lengthConcatList)
-                                {
-                                    int? aggregateLength = 0;
-
-                                    for (var i = 0; i < lengthConcatList.Items.Count; i++)
-                                    {
-                                        var lengthConcatListItem = lengthConcatList.Items[i];
-
-                                        {
-                                            if (lengthConcatListItem is Expression.Litral lengthConcatListItemLiteral &&
-                                                lengthConcatListItemLiteral.Value is PineValue.ListValue lengthConcatListItemList)
-                                            {
-                                                aggregateLength += lengthConcatListItemList.Items.Length;
-                                                continue;
-                                            }
-                                        }
-
-                                        {
-                                            if (lengthConcatListItem is Expression.List lengthConcatListItemList)
-                                            {
-                                                aggregateLength += lengthConcatListItemList.Items.Count;
-                                                continue;
-                                            }
-                                        }
-
-                                        aggregateLength = null;
-                                        break;
-                                    }
-
-                                    if (aggregateLength.HasValue)
-                                    {
-                                        return
-                                            Expression.LitralInst(
-                                                IntegerEncoding.EncodeSignedInteger(aggregateLength.Value));
-                                    }
-                                }
-                            }
-
-                            return AttemptReduceViaEval();
-                        }
-
-                    case nameof(BuiltinFunction.int_add):
-                        {
-                            if (rootBuiltinExpr.Input is Expression.List addInputList)
-                            {
-                                var reducedBuiltinExpr =
-                                    ReduceFlattenedIntegerBuiltinApplication(
-                                        nameof(BuiltinFunction.int_add),
-                                        addInputList.Items,
-                                        parseCache);
-
-                                if (reducedBuiltinExpr is not null)
-                                {
-                                    return reducedBuiltinExpr;
-                                }
-                            }
-
-                            return AttemptReduceViaEval();
-                        }
-
-                    case nameof(BuiltinFunction.int_mul):
-                        {
-                            if (rootBuiltinExpr.Input is Expression.List mulInputList)
-                            {
-                                var reducedBuiltinExpr =
-                                    ReduceFlattenedIntegerBuiltinApplication(
-                                        nameof(BuiltinFunction.int_mul),
-                                        mulInputList.Items,
-                                        parseCache);
-
-                                if (reducedBuiltinExpr is not null)
-                                {
-                                    return reducedBuiltinExpr;
-                                }
-                            }
-
-                            return AttemptReduceViaEval();
-                        }
-
-                    default:
-                        return AttemptReduceViaEval();
-                }
-
-            case Expression.Conditional conditional:
-                {
-                    if (TryReduceHeadMatchWithNonemptyCheck(conditional) is { } reducedHeadMatch)
-                    {
-                        return reducedHeadMatch;
-                    }
-
-                    if (TryMergeAdjacentSliceMatches(conditional) is { } mergedSliceMatch)
-                    {
-                        return mergedSliceMatch;
-                    }
-
-                    if (!conditional.Condition.ReferencesEnvironment)
-                    {
-                        if (TryEvalIndependent(
-                            conditional.Condition,
-                            parseCache).Value is { } conditionValue)
-                        {
-                            return
-                                conditionValue == PineKernelValues.TrueValue
-                                ?
-                                conditional.TrueBranch
-                                :
-                                conditional.FalseBranch;
-                        }
-                    }
-
-                    if (conditional.TrueBranch == conditional.FalseBranch)
-                    {
-                        return conditional.TrueBranch;
-                    }
-
-                    if (conditional.Condition is Expression.Builtin
-                        {
-                            Function: "equal",
-                            Input: Expression.List equalArgsList
-                        }
-                        && equalArgsList.Items.Count is 2)
-                    {
-                        if (equalArgsList.Items[1] is Expression.Litral { Value: var val1 })
-                        {
-                            if (val1 == PineKernelValues.FalseValue &&
-                                IsKnownBooleanExpression(equalArgsList.Items[0]))
-                            {
-                                return
-                                    Expression.ConditionalInst(
-                                        condition: equalArgsList.Items[0],
-                                        trueBranch: conditional.FalseBranch,
-                                        falseBranch: conditional.TrueBranch);
-
-                            }
-
-                            if (val1 == PineKernelValues.TrueValue &&
-                                IsKnownBooleanExpression(equalArgsList.Items[0]))
-                            {
-                                return
-                                    Expression.ConditionalInst(
-                                        condition: equalArgsList.Items[0],
-                                        falseBranch: conditional.FalseBranch,
-                                        trueBranch: conditional.TrueBranch);
-                            }
-                        }
-
-                        if (equalArgsList.Items[0] is Expression.Litral { Value: var val0 })
-                        {
-                            if (val0 == PineKernelValues.FalseValue &&
-                                IsKnownBooleanExpression(equalArgsList.Items[1]))
-                            {
-                                return
-                                    Expression.ConditionalInst(
-                                        condition: equalArgsList.Items[1],
-                                        trueBranch: conditional.FalseBranch,
-                                        falseBranch: conditional.TrueBranch);
-                            }
-
-                            if (val0 == PineKernelValues.TrueValue &&
-                                IsKnownBooleanExpression(equalArgsList.Items[1]))
-                            {
-                                return
-                                    Expression.ConditionalInst(
-                                        condition: equalArgsList.Items[1],
-                                        falseBranch: conditional.FalseBranch,
-                                        trueBranch: conditional.TrueBranch);
-                            }
-                        }
-                    }
-
-                    return AttemptReduceViaEval();
-                }
-
-            default:
-                return AttemptReduceViaEval();
-        }
-    }
-
-    private static Expression? TryReduceEqualityOfSingleFieldTags(
-        Expression.List input,
-        PineVMParseCache parseCache)
-    {
-        if (input.Items.Count is not 2)
-            return null;
-
-        var left = TryUnwrapSingleFieldTagFromAllBranches(input.Items[0], parseCache);
-        var right = TryUnwrapSingleFieldTagFromAllBranches(input.Items[1], parseCache);
-
-        if (left is null ||
-            right is null ||
-            left.Value.marker != right.Value.marker ||
-            left.Value.tag != right.Value.tag)
-        {
-            return null;
-        }
-
-        return
-            Expression.BuiltinInst(
-                nameof(BuiltinFunction.equal),
-                Expression.ListInst([left.Value.inner, right.Value.inner]));
-    }
-
-    private static (PineValue? marker, PineValue tag, Expression inner)? TryUnwrapSingleFieldTagFromAllBranches(
-        Expression expression,
-        PineVMParseCache parseCache)
-    {
-        switch (expression)
-        {
-            case Expression.List
-            {
-                Items.Count: 3,
-                Items:
-                [
-                    Expression.Litral marker,
-                    Expression.Litral tag,
-                    var inner
-                ]
-            }:
-                return (marker.Value, tag.Value, inner);
-
-            case Expression.List
-            {
-                Items.Count: 2,
-                Items:
-                [
-                    Expression.Litral tag,
-                    Expression.List { Items.Count: 1 } fields
-                ]
-            }:
-                return (null, tag.Value, fields.Items[0]);
-
-            case Expression.Litral
-            {
-                Value: PineValue.ListValue
-                {
-                    Items.Length: 3
-                } taggedValue
-            }:
-                {
-                    var items = taggedValue.Items.Span;
-
-                    return
-                        (items[0],
-                        items[1],
-                        Expression.LitralInst(items[2]));
-                }
-
-            case Expression.Litral
-            {
-                Value: PineValue.ListValue
-                {
-                    Items.Length: 2
-                } taggedValue
-            }:
-                {
-                    var items = taggedValue.Items.Span;
-
-                    if (items[1] is not PineValue.ListValue { Items.Length: 1 } fields)
-                        return null;
-
-                    return (null, items[0], Expression.LitralInst(fields.Items.Span[0]));
-                }
-
-            case Expression.Conditional conditional:
-                {
-                    var trueBranch =
-                        TryUnwrapSingleFieldTagFromAllBranches(
-                            conditional.TrueBranch,
-                            parseCache);
-
-                    var falseBranch =
-                        TryUnwrapSingleFieldTagFromAllBranches(
-                            conditional.FalseBranch,
-                            parseCache);
-
-                    if (trueBranch is null ||
-                        falseBranch is null ||
-                        trueBranch.Value.marker != falseBranch.Value.marker ||
-                        trueBranch.Value.tag != falseBranch.Value.tag)
-                    {
-                        return null;
-                    }
-
-                    return
-                        (trueBranch.Value.marker,
-                        trueBranch.Value.tag,
-                        Expression.ConditionalInst(
-                            conditional.Condition,
-                            falseBranch: falseBranch.Value.inner,
-                            trueBranch: trueBranch.Value.inner));
-                }
-
-            case Expression.Eval
-            {
-                Encoded: Expression.Litral encoded
-            } eval:
-                {
-                    var parsed =
-                        parseCache.ParseExpressionWithoutResultAllocation(encoded.Value).Expression;
-
-                    if (parsed is null)
-                        return null;
-
-                    var unwrapped =
-                        TryUnwrapSingleFieldTagFromAllBranches(parsed, parseCache);
-
-                    if (unwrapped is null)
-                        return null;
-
-                    var specializedEncoded =
-                        ExpressionEncoding.EncodeExpressionAsValue(unwrapped.Value.inner);
-
-                    return
-                        (unwrapped.Value.marker,
-                        unwrapped.Value.tag,
-                        new Expression.Eval(
-                            Expression.LitralInst(specializedEncoded),
-                            eval.Environment));
-                }
-
-            case Expression.Label label:
-                {
-                    var unwrapped =
-                        TryUnwrapSingleFieldTagFromAllBranches(label.Tagged, parseCache);
-
-                    if (unwrapped is null)
-                        return null;
-
-                    return
-                        (unwrapped.Value.marker,
-                        unwrapped.Value.tag,
-                        new Expression.Label(label.Tag, unwrapped.Value.inner));
-                }
-
-            default:
-                return null;
-        }
-    }
-
-    private static Expression? TryReduceHeadMatchWithNonemptyCheck(
-        Expression.Conditional conditional)
-    {
-        if (!IsFalseLiteral(conditional.FalseBranch))
-            return null;
-
-        if (TryParseHeadEqualsLiteral(conditional.Condition) is { } headMatch &&
-            TryParseNotEmpty(conditional.TrueBranch) is { } notEmptySource &&
-            headMatch.source == notEmptySource)
-        {
-            return BuildSliceMatch(headMatch.source, offset: 0, [headMatch.expectedValue]);
-        }
-
-        if (TryParseNotEmpty(conditional.Condition) is { } conditionNotEmptySource &&
-            TryParseHeadEqualsLiteral(conditional.TrueBranch) is { } trueHeadMatch &&
-            conditionNotEmptySource == trueHeadMatch.source)
-        {
-            return BuildSliceMatch(trueHeadMatch.source, offset: 0, [trueHeadMatch.expectedValue]);
-        }
-
-        return null;
-    }
-
-    private static Expression? TryMergeAdjacentSliceMatches(
-        Expression.Conditional conditional)
-    {
-        if (!IsFalseLiteral(conditional.FalseBranch) ||
-            TryParseSliceMatch(conditional.Condition) is not { } conditionMatch ||
-            TryParseSliceMatch(conditional.TrueBranch) is not { } trueMatch ||
-            conditionMatch.source != trueMatch.source)
-        {
-            return null;
-        }
-
-        if (conditionMatch.offset > int.MaxValue - conditionMatch.expectedValues.Items.Length ||
-            trueMatch.offset > int.MaxValue - trueMatch.expectedValues.Items.Length)
-        {
-            return null;
-        }
-
-        var conditionEnd = conditionMatch.offset + conditionMatch.expectedValues.Items.Length;
-        var trueEnd = trueMatch.offset + trueMatch.expectedValues.Items.Length;
-
-        if (Math.Min(conditionMatch.offset, trueMatch.offset) is not 0 ||
-            (conditionEnd != trueMatch.offset && trueEnd != conditionMatch.offset))
-        {
-            return null;
-        }
-
-        var combinedValues = new PineValue[Math.Max(conditionEnd, trueEnd)];
-
-        conditionMatch.expectedValues.Items.Span.CopyTo(combinedValues.AsSpan(conditionMatch.offset));
-        trueMatch.expectedValues.Items.Span.CopyTo(combinedValues.AsSpan(trueMatch.offset));
-
-        return BuildSliceMatch(conditionMatch.source, offset: 0, combinedValues);
-    }
-
-    private static (Expression source, PineValue expectedValue)? TryParseHeadEqualsLiteral(
-        Expression expression)
-    {
-        if (TryParseBinaryEqual(expression) is not { } equalArgs)
-            return null;
-
-        if (equalArgs.left is Expression.Builtin
-            {
-                Function: nameof(BuiltinFunction.head),
-                Input: var leftSource
-            } &&
-            equalArgs.right is Expression.Litral rightLiteral &&
-            CanRepresentHeadMatchAsListSlice(rightLiteral.Value))
-        {
-            return (leftSource, rightLiteral.Value);
-        }
-
-        if (equalArgs.right is Expression.Builtin
-            {
-                Function: nameof(BuiltinFunction.head),
-                Input: var rightSource
-            } &&
-            equalArgs.left is Expression.Litral leftLiteral &&
-            CanRepresentHeadMatchAsListSlice(leftLiteral.Value))
-        {
-            return (rightSource, leftLiteral.Value);
-        }
-
-        return null;
-    }
-
-    private static bool CanRepresentHeadMatchAsListSlice(PineValue expectedValue) =>
-        expectedValue is not PineValue.BlobValue { Bytes.Length: 1 };
-
-    private static Expression? TryParseNotEmpty(Expression expression)
-    {
-        if (TryParseBinaryEqual(expression) is not { } outerEqual)
-            return null;
-
-        Expression? emptyCheck = null;
-
-        if (IsFalseLiteral(outerEqual.left))
-            emptyCheck = outerEqual.right;
-
-        if (IsFalseLiteral(outerEqual.right))
-            emptyCheck = outerEqual.left;
-
-        if (emptyCheck is null ||
-            TryParseBinaryEqual(emptyCheck) is not { } emptyEqual)
-        {
-            return null;
-        }
-
-        if (TryParseLengthComparedWithZero(emptyEqual.left, emptyEqual.right) is { } leftSource)
-            return leftSource;
-
-        return TryParseLengthComparedWithZero(emptyEqual.right, emptyEqual.left);
-    }
-
-    private static Expression? TryParseLengthComparedWithZero(
-        Expression lengthExpression,
-        Expression zeroExpression)
-    {
-        if (lengthExpression is not Expression.Builtin
-            {
-                Function: nameof(BuiltinFunction.length),
-                Input: var source
-            } ||
-            zeroExpression is not Expression.Litral zeroLiteral ||
-            BuiltinFunction.SignedIntegerFromValueRelaxed(zeroLiteral.Value) is not { } zero ||
-            zero != 0)
-        {
-            return null;
-        }
-
-        return source;
-    }
-
-    private static (
-        Expression source,
-        int offset,
-        PineValue.ListValue expectedValues)? TryParseSliceMatch(
-        Expression expression)
-    {
-        if (TryParseBinaryEqual(expression) is not { } equalArgs)
-            return null;
-
-        if (TryParseSliceComparedWithLiteral(equalArgs.left, equalArgs.right) is { } leftMatch)
-            return leftMatch;
-
-        return TryParseSliceComparedWithLiteral(equalArgs.right, equalArgs.left);
-    }
-
-    private static (
-        Expression source,
-        int offset,
-        PineValue.ListValue expectedValues)? TryParseSliceComparedWithLiteral(
-        Expression sliceExpression,
-        Expression literalExpression)
-    {
-        if (sliceExpression is not Expression.Builtin
-            {
-                Function: nameof(BuiltinFunction.take),
-                Input: Expression.List { Items.Count: 2 } takeArguments
-            } ||
-            takeArguments.Items[0] is not Expression.Litral takeCountLiteral ||
-            BuiltinFunction.SignedIntegerFromValueRelaxed(takeCountLiteral.Value) is not { } takeCount ||
-            takeCount < 0 ||
-            literalExpression is not Expression.Litral
-            {
-                Value: PineValue.ListValue expectedValues
-            } ||
-            takeCount != expectedValues.Items.Length)
-        {
-            return null;
-        }
-
-        var source = takeArguments.Items[1];
-        var offset = 0;
-
-        if (source is Expression.Builtin
-            {
-                Function: nameof(BuiltinFunction.skip),
-                Input: Expression.List { Items.Count: 2 } skipArguments
-            } &&
-            skipArguments.Items[0] is Expression.Litral skipCountLiteral &&
-            BuiltinFunction.SignedIntegerFromValueRelaxed(skipCountLiteral.Value) is { } skipCount &&
-            skipCount >= 0 &&
-            skipCount <= int.MaxValue)
-        {
-            offset = (int)skipCount;
-            source = skipArguments.Items[1];
-        }
-
-        return (source, offset, expectedValues);
-    }
-
-    private static (Expression left, Expression right)? TryParseBinaryEqual(
-        Expression expression)
-    {
-        if (expression is Expression.Builtin
-            {
-                Function: nameof(BuiltinFunction.equal),
-                Input: Expression.List { Items.Count: 2 } arguments
-            })
-        {
-            return (arguments.Items[0], arguments.Items[1]);
-        }
-
-        return null;
-    }
-
-    private static bool IsFalseLiteral(Expression expression) =>
-        expression is Expression.Litral { Value: var value } &&
-        value == PineKernelValues.FalseValue;
-
-    private static Expression BuildSliceMatch(
-        Expression source,
-        int offset,
-        ReadOnlySpan<PineValue> expectedValues)
-    {
-        var sliceSource = source;
-
-        if (offset is not 0)
-        {
-            sliceSource =
-                Expression.BuiltinInst(
-                    nameof(BuiltinFunction.skip),
-                    Expression.ListInst(
-                        [
-                        Expression.LitralInst(IntegerEncoding.EncodeSignedInteger(offset)),
-                        source
-                        ]));
-        }
-
-        var slice =
-            Expression.BuiltinInst(
-                nameof(BuiltinFunction.take),
-                Expression.ListInst(
-                    [
-                    Expression.LitralInst(IntegerEncoding.EncodeSignedInteger(expectedValues.Length)),
-                    sliceSource
-                    ]));
-
-        return
-            Expression.BuiltinInst(
-                nameof(BuiltinFunction.equal),
-                Expression.ListInst(
-                    [
-                    slice,
-                    Expression.LitralInst(PineValue.List(expectedValues.ToArray()))
-                    ]));
-    }
-
+        PineVMParseCache parseCache) =>
+        ToCanonicalOrNull(
+            Pine.Core.Runtime.InternalExpression.ExpressionReduction.SearchForExpressionReduction(
+                ToInternal(expression),
+                envConstraintId,
+                parseCache));
 
     /// <summary>
     /// Returns <c>true</c> when <paramref name="expression"/> is statically
@@ -1338,240 +194,8 @@ public class ReducePineExpression
     /// </summary>
     /// <param name="expression">The expression to inspect.</param>
     /// <returns><c>true</c> if the expression is provably boolean; otherwise <c>false</c>.</returns>
-    public static bool IsKnownBooleanExpression(Expression expression)
-    {
-        return expression switch
-        {
-            Expression.Litral literal =>
-            literal.Value == PineKernelValues.TrueValue ||
-            literal.Value == PineKernelValues.FalseValue,
-
-            Expression.Builtin builtinExpr =>
-            builtinExpr.Function switch
-            {
-                nameof(BuiltinFunction.equal) => true,
-                nameof(BuiltinFunction.int_is_sorted_asc) => true,
-
-                _ =>
-                false,
-            },
-
-            Expression.Conditional conditional =>
-            IsKnownBooleanExpression(conditional.TrueBranch) &&
-            IsKnownBooleanExpression(conditional.FalseBranch),
-
-            Expression.Label labelExpr =>
-            IsKnownBooleanExpression(labelExpr.Tagged),
-
-            _ =>
-            false,
-        };
-    }
-
-    /// <summary>
-    /// For example, <c>int_add([int_add([a, b]), c])</c> becomes <c>[a, b, c]</c>.
-    /// Returns <c>null</c> if no flattening was possible (no nested same-function applications found).
-    /// </summary>
-    private static IReadOnlyList<Expression>? FlattenNestedBuiltinApplication(
-        string functionName,
-        IReadOnlyList<Expression> items)
-    {
-        var anyFlattened = false;
-        var flattened = new List<Expression>(capacity: items.Count);
-
-        for (var i = 0; i < items.Count; i++)
-        {
-            var item = items[i];
-
-            if (item is Expression.Builtin innerBuiltin &&
-                innerBuiltin.Function == functionName &&
-                innerBuiltin.Input is Expression.List innerList)
-            {
-                anyFlattened = true;
-
-                for (var j = 0; j < innerList.Items.Count; j++)
-                {
-                    flattened.Add(innerList.Items[j]);
-                }
-            }
-            else
-            {
-                flattened.Add(item);
-            }
-        }
-
-        return anyFlattened ? flattened : null;
-    }
-
-    private static Expression? ReduceFlattenedIntegerBuiltinApplication(
-        string functionName,
-        IReadOnlyList<Expression> originalItems,
-        PineVMParseCache parseCache)
-    {
-        var flattenedItems =
-            FlattenNestedBuiltinApplication(functionName, originalItems);
-
-        var reducedItems =
-            flattenedItems ?? originalItems;
-
-        var changed =
-            flattenedItems is not null;
-
-        var constants =
-            CollectConstantIntegers(reducedItems);
-
-        if (1 < constants.constants.Count)
-        {
-            var foldedConstant =
-                functionName switch
-                {
-                    nameof(BuiltinFunction.int_add) => BigInteger.Zero,
-                    nameof(BuiltinFunction.int_mul) => BigInteger.One,
-
-                    _ =>
-                    throw new NotSupportedException($"Unsupported integer kernel application: {functionName}")
-                };
-
-            foreach (var constant in constants.constants)
-            {
-                foldedConstant =
-                    functionName switch
-                    {
-                        nameof(BuiltinFunction.int_add) => foldedConstant + constant,
-                        nameof(BuiltinFunction.int_mul) => foldedConstant * constant,
-
-                        _ =>
-                        throw new NotSupportedException($"Unsupported integer kernel application: {functionName}")
-                    };
-            }
-
-            reducedItems =
-                [
-                Expression.LitralInst(IntegerEncoding.EncodeSignedInteger(foldedConstant)),
-                .. constants.variables
-                ];
-
-            changed = true;
-        }
-
-        if (functionName is nameof(BuiltinFunction.int_add) &&
-            CombineRepeatedLinearIntegerTerms(reducedItems) is { } combinedItems)
-        {
-            if (combinedItems.Count is 1)
-                return combinedItems[0];
-
-            reducedItems = combinedItems;
-            changed = true;
-        }
-
-        if (!changed)
-        {
-            return null;
-        }
-
-        var reducedExpr =
-            Expression.BuiltinInst(
-                functionName,
-                Expression.ListInst(reducedItems));
-
-        if (!reducedExpr.ReferencesEnvironment)
-        {
-            if (TryEvalIndependent(reducedExpr, parseCache).Value is { } okValue)
-            {
-                return Expression.LitralInst(okValue);
-            }
-        }
-
-        return reducedExpr;
-    }
-
-    /// <summary>
-    /// Combines structurally equal linear terms while retaining one integer kernel application
-    /// to preserve validation and canonicalization of the shared operand.
-    /// </summary>
-    private static IReadOnlyList<Expression>? CombineRepeatedLinearIntegerTerms(
-        IReadOnlyList<Expression> items)
-    {
-        var groupIndexByBase = new Dictionary<Expression, int>();
-        var groups = new List<(Expression Base, BigInteger Coefficient, int Count, Expression FirstTerm)>();
-        var changed = false;
-
-        for (var i = 0; i < items.Count; i++)
-        {
-            var term = ParseLinearIntegerTerm(items[i]);
-
-            if (groupIndexByBase.TryGetValue(term.Base, out var groupIndex))
-            {
-                var group = groups[groupIndex];
-
-                groups[groupIndex] =
-                    group with
-                    {
-                        Coefficient = group.Coefficient + term.Coefficient,
-                        Count = group.Count + 1
-                    };
-
-                changed = true;
-            }
-            else
-            {
-                groupIndexByBase.Add(term.Base, groups.Count);
-                groups.Add((term.Base, term.Coefficient, Count: 1, FirstTerm: items[i]));
-            }
-        }
-
-        if (!changed)
-            return null;
-
-        var combined = new List<Expression>(capacity: groups.Count);
-
-        foreach (var group in groups)
-        {
-            if (group.Count is 1)
-            {
-                combined.Add(group.FirstTerm);
-                continue;
-            }
-
-            combined.Add(
-                Expression.BuiltinInst(
-                    nameof(BuiltinFunction.int_mul),
-                    Expression.ListInst(
-                        [
-                        Expression.LitralInst(IntegerEncoding.EncodeSignedInteger(group.Coefficient)),
-                        group.Base
-                        ])));
-        }
-
-        return combined;
-    }
-
-    private static (Expression Base, BigInteger Coefficient) ParseLinearIntegerTerm(
-        Expression expression)
-    {
-        if (expression is not Expression.Builtin
-            {
-                Function: nameof(BuiltinFunction.int_mul),
-                Input: Expression.List factors
-            })
-        {
-            return (expression, BigInteger.One);
-        }
-
-        var parsedFactors = CollectConstantIntegers(factors.Items);
-
-        if (parsedFactors.variables.Count is not 1)
-            return (expression, BigInteger.One);
-
-        var coefficient = BigInteger.One;
-
-        foreach (var constant in parsedFactors.constants)
-        {
-            coefficient *= constant;
-        }
-
-        return (parsedFactors.variables[0], coefficient);
-    }
+    public static bool IsKnownBooleanExpression(Expression expression) =>
+        Pine.Core.Runtime.InternalExpression.ExpressionReduction.IsKnownBooleanExpression(ToInternal(expression));
 
     /// <summary>
     /// Infers lower and upper bounds for the length of lists produced by the given expression,
@@ -1580,43 +204,11 @@ public class ReducePineExpression
     public static (int? lower, int? upper) InferListLengthBounds(
         Expression expression,
         PineValueClass envConstraintId,
-        PineVMParseCache parseCache)
-    {
-        int? lowerBound = null;
-        int? upperBound = null;
-
-        if (expression != null)
-        {
-            foreach (var nextBounds in EnumerateInferListLengthBounds(expression, envConstraintId, parseCache))
-            {
-                if (lowerBound.HasValue)
-                {
-                    if (nextBounds.lower > lowerBound.Value)
-                    {
-                        lowerBound = nextBounds.lower;
-                    }
-                }
-                else
-                {
-                    lowerBound = nextBounds.lower;
-                }
-
-                if (upperBound.HasValue)
-                {
-                    if (nextBounds.upper < upperBound.Value)
-                    {
-                        upperBound = nextBounds.upper;
-                    }
-                }
-                else
-                {
-                    upperBound = nextBounds.upper;
-                }
-            }
-        }
-
-        return (lowerBound, upperBound);
-    }
+        PineVMParseCache parseCache) =>
+        Pine.Core.Runtime.InternalExpression.ExpressionReduction.InferListLengthBounds(
+            ToInternal(expression),
+            envConstraintId,
+            parseCache);
 
     /// <summary>
     /// Infers lower and upper bounds for the length of lists produced by the given expression,
@@ -1629,72 +221,11 @@ public class ReducePineExpression
     public static IEnumerable<(int? lower, int? upper)> EnumerateInferListLengthBounds(
         Expression expression,
         PineValueClass envConstraintId,
-        PineVMParseCache parseCache)
-    {
-        if (expression is Expression.Litral literalExpr)
-        {
-            if (literalExpr.Value is PineValue.ListValue literalList)
-            {
-                yield return (literalList.Items.Length, literalList.Items.Length);
-            }
-        }
-
-        if (expression is Expression.List listExpr)
-        {
-            yield return (listExpr.Items.Count, listExpr.Items.Count);
-        }
-
-        if (CodeAnalysis.TryParseAsLiteral(expression) is { } literal)
-        {
-            if (literal is PineValue.ListValue literalList)
-            {
-                yield return (literalList.Items.Length, literalList.Items.Length);
-            }
-        }
-
-        if (CodeAnalysis.TryParseExprAsPathInEnv(expression) is { } itemPath)
-        {
-            var itemConstraint = envConstraintId.PartUnderPath(itemPath);
-
-            foreach (var itemConstraintItem in itemConstraint.ParsedItems)
-            {
-                if (itemConstraintItem.Key.Count is 0)
-                {
-                    if (itemConstraintItem.Value is PineValue.ListValue itemListValue)
-                    {
-                        yield return (itemListValue.Items.Length, null);
-                    }
-                }
-                else
-                {
-                    yield return (itemConstraintItem.Key[0] + 1, null);
-                }
-            }
-        }
-
-        if (expression is Expression.Builtin kernelApp)
-        {
-            if (kernelApp.Function is nameof(BuiltinFunction.skip) &&
-                kernelApp.Input is Expression.List skipInputList && skipInputList.Items.Count is 2)
-            {
-                if (TryEvalIndependent(
-                    skipInputList.Items[0],
-                    parseCache).Value is { } okSkipCountValue)
-                {
-                    if (IntegerEncoding.ParseSignedIntegerRelaxed(okSkipCountValue).IsOkOrNullable() is { } okSkipCount)
-                    {
-                        var skipCountClamped =
-                            (int)(okSkipCount < 0 ? 0 : okSkipCount);
-
-                        foreach (var offsetBound in EnumerateInferListLengthBounds(skipInputList.Items[1], envConstraintId, parseCache))
-                        {
-                            yield return (offsetBound.lower - skipCountClamped, offsetBound.upper - skipCountClamped);
-                        }
-                    }
-                }
-            }
-        }
-    }
+        PineVMParseCache parseCache) =>
+        Pine.Core.Runtime.InternalExpression.ExpressionReduction.EnumerateInferListLengthBounds(
+            ToInternal(expression),
+            envConstraintId,
+            parseCache);
 
     /// <summary>
     /// Transforms an expression tree by attempting to replace nodes using a provided function.
@@ -1706,191 +237,11 @@ public class ReducePineExpression
     /// <returns>The transformed expression and whether it references the original environment.</returns>
     public static (Expression expr, bool referencesOriginalEnv) TransformPineExpressionWithOptionalReplacement(
         Func<Expression, Expression?> findReplacement,
-        Expression expression)
-    {
-        return
-            TransformPineExpressionWithOptionalReplacement(
-                findReplacement,
-                expression,
-                cache: []);
-    }
-
-    private static (Expression expr, bool referencesOriginalEnv) TransformPineExpressionWithOptionalReplacement(
-        Func<Expression, Expression?> findReplacement,
-        Expression expression,
-        Dictionary<Expression, (Expression expr, bool referencesOriginalEnv)> cache)
-    {
-        if (cache.TryGetValue(expression, out var cached))
-            return cached;
-
-        (Expression expr, bool referencesOriginalEnv) LessCache()
-        {
-            if (findReplacement(expression) is { } fromReplacement)
-                return (fromReplacement, false);
-
-            switch (expression)
-            {
-                case Expression.Litral:
-                    return (expression, false);
-
-                case Expression.List list:
-                    {
-                        var referencesOriginalEnv = false;
-
-                        var mappedItems = new Expression[list.Items.Count];
-
-                        var anyChanged = false;
-
-                        for (var i = 0; i < list.Items.Count; i++)
-                        {
-                            var (mappedItem, itemReferencesOriginalEnv) =
-                                TransformPineExpressionWithOptionalReplacement(
-                                    findReplacement: findReplacement,
-                                    expression: list.Items[i],
-                                    cache);
-
-                            anyChanged = anyChanged || (mappedItem != list.Items[i]);
-
-                            mappedItems[i] = mappedItem;
-
-                            referencesOriginalEnv = referencesOriginalEnv || itemReferencesOriginalEnv;
-                        }
-
-                        if (!anyChanged)
-                        {
-                            return (list, referencesOriginalEnv);
-                        }
-
-                        return (Expression.ListInst(mappedItems), referencesOriginalEnv);
-                    }
-
-                case Expression.Eval evalExpr:
-                    {
-                        var encodedTransform =
-                            TransformPineExpressionWithOptionalReplacement(
-                                findReplacement,
-                                evalExpr.Encoded,
-                                cache);
-
-                        var envTransform =
-                            TransformPineExpressionWithOptionalReplacement(
-                                findReplacement,
-                                evalExpr.Environment,
-                                cache);
-
-                        var referencesOriginalEnv =
-                            encodedTransform.referencesOriginalEnv ||
-                            envTransform.referencesOriginalEnv;
-
-                        if (encodedTransform.expr == evalExpr.Encoded &&
-                            envTransform.expr == evalExpr.Environment)
-                        {
-                            return (evalExpr, referencesOriginalEnv);
-                        }
-
-                        return
-                            (new Expression.Eval(
-                                encoded: encodedTransform.expr,
-                                environment: envTransform.expr),
-                            referencesOriginalEnv);
-                    }
-
-                case Expression.Builtin kernelApp:
-                    {
-                        var argumentTransform =
-                            TransformPineExpressionWithOptionalReplacement(
-                                findReplacement,
-                                kernelApp.Input,
-                                cache);
-
-                        if (argumentTransform.expr == kernelApp.Input)
-                        {
-                            return (kernelApp, argumentTransform.referencesOriginalEnv);
-                        }
-
-                        return
-                            (Expression.BuiltinInst(
-                                function: kernelApp.Function,
-                                input: argumentTransform.expr),
-                            argumentTransform.referencesOriginalEnv);
-                    }
-
-                case Expression.Conditional conditional:
-                    {
-                        var conditionTransform =
-                            TransformPineExpressionWithOptionalReplacement(
-                                findReplacement,
-                                conditional.Condition,
-                                cache);
-
-                        var trueBranchTransform =
-                            TransformPineExpressionWithOptionalReplacement(
-                                findReplacement,
-                                conditional.TrueBranch,
-                                cache);
-
-                        var falseBranchTransform =
-                            TransformPineExpressionWithOptionalReplacement(
-                                findReplacement,
-                                conditional.FalseBranch,
-                                cache);
-
-                        var referencesOriginalEnv =
-                            conditionTransform.referencesOriginalEnv ||
-                            falseBranchTransform.referencesOriginalEnv ||
-                            trueBranchTransform.referencesOriginalEnv;
-
-                        if (conditionTransform.expr == conditional.Condition &&
-                            trueBranchTransform.expr == conditional.TrueBranch &&
-                            falseBranchTransform.expr == conditional.FalseBranch)
-                        {
-                            return (conditional, referencesOriginalEnv);
-                        }
-
-                        return
-                            (Expression.ConditionalInst
-                            (
-                                condition: conditionTransform.expr,
-                                falseBranch: falseBranchTransform.expr,
-                                trueBranch: trueBranchTransform.expr),
-                            referencesOriginalEnv);
-                    }
-
-                case Expression.Environment:
-                    return (expression, true);
-
-                case Expression.Label labelExpr:
-                    {
-                        var taggedTransform =
-                            TransformPineExpressionWithOptionalReplacement(
-                                findReplacement,
-                                labelExpr.Tagged,
-                                cache);
-
-                        if (taggedTransform.expr == labelExpr.Tagged)
-                        {
-                            return
-                                (labelExpr, taggedTransform.referencesOriginalEnv);
-                        }
-
-                        return
-                            (new Expression.Label(
-                                labelExpr.Tag,
-                                taggedTransform.expr),
-                            taggedTransform.referencesOriginalEnv);
-                    }
-            }
-
-            throw new NotImplementedException(
-                "Expression type not implemented: " + expression.GetType().FullName);
-        }
-
-        var result = LessCache();
-
-        cache[expression] = result;
-
-        return result;
-    }
+        Expression expression) =>
+        ToCanonical(
+            Pine.Core.Runtime.InternalExpression.ExpressionReduction.TransformPineExpressionWithOptionalReplacement(
+                ToInternal(findReplacement),
+                ToInternal(expression)));
 
     /// <summary>
     /// Recursively searches for reductions up to a maximum depth.
@@ -1905,26 +256,13 @@ public class ReducePineExpression
         int maxDepth,
         Expression expression,
         PineVMParseCache parseCache,
-        PineValueClass? envConstraintId = null)
-    {
-        if (maxDepth < 1)
-            return expression;
-
-        var transformed =
-            TransformPineExpressionWithOptionalReplacement(
-                expr => SearchForExpressionReduction(expr, envConstraintId, parseCache),
-                expression).expr;
-
-        if (transformed == expression)
-            return transformed;
-
-        return
-            SearchForExpressionReductionRecursive(
-                maxDepth - 1,
-                transformed,
+        PineValueClass? envConstraintId = null) =>
+        ToCanonical(
+            Pine.Core.Runtime.InternalExpression.ExpressionReduction.SearchForExpressionReductionRecursive(
+                maxDepth,
+                ToInternal(expression),
                 parseCache,
-                envConstraintId: envConstraintId);
-    }
+                envConstraintId));
 
     /// <summary>
     /// Performs a single bottom-up reduction pass with the default <see cref="ReductionConfig"/>:
@@ -1940,15 +278,12 @@ public class ReducePineExpression
     public static Expression ReduceExpressionBottomUp(
         Expression expression,
         PineVMParseCache parseCache,
-        IDictionary<(Expression, ReductionConfig), Expression>? reducedExpressionCache = null)
-    {
-        return
-            ReduceExpressionBottomUp(
-                expression,
-                ReductionConfig.Default,
+        IDictionary<(Expression, ReductionConfig), Expression>? reducedExpressionCache = null) =>
+        ToCanonical(
+            Pine.Core.Runtime.InternalExpression.ExpressionReduction.ReduceExpressionBottomUp(
+                ToInternal(expression),
                 parseCache,
-                reducedExpressionCache);
-    }
+                ToInternal(reducedExpressionCache)));
 
     /// <summary>
     /// Performs a single bottom-up reduction pass:
@@ -1967,83 +302,13 @@ public class ReducePineExpression
         Expression expression,
         ReductionConfig config,
         PineVMParseCache parseCache,
-        IDictionary<(Expression, ReductionConfig), Expression>? reducedExpressionCache = null)
-    {
-        if (reducedExpressionCache is not null &&
-            reducedExpressionCache.TryGetValue((expression, config), out var cachedReducedExpression))
-        {
-            return cachedReducedExpression;
-        }
-
-        // First, reduce the sub-expressions.
-        var expressionWithReducedChildren =
-            expression switch
-            {
-                Expression.Litral => expression,
-
-                Expression.List listExpr =>
-                ReduceListExpressionBottomUp(
-                    listExpr,
-                    parseCache,
-                    reducedExpressionCache,
-                    config),
-
-                Expression.Builtin builtinExpr =>
-                ReduceBuiltinBottomUp(
-                    builtinExpr,
-                    parseCache,
-                    reducedExpressionCache,
-                    config),
-
-                Expression.Eval evalExpr =>
-                ReduceEvalBottomUp(
-                    evalExpr,
-                    parseCache,
-                    reducedExpressionCache,
-                    config),
-
-                Expression.Conditional conditional =>
-                ReduceConditionalBottomUp(
-                    conditional,
-                    parseCache,
-                    reducedExpressionCache,
-                    config),
-
-                Expression.Label labelExpr =>
-                ReduceLabelBottomUp(
-                    labelExpr,
-                    parseCache,
-                    reducedExpressionCache,
-                    config),
-
-                // These are direct references to the environment or stack.
-                // No further children to reduce.
-                Expression.Environment => expression,
-
-                _ =>
-                throw new NotImplementedException(
-                    $"Expression type not implemented: {expression.GetType().FullName}")
-            };
-
-        // Next, try to reduce this node itself unless the caller forbids it.
-        {
-            // If we can reduce further, return the reduced expression:
-            var reduced =
-                SearchForExpressionReduction(expressionWithReducedChildren, envConstraintId: null, parseCache);
-
-            if (reduced is not null)
-            {
-                reducedExpressionCache?[(expression, config)] = reduced;
-
-                return reduced;
-            }
-        }
-
-        // If no further reduction, just return our (possibly child-reduced) node.
-        reducedExpressionCache?[(expression, config)] = expressionWithReducedChildren;
-
-        return expressionWithReducedChildren;
-    }
+        IDictionary<(Expression, ReductionConfig), Expression>? reducedExpressionCache = null) =>
+        ToCanonical(
+            Pine.Core.Runtime.InternalExpression.ExpressionReduction.ReduceExpressionBottomUp(
+                ToInternal(expression),
+                config,
+                parseCache,
+                ToInternal(reducedExpressionCache)));
 
     /// <summary>
     /// Reduces a list expression bottom-up by first reducing each item, then attempting a local reduction.
@@ -2057,35 +322,13 @@ public class ReducePineExpression
         Expression.List listExpr,
         PineVMParseCache parseCache,
         IDictionary<(Expression, ReductionConfig), Expression>? reducedExpressionCache,
-        ReductionConfig config = default)
-    {
-        var items = listExpr.Items;
-        var changed = false;
-        var newItems = new Expression[items.Count];
-
-        for (var i = 0; i < items.Count; i++)
-        {
-            var reducedChild =
-                ReduceExpressionBottomUp(
-                    items[i],
-                    config,
-                    parseCache,
-                    reducedExpressionCache);
-
-            newItems[i] = reducedChild;
-
-            changed =
-                changed || reducedChild != items[i];
-        }
-
-        // If none of the subexpressions changed, return the original; else build a new list.
-        return
-            changed
-            ?
-            Expression.ListInst(newItems)
-            :
-            listExpr;
-    }
+        ReductionConfig config = default) =>
+        ToCanonical(
+            Pine.Core.Runtime.InternalExpression.ExpressionReduction.ReduceListExpressionBottomUp(
+                ToInternal(listExpr),
+                parseCache,
+                ToInternal(reducedExpressionCache),
+                config));
 
     /// <summary>
     /// Reduces a built-in application bottom-up by first reducing its input, then attempting a local reduction.
@@ -2099,94 +342,13 @@ public class ReducePineExpression
         Expression.Builtin builtinExpr,
         PineVMParseCache parseCache,
         IDictionary<(Expression, ReductionConfig), Expression>? reducedExpressionCache,
-        ReductionConfig config = default)
-    {
-        var reducedArg =
-            ReduceExpressionBottomUp(
-                builtinExpr.Input,
-                config,
+        ReductionConfig config = default) =>
+        ToCanonical(
+            Pine.Core.Runtime.InternalExpression.ExpressionReduction.ReduceBuiltinBottomUp(
+                ToInternal(builtinExpr),
                 parseCache,
-                reducedExpressionCache);
-
-        if (builtinExpr.Function is nameof(BuiltinFunction.int_mul) &&
-            reducedArg is Expression.List operandList)
-        {
-            var constants = CollectConstantIntegers(operandList.Items);
-
-            if (1 < constants.constants.Count)
-            {
-                var product = BigInteger.One;
-
-                foreach (var c in constants.constants)
-                {
-                    product *= c;
-                }
-
-                var newItems =
-                    new List<Expression>(capacity: constants.variables.Count + 1)
-                    {
-                        Expression.LitralInst(IntegerEncoding.EncodeSignedInteger(product))
-                    };
-
-                newItems.AddRange(constants.variables);
-
-                reducedArg = Expression.ListInst(newItems);
-            }
-        }
-
-        if (builtinExpr.Function is nameof(BuiltinFunction.int_add) &&
-            reducedArg is Expression.List addendList)
-        {
-            var constants = CollectConstantIntegers(addendList.Items);
-
-            if (1 < constants.constants.Count)
-            {
-                var sum = BigInteger.Zero;
-
-                foreach (var c in constants.constants)
-                {
-                    sum += c;
-                }
-
-                var newItems =
-                    new List<Expression>(capacity: constants.variables.Count + 1)
-                    {
-                        Expression.LitralInst(IntegerEncoding.EncodeSignedInteger(sum))
-                    };
-
-                newItems.AddRange(constants.variables);
-
-                reducedArg = Expression.ListInst(newItems);
-            }
-        }
-
-        if (reducedArg == builtinExpr.Input)
-            return builtinExpr;
-
-        return Expression.BuiltinInst(builtinExpr.Function, reducedArg);
-    }
-
-    private static (IReadOnlyList<BigInteger> constants, IReadOnlyList<Expression> variables) CollectConstantIntegers(
-        IReadOnlyList<Expression> items)
-    {
-        var constants = new List<BigInteger>();
-        var variableExpressions = new List<Expression>();
-
-        for (var i = 0; i < items.Count; i++)
-        {
-            if (items[i] is Expression.Litral literal &&
-                BuiltinFunction.SignedIntegerFromValueRelaxed(literal.Value) is { } intValue)
-            {
-                constants.Add(intValue);
-            }
-            else
-            {
-                variableExpressions.Add(items[i]);
-            }
-        }
-
-        return (constants, variableExpressions);
-    }
+                ToInternal(reducedExpressionCache),
+                config));
 
     /// <summary>
     /// Reduces an Eval expression bottom-up by reducing both the encoded expression and the environment.
@@ -2203,60 +365,13 @@ public class ReducePineExpression
         Expression.Eval evalExpr,
         PineVMParseCache parseCache,
         IDictionary<(Expression, ReductionConfig), Expression>? reducedExpressionCache,
-        ReductionConfig config = default)
-    {
-        var reducedEncoded =
-            ReduceExpressionBottomUp(
-                evalExpr.Encoded,
-                config,
+        ReductionConfig config = default) =>
+        ToCanonical(
+            Pine.Core.Runtime.InternalExpression.ExpressionReduction.ReduceEvalBottomUp(
+                ToInternal(evalExpr),
                 parseCache,
-                reducedExpressionCache);
-
-        var reducedEnv =
-            ReduceExpressionBottomUp(
-                evalExpr.Environment,
-                config,
-                parseCache,
-                reducedExpressionCache);
-
-        var reduced =
-            (reducedEncoded == evalExpr.Encoded && reducedEnv == evalExpr.Environment)
-            ?
-            evalExpr
-            :
-            new Expression.Eval(encoded: reducedEncoded, environment: reducedEnv);
-
-        // Try to consolidate a chain of nested Eval expressions emitted by frontend
-        // compilers as the generic form of a function application. This collapses the chain into
-        // a single Eval when the innermost function expression is a literal and there
-        // is more than one argument applied generically.
-        if (TryConsolidateGenericFunctionApplicationChain(
-                reduced,
-                parseCache,
-                config) is { } consolidated)
-        {
-            // The consolidation symbolically inlines the structural-encoding wrapper that
-            // FunctionValueBuilder emits, which can leave behind built-in applications
-            // (concat/head/skip) over partly-literal lists that are statically reducible.
-            // Run a bottom-up reduction pass on the result so those simplifications happen
-            // before downstream codegen sees the expression.
-            var reducedConsolidated =
-                ReduceExpressionBottomUp(
-                    consolidated,
-                    config,
-                    parseCache,
-                    reducedExpressionCache);
-
-            return reducedConsolidated;
-        }
-
-        if (TryInlineEvalBottomUp(reduced, config, parseCache, reducedExpressionCache) is { } inlined)
-        {
-            return inlined;
-        }
-
-        return reduced;
-    }
+                ToInternal(reducedExpressionCache),
+                config));
 
     /// <summary>
     /// Attempts to inline a <see cref="Expression.Eval"/> whose
@@ -2269,65 +384,13 @@ public class ReducePineExpression
         Expression.Eval evalExpr,
         ReductionConfig config,
         PineVMParseCache parseCache,
-        IDictionary<(Expression, ReductionConfig), Expression>? reducedExpressionCache)
-    {
-        if (config.InlineEvalEnvironmentSizeLimit <= evalExpr.SubexpressionCount)
-            return null;
-
-        if (evalExpr.Encoded.ReferencesEnvironment)
-            return null;
-
-        if (TryEvalIndependent(
-            evalExpr.Encoded,
-            parseCache).Value is not { } encodedExprValue)
-        {
-            return null;
-        }
-
-        if (parseCache.ParseExpressionWithoutResultAllocation(encodedExprValue).Expression is not { } innerExpr)
-            return null;
-
-        var evalCountBefore = evalExpr.Environment.EvalCount;
-
-        if (innerExpr.EvalCount > 0)
-        {
-            foreach (var innerSubExpr in Expression.EnumerateSelfAndDescendants(innerExpr))
-            {
-                if (innerSubExpr is Expression.Eval { ReferencesEnvironment: true })
-                {
-                    return null;
-                }
-            }
-        }
-
-        var innerExprReduced =
-            ReduceExpressionBottomUp(
-                innerExpr,
+        IDictionary<(Expression, ReductionConfig), Expression>? reducedExpressionCache) =>
+        ToCanonicalOrNull(
+            Pine.Core.Runtime.InternalExpression.ExpressionReduction.TryInlineEvalBottomUp(
+                ToInternal(evalExpr),
                 config,
                 parseCache,
-                reducedExpressionCache);
-
-        var substituted =
-            ExpressionSubstituteEnvironment.SubstituteEnvironmentNode(
-                expression: innerExprReduced,
-                environmentReplacement: evalExpr.Environment);
-
-        var reducedViaEval =
-            ReduceExpressionBottomUp(
-                substituted,
-                config,
-                parseCache,
-                reducedExpressionCache);
-
-        var evalCountAfter = reducedViaEval.EvalCount;
-
-        if (evalCountAfter > evalCountBefore)
-        {
-            return null;
-        }
-
-        return reducedViaEval;
-    }
+                ToInternal(reducedExpressionCache)));
 
     /// <summary>
     /// Attempts to collapse a chain of nested <see cref="Expression.Eval"/> expressions
@@ -2356,53 +419,12 @@ public class ReducePineExpression
     public static Expression? TryConsolidateGenericFunctionApplicationChain(
         Expression.Eval evalExpr,
         PineVMParseCache parseCache,
-        ReductionConfig config = default)
-    {
-        if (config.DisableGenericApplicationChainConsolidation)
-        {
-            return null;
-        }
-
-        if (CodeAnalysis.ParseGenericFunctionApplication(evalExpr) is not { } chain)
-        {
-            return null;
-        }
-
-        var (functionExpr, arguments) = chain;
-
-        if (arguments.Count <= 1)
-        {
-            return null;
-        }
-
-        if (functionExpr is not Expression.Litral functionLiteral)
-        {
-            return null;
-        }
-
-        if (parseCache.ParseExpression(functionLiteral.Value).IsOkOrNull() is not { } functionBody)
-        {
-            return null;
-        }
-
-        // First step: Eval(Literal(L), arguments[0]) ≡ functionBody[Environment := arguments[0]].
-        var currentExpr = ExpressionSubstituteEnvironment.SubstituteEnvironmentNode(functionBody, arguments[0]);
-
-        // For each subsequent argument, treat currentExpr as a "construction" expression that
-        // builds an encoded Pine expression at runtime, and decode the application of that
-        // argument into a single equivalent Pine expression.
-        for (var i = 1; i < arguments.Count; ++i)
-        {
-            if (TryDecodeApplicationOfConstructedEncoding(currentExpr, arguments[i], parseCache) is not { } decoded)
-            {
-                return null;
-            }
-
-            currentExpr = decoded;
-        }
-
-        return currentExpr;
-    }
+        ReductionConfig config = default) =>
+        ToCanonicalOrNull(
+            Pine.Core.Runtime.InternalExpression.ExpressionReduction.TryConsolidateGenericFunctionApplicationChain(
+                ToInternal(evalExpr),
+                parseCache,
+                config));
 
     /// <summary>
     /// Symbolically computes an expression equivalent to
@@ -2419,315 +441,12 @@ public class ReducePineExpression
     public static Expression? TryDecodeApplicationOfConstructedEncoding(
         Expression construction,
         Expression envArg,
-        PineVMParseCache parseCache)
-    {
-        // If the construction is itself a Eval whose Encoded part is a literal,
-        // first inline that step (parse the literal as an expression, substitute Environment
-        // with the inner Eval's Environment) and then continue the decoding.
-        if (construction is Expression.Eval innerPe &&
-            innerPe.Encoded is Expression.Litral innerEncodedLiteral)
-        {
-            if (parseCache.ParseExpression(innerEncodedLiteral.Value).IsOkOrNull() is { } innerFunctionBody)
-            {
-                var inlined =
-                    ExpressionSubstituteEnvironment.SubstituteEnvironmentNode(innerFunctionBody, innerPe.Environment);
-
-                return TryDecodeApplicationOfConstructedEncoding(inlined, envArg, parseCache);
-            }
-
-            return null;
-        }
-
-        // If the construction itself is a literal, parse it as an expression and substitute
-        // Environment with envArg.
-        if (construction is Expression.Litral constructionLiteral)
-        {
-            if (parseCache.ParseExpression(constructionLiteral.Value).IsOkOrNull() is { } parsedInner)
-            {
-                return ExpressionSubstituteEnvironment.SubstituteEnvironmentNode(parsedInner, envArg);
-            }
-
-            return null;
-        }
-
-        // Otherwise, the construction must be a ListExpr matching the structural encoding shape.
-        if (construction is not Expression.List constructionList)
-        {
-            return null;
-        }
-
-        if (constructionList.Items.Count is 0 ||
-            constructionList.Items[0] is not Expression.Litral tagLiteral)
-        {
-            return null;
-        }
-
-        if (StringEncoding.StringFromValue(tagLiteral.Value).IsOkOrNull() is not { } tag)
-        {
-            return null;
-        }
-
-        if (TryDecodeConstructedEncoding2026(constructionList, tag, envArg, parseCache) is { } decoded2026)
-        {
-            return decoded2026;
-        }
-
-        if (constructionList.Items.Count is not 2)
-        {
-            return null;
-        }
-
-        if (constructionList.Items[1] is not Expression.List tagArguments)
-        {
-            return null;
-        }
-
-        switch (tag)
-        {
-            case "Literal":
-                {
-                    // Encoding of Expression.Literal: ListExpr([Lit("Literal"), ListExpr([X])]).
-                    // Eval(this, envArg) evaluates the parsed Literal expression with
-                    // env = envArg; Literal expressions ignore their environment, so the result
-                    // is the literal value, which is what X evaluates to in the outer env.
-                    if (tagArguments.Items.Count is not 1)
-                    {
-                        return null;
-                    }
-
-                    return tagArguments.Items[0];
-                }
-
-            case "Environment":
-                {
-                    // Encoding of Expression.Environment: ListExpr([Lit("Environment"), ListExpr([])]).
-                    // Eval(this, envArg) evaluates the parsed Environment expression
-                    // with env = envArg, producing envArg.
-                    if (tagArguments.Items.Count is not 0)
-                    {
-                        return null;
-                    }
-
-                    return envArg;
-                }
-
-            case "List":
-                {
-                    // Encoding of Expression.List: ListExpr([Lit("List"), ListExpr([ListExpr([item_enc...])])]).
-                    if (tagArguments.Items.Count is not 1)
-                    {
-                        return null;
-                    }
-
-                    if (tagArguments.Items[0] is not Expression.List innerItemsList)
-                    {
-                        return null;
-                    }
-
-                    var decodedItems = new Expression[innerItemsList.Items.Count];
-
-                    for (var i = 0; i < innerItemsList.Items.Count; ++i)
-                    {
-                        if (TryDecodeApplicationOfConstructedEncoding(
-                                innerItemsList.Items[i],
-                                envArg,
-                                parseCache) is not { } decodedItem)
-                        {
-                            return null;
-                        }
-
-                        decodedItems[i] = decodedItem;
-                    }
-
-                    return Expression.ListInst(decodedItems);
-                }
-
-            case "ParseAndEval":
-                {
-                    // Encoding of Expression.ParseAndEval:
-                    // ListExpr([Lit("ParseAndEval"), ListExpr([encInner, envInner])]).
-                    if (tagArguments.Items.Count is not 2)
-                    {
-                        return null;
-                    }
-
-                    if (TryDecodeApplicationOfConstructedEncoding(
-                            tagArguments.Items[0],
-                            envArg,
-                            parseCache) is not { } decodedEncoded)
-                    {
-                        return null;
-                    }
-
-                    if (TryDecodeApplicationOfConstructedEncoding(
-                            tagArguments.Items[1],
-                            envArg,
-                            parseCache) is not { } decodedEnv)
-                    {
-                        return null;
-                    }
-
-                    return new Expression.Eval(decodedEncoded, decodedEnv);
-                }
-
-            case "KernelApplication":
-                {
-                    // Encoding of Expression.KernelApplication:
-                    // ListExpr([Lit("KernelApplication"), ListExpr([Lit(funcName_str), input_enc])]).
-                    if (tagArguments.Items.Count is not 2)
-                    {
-                        return null;
-                    }
-
-                    if (tagArguments.Items[0] is not Expression.Litral funcNameLiteral)
-                    {
-                        return null;
-                    }
-
-                    if (StringEncoding.StringFromValue(funcNameLiteral.Value).IsOkOrNull() is not { } functionName)
-                    {
-                        return null;
-                    }
-
-                    if (TryDecodeApplicationOfConstructedEncoding(
-                            tagArguments.Items[1],
-                            envArg,
-                            parseCache) is not { } decodedInput)
-                    {
-                        return null;
-                    }
-
-                    return Expression.BuiltinInst(functionName, decodedInput);
-                }
-
-            default:
-                return null;
-        }
-    }
-
-    private static Expression? TryDecodeConstructedEncoding2026(
-        Expression.List construction,
-        string tag,
-        Expression envArg,
-        PineVMParseCache parseCache)
-    {
-        switch (tag)
-        {
-            case "Litral":
-                return
-                    construction.Items.Count is 2
-                    ?
-                    construction.Items[1]
-                    :
-                    null;
-
-            case "Environment":
-                return
-                    construction.Items.Count is 1
-                    ?
-                    envArg
-                    :
-                    null;
-
-            case "List":
-                {
-                    var decodedItems = new Expression[construction.Items.Count - 1];
-
-                    for (var i = 1; i < construction.Items.Count; ++i)
-                    {
-                        if (TryDecodeApplicationOfConstructedEncoding(
-                                construction.Items[i],
-                                envArg,
-                                parseCache) is not { } decodedItem)
-                        {
-                            return null;
-                        }
-
-                        decodedItems[i - 1] = decodedItem;
-                    }
-
-                    return Expression.ListInst(decodedItems);
-                }
-
-            case "Builtin":
-                {
-                    if (construction.Items.Count is not 3 ||
-                        construction.Items[1] is not Expression.Litral functionLiteral ||
-                        StringEncoding.StringFromValue(functionLiteral.Value).IsOkOrNull() is not { } functionName ||
-                        TryDecodeApplicationOfConstructedEncoding(
-                            construction.Items[2],
-                            envArg,
-                            parseCache) is not { } decodedInput)
-                    {
-                        return null;
-                    }
-
-                    return Expression.BuiltinInst(functionName, decodedInput);
-                }
-
-            case "Conditional" or "Condition":
-                {
-                    if (construction.Items.Count is not 4 ||
-                        TryDecodeApplicationOfConstructedEncoding(
-                            construction.Items[1],
-                            envArg,
-                            parseCache) is not { } decodedCondition ||
-                        TryDecodeApplicationOfConstructedEncoding(
-                            construction.Items[2],
-                            envArg,
-                            parseCache) is not { } decodedFalseBranch ||
-                        TryDecodeApplicationOfConstructedEncoding(
-                            construction.Items[3],
-                            envArg,
-                            parseCache) is not { } decodedTrueBranch)
-                    {
-                        return null;
-                    }
-
-                    return
-                        Expression.ConditionalInst(
-                            decodedCondition,
-                            decodedFalseBranch,
-                            decodedTrueBranch);
-                }
-
-            case "Eval":
-                {
-                    if (construction.Items.Count is not 3 ||
-                        TryDecodeApplicationOfConstructedEncoding(
-                            construction.Items[1],
-                            envArg,
-                            parseCache) is not { } decodedEncoded ||
-                        TryDecodeApplicationOfConstructedEncoding(
-                            construction.Items[2],
-                            envArg,
-                            parseCache) is not { } decodedEnvironment)
-                    {
-                        return null;
-                    }
-
-                    return new Expression.Eval(decodedEncoded, decodedEnvironment);
-                }
-
-            case "Label":
-                {
-                    if (construction.Items.Count is not 3 ||
-                        construction.Items[1] is not Expression.Litral labelLiteral ||
-                        TryDecodeApplicationOfConstructedEncoding(
-                            construction.Items[2],
-                            envArg,
-                            parseCache) is not { } decodedLabeled)
-                    {
-                        return null;
-                    }
-
-                    return new Expression.Label(labelLiteral.Value, decodedLabeled);
-                }
-
-            default:
-                return null;
-        }
-    }
+        PineVMParseCache parseCache) =>
+        ToCanonicalOrNull(
+            Pine.Core.Runtime.InternalExpression.ExpressionReduction.TryDecodeApplicationOfConstructedEncoding(
+                ToInternal(construction),
+                ToInternal(envArg),
+                parseCache));
 
     /// <summary>
     /// Reduces a conditional expression bottom-up by reducing its components and then attempting a local reduction.
@@ -2741,197 +460,13 @@ public class ReducePineExpression
         Expression.Conditional conditional,
         PineVMParseCache parseCache,
         IDictionary<(Expression, ReductionConfig), Expression>? reducedExpressionCache,
-        ReductionConfig config = default)
-    {
-        var reducedCondition =
-            ReduceExpressionBottomUp(
-                conditional.Condition,
-                config,
+        ReductionConfig config = default) =>
+        ToCanonical(
+            Pine.Core.Runtime.InternalExpression.ExpressionReduction.ReduceConditionalBottomUp(
+                ToInternal(conditional),
                 parseCache,
-                reducedExpressionCache);
-
-        var reducedTrue =
-            ReduceExpressionBottomUp(
-                conditional.TrueBranch,
-                config,
-                parseCache,
-                reducedExpressionCache);
-
-        reducedTrue =
-            ReduceBranchUnderAssumption(
-                reducedTrue,
-                reducedCondition,
-                assumedValue: true,
-                config,
-                parseCache,
-                reducedExpressionCache);
-
-        var reducedFalse =
-            ReduceExpressionBottomUp(
-                conditional.FalseBranch,
-                config,
-                parseCache,
-                reducedExpressionCache);
-
-        reducedFalse =
-            ReduceBranchUnderAssumption(
-                reducedFalse,
-                reducedCondition,
-                assumedValue: false,
-                config,
-                parseCache,
-                reducedExpressionCache);
-
-        if (reducedCondition == conditional.Condition &&
-            reducedTrue == conditional.TrueBranch &&
-            reducedFalse == conditional.FalseBranch)
-        {
-            return conditional;
-        }
-
-        return
-            Expression.ConditionalInst(
-                condition: reducedCondition,
-                falseBranch: reducedFalse,
-                trueBranch: reducedTrue);
-    }
-
-    private static Expression ReduceBranchUnderAssumption(
-        Expression branch,
-        Expression condition,
-        bool assumedValue,
-        ReductionConfig config,
-        PineVMParseCache parseCache,
-        IDictionary<(Expression, ReductionConfig), Expression>? reducedExpressionCache)
-    {
-        var specialized =
-            TransformPineExpressionWithOptionalReplacement(
-                expression =>
-                TryProveBooleanExpression(
-                    expression,
-                    condition,
-                    assumedValue) is { } provenValue
-                ?
-                Expression.LitralInst(
-                    provenValue
-                    ?
-                    PineKernelValues.TrueValue
-                    :
-                    PineKernelValues.FalseValue)
-                :
-                null,
-                branch).expr;
-
-        if (specialized == branch)
-            return branch;
-
-        return
-            ReduceExpressionBottomUp(
-                specialized,
-                config,
-                parseCache,
-                reducedExpressionCache);
-    }
-
-    private static bool? TryProveBooleanExpression(
-        Expression expression,
-        Expression condition,
-        bool assumedValue)
-    {
-        if (assumedValue && expression == condition)
-            return true;
-
-        if (!assumedValue ||
-            expression is not Expression.Builtin
-            {
-                Function: nameof(BuiltinFunction.int_is_sorted_asc),
-                Input: Expression.List expressionOperands
-            } ||
-            condition is not Expression.Builtin
-            {
-                Function: nameof(BuiltinFunction.int_is_sorted_asc),
-                Input: Expression.List conditionOperands
-            })
-        {
-            return null;
-        }
-
-        if (expressionOperands.Items.Count is 1 &&
-            !IsKnownIntegerExpression(
-                expressionOperands.Items[0],
-                conditionOperands.Items))
-        {
-            return null;
-        }
-
-        for (var operandIndex = 1; operandIndex < expressionOperands.Items.Count; operandIndex++)
-        {
-            if (!TryProveIntegerLessThanOrEqual(
-                expressionOperands.Items[operandIndex - 1],
-                expressionOperands.Items[operandIndex],
-                conditionOperands.Items))
-            {
-                return null;
-            }
-        }
-
-        return true;
-    }
-
-    private static bool TryProveIntegerLessThanOrEqual(
-        Expression left,
-        Expression right,
-        IReadOnlyList<Expression> sortedExpressions)
-    {
-        if (left == right)
-            return IsKnownIntegerExpression(left, sortedExpressions);
-
-        for (var expressionIndex = 1; expressionIndex < sortedExpressions.Count; expressionIndex++)
-        {
-            if (sortedExpressions[expressionIndex - 1] == left &&
-                sortedExpressions[expressionIndex] == right)
-            {
-                return true;
-            }
-        }
-
-        if (right is not Expression.Builtin
-            {
-                Function: nameof(BuiltinFunction.int_add),
-                Input: Expression.List addends
-            } ||
-            !IsKnownIntegerExpression(left, sortedExpressions))
-        {
-            return false;
-        }
-
-        var matchedLeft = false;
-
-        foreach (var addend in addends.Items)
-        {
-            if (!matchedLeft && addend == left)
-            {
-                matchedLeft = true;
-                continue;
-            }
-
-            if (addend is not Expression.Litral literal ||
-                BuiltinFunction.SignedIntegerFromValueRelaxed(literal.Value) is not { } integer ||
-                integer < 0)
-            {
-                return false;
-            }
-        }
-
-        return matchedLeft;
-    }
-
-    private static bool IsKnownIntegerExpression(
-        Expression expression,
-        IReadOnlyList<Expression> sortedExpressions) =>
-        expression is Expression.Litral literal &&
-        BuiltinFunction.SignedIntegerFromValueRelaxed(literal.Value) is not null ||
-        sortedExpressions.Contains(expression);
+                ToInternal(reducedExpressionCache),
+                config));
 
     /// <summary>
     /// Reduces a labelled expression bottom-up by reducing the tagged subexpression.
@@ -2945,20 +480,13 @@ public class ReducePineExpression
         Expression.Label labelExpr,
         PineVMParseCache parseCache,
         IDictionary<(Expression, ReductionConfig), Expression>? reducedExpressionCache,
-        ReductionConfig config = default)
-    {
-        var reducedTagged =
-            ReduceExpressionBottomUp(
-                labelExpr.Tagged,
-                config,
+        ReductionConfig config = default) =>
+        ToCanonical(
+            Pine.Core.Runtime.InternalExpression.ExpressionReduction.ReduceLabelBottomUp(
+                ToInternal(labelExpr),
                 parseCache,
-                reducedExpressionCache);
-
-        if (reducedTagged == labelExpr.Tagged)
-            return labelExpr;
-
-        return new Expression.Label(labelExpr.Tag, reducedTagged);
-    }
+                ToInternal(reducedExpressionCache),
+                config));
 
     /// <summary>
     /// Attempts to push a reverse operation into the structure of an expression without evaluation.
@@ -2971,61 +499,10 @@ public class ReducePineExpression
     /// or <c>null</c> if no structural reduction is applicable.
     /// </returns>
     public static Expression? ApplyBuiltinFunctionReverseToAllBranches(
-        Expression expression)
-    {
-        switch (expression)
-        {
-            case Expression.List listExpr:
-                {
-                    if (listExpr.Items.Count <= 1)
-                        return listExpr;
-
-                    var reversed = listExpr.Items.Reverse().ToArray();
-
-                    return Expression.ListInst(reversed);
-                }
-
-            case Expression.Litral literal:
-                return Expression.LitralInst(BuiltinFunction.reverse(literal.Value));
-
-            case Expression.Builtin innerBuiltinExpr:
-                {
-                    if (innerBuiltinExpr.Function is nameof(BuiltinFunction.reverse))
-                    {
-                        return innerBuiltinExpr.Input;
-                    }
-
-                    return null;
-                }
-
-            case Expression.Conditional cond:
-                {
-                    if (ApplyBuiltinFunctionReverseToAllBranches(cond.FalseBranch) is { } falseOk &&
-                        ApplyBuiltinFunctionReverseToAllBranches(cond.TrueBranch) is { } trueOk)
-                    {
-                        return
-                            Expression.ConditionalInst(
-                                cond.Condition,
-                                falseBranch: falseOk,
-                                trueBranch: trueOk);
-                    }
-
-                    return null;
-                }
-
-            case Expression.Label tag:
-                {
-                    if (ApplyBuiltinFunctionReverseToAllBranches(tag.Tagged) is { } inner)
-                    {
-                        return new Expression.Label(tag.Tag, inner);
-                    }
-
-                    return null;
-                }
-        }
-
-        return null;
-    }
+        Expression expression) =>
+        ToCanonicalOrNull(
+            Pine.Core.Runtime.InternalExpression.ExpressionReduction.ApplyBuiltinFunctionReverseToAllBranches(
+                ToInternal(expression)));
 
     /// <summary>
     /// Attempts to push a skip operation into the expression tree without evaluation.
@@ -3040,91 +517,11 @@ public class ReducePineExpression
     /// </returns>
     public static Expression? ApplyBuiltinFunctionSkipToAllBranches(
         int count,
-        Expression expression)
-    {
-        var countClamped =
-            count < 0 ? 0 : count;
-
-        if (countClamped is 0)
-            return expression;
-
-        switch (expression)
-        {
-            case Expression.List list:
-                {
-                    if (countClamped <= 0)
-                        return list;
-
-                    if (countClamped >= list.Items.Count)
-                        return Expression.LitralInst(PineValue.EmptyList);
-
-                    return Expression.ListInst([.. list.Items.Skip(countClamped)]);
-                }
-
-            case Expression.Litral literal:
-                return Expression.LitralInst(BuiltinFunctionSpecialized.skip(countClamped, literal.Value));
-
-            case Expression.Builtin innerSkip:
-                {
-                    if (innerSkip.Function is nameof(BuiltinFunction.skip) &&
-                        innerSkip.Input is Expression.List args && args.Items.Count is 2 &&
-                        args.Items[0] is Expression.Litral litCount &&
-                        BuiltinFunction.SignedIntegerFromValueRelaxed(litCount.Value) is { } innerCount)
-                    {
-                        if (innerCount > int.MaxValue)
-                            return null;
-
-                        var innerCountClamped =
-                            innerCount < 0 ? 0 : (int)innerCount;
-
-                        if (innerCountClamped > int.MaxValue - countClamped)
-                            return null;
-
-                        var combinedCount = countClamped + innerCountClamped;
-
-                        return
-                            ApplyBuiltinFunctionSkipToAllBranches(combinedCount, args.Items[1])
-                            ??
-                            Expression.BuiltinInst(
-                                nameof(BuiltinFunction.skip),
-                                Expression.ListInst(
-                                    [
-                                    Expression.LitralInst(IntegerEncoding.EncodeSignedInteger(combinedCount)),
-                                    args.Items[1]
-                                    ]));
-                    }
-
-                    return null;
-                }
-
-            case Expression.Conditional conditional:
-                {
-                    if (ApplyBuiltinFunctionSkipToAllBranches(countClamped, conditional.FalseBranch) is { } falseOk &&
-                        ApplyBuiltinFunctionSkipToAllBranches(countClamped, conditional.TrueBranch) is { } trueOk)
-                    {
-                        return
-                            Expression.ConditionalInst(
-                                conditional.Condition,
-                                falseBranch: falseOk,
-                                trueBranch: trueOk);
-                    }
-
-                    return null;
-                }
-
-            case Expression.Label tag:
-                {
-                    if (ApplyBuiltinFunctionSkipToAllBranches(countClamped, tag.Tagged) is { } taggedOk)
-                    {
-                        return new Expression.Label(tag.Tag, taggedOk);
-                    }
-
-                    return null;
-                }
-        }
-
-        return null;
-    }
+        Expression expression) =>
+        ToCanonicalOrNull(
+            Pine.Core.Runtime.InternalExpression.ExpressionReduction.ApplyBuiltinFunctionSkipToAllBranches(
+                count,
+                ToInternal(expression)));
 
     /// <summary>
     /// Attempts to push a take operation into the expression tree without evaluation.
@@ -3139,75 +536,11 @@ public class ReducePineExpression
     /// </returns>
     public static Expression? ApplyBuiltinFunctionTakeToAllBranches(
         int count,
-        Expression expression)
-    {
-        var countClamped =
-            count < 0 ? 0 : count;
-
-        switch (expression)
-        {
-            case Expression.List list:
-                {
-                    if (countClamped <= 0)
-                        return Expression.LitralInst(PineValue.EmptyList);
-
-                    if (countClamped >= list.Items.Count)
-                        return list;
-
-                    return Expression.ListInst([.. list.Items.Take(countClamped)]);
-                }
-
-            case Expression.Litral literal:
-                return Expression.LitralInst(BuiltinFunctionSpecialized.take(countClamped, literal.Value));
-
-            case Expression.Builtin innerTake:
-
-                {
-                    if (innerTake.Function is nameof(BuiltinFunction.take) &&
-                        innerTake.Input is Expression.List args && args.Items.Count is 2 &&
-                        args.Items[0] is Expression.Litral litCount &&
-                        BuiltinFunction.SignedIntegerFromValueRelaxed(litCount.Value) is { } innerCount)
-                    {
-                        var innerCountClamped =
-                            innerCount < 0 ? 0 : (int)innerCount;
-
-                        return
-                            ApplyBuiltinFunctionTakeToAllBranches(
-                                countClamped + innerCountClamped,
-                                args.Items[1]);
-                    }
-
-                    return null;
-                }
-
-            case Expression.Conditional conditional:
-                {
-                    if (ApplyBuiltinFunctionTakeToAllBranches(countClamped, conditional.FalseBranch) is { } falseOk &&
-                        ApplyBuiltinFunctionTakeToAllBranches(countClamped, conditional.TrueBranch) is { } trueOk)
-                    {
-                        return
-                            Expression.ConditionalInst(
-                                conditional.Condition,
-                                falseBranch: falseOk,
-                                trueBranch: trueOk);
-                    }
-
-                    return null;
-                }
-
-            case Expression.Label tag:
-                {
-                    if (ApplyBuiltinFunctionTakeToAllBranches(countClamped, tag.Tagged) is { } taggedOk)
-                    {
-                        return new Expression.Label(tag.Tag, taggedOk);
-                    }
-
-                    return null;
-                }
-        }
-
-        return null;
-    }
+        Expression expression) =>
+        ToCanonicalOrNull(
+            Pine.Core.Runtime.InternalExpression.ExpressionReduction.ApplyBuiltinFunctionTakeToAllBranches(
+                count,
+                ToInternal(expression)));
 
     /// <summary>
     /// Attempts to push a head operation (select first element) into the expression tree without evaluation.
@@ -3219,43 +552,10 @@ public class ReducePineExpression
     /// A structurally transformed expression representing the head selection, or <c>null</c>
     /// if no structural reduction is applicable.
     /// </returns>
-    public static Expression? ApplyBuiltinFunctionHeadToAllBranches(Expression expression)
-    {
-        if (TryReduceSelectListItem(expression, 0) is { } selected)
-        {
-            return selected;
-        }
-
-        switch (expression)
-        {
-            case Expression.Conditional cond:
-                {
-                    if (ApplyBuiltinFunctionHeadToAllBranches(cond.FalseBranch) is { } falseOk &&
-                        ApplyBuiltinFunctionHeadToAllBranches(cond.TrueBranch) is { } trueOk)
-                    {
-                        return
-                            Expression.ConditionalInst(
-                                condition: cond.Condition,
-                                falseBranch: falseOk,
-                                trueBranch: trueOk);
-                    }
-
-                    return null;
-                }
-
-            case Expression.Label tag:
-                {
-                    if (ApplyBuiltinFunctionHeadToAllBranches(tag.Tagged) is { } taggedOk)
-                    {
-                        return new Expression.Label(tag.Tag, taggedOk);
-                    }
-
-                    return null;
-                }
-        }
-
-        return null;
-    }
+    public static Expression? ApplyBuiltinFunctionHeadToAllBranches(Expression expression) =>
+        ToCanonicalOrNull(
+            Pine.Core.Runtime.InternalExpression.ExpressionReduction.ApplyBuiltinFunctionHeadToAllBranches(
+                ToInternal(expression)));
 
     /// <summary>
     /// Attempts to select the list item at a given index from the provided expression without
@@ -3266,62 +566,17 @@ public class ReducePineExpression
     /// - Expression.StringTag: unwraps and attempts on the tagged expression.
     /// Returns null if no structural reduction can be applied.
     /// </summary>
-    public static Expression? TryReduceSelectListItem(Expression inputExpression, int index)
-    {
-        if (index < 0)
-            index = 0;
+    public static Expression? TryReduceSelectListItem(Expression inputExpression, int index) =>
+        ToCanonicalOrNull(
+            Pine.Core.Runtime.InternalExpression.ExpressionReduction.TryReduceSelectListItem(
+                ToInternal(inputExpression),
+                index));
 
-        switch (inputExpression)
-        {
-            case Expression.List list:
-                {
-                    if (index < list.Items.Count)
-                    {
-                        return list.Items[index];
-                    }
-
-                    return Expression.LitralInst(PineValue.EmptyList);
-                }
-
-            case Expression.Litral lit:
-                {
-                    if (lit.Value is PineValue.ListValue lv)
-                    {
-                        if (index < lv.Items.Length)
-                        {
-                            return Expression.LitralInst(lv.Items.Span[index]);
-                        }
-
-                        return Expression.LitralInst(PineValue.EmptyList);
-                    }
-
-                    // Not a list-literal: no structural reduction.
-                    return null;
-                }
-
-            case Expression.Conditional cond:
-                {
-                    var falseOut = TryReduceSelectListItem(cond.FalseBranch, index);
-                    var trueOut = TryReduceSelectListItem(cond.TrueBranch, index);
-
-                    if (falseOut is not null && trueOut is not null)
-                    {
-                        return
-                            Expression.ConditionalInst(
-                                condition: cond.Condition,
-                                falseBranch: falseOut,
-                                trueBranch: trueOut);
-                    }
-
-                    return null;
-                }
-
-            case Expression.Label label:
-                {
-                    return TryReduceSelectListItem(label.Tagged, index);
-                }
-        }
-
-        return null;
-    }
+    private static ValueEvalResult AdaptValueResult(
+        Pine.Core.Runtime.InternalExpression.ExpressionReduction.ValueEvalResult result) =>
+        result.Value is { } value
+        ?
+        ValueEvalResult.Ok(value)
+        :
+        ValueEvalResult.Err(result.Error ?? throw new InvalidOperationException("Empty independent evaluation result."));
 }

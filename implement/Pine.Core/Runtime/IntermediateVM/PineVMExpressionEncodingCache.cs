@@ -1,4 +1,3 @@
-using Pine.Core.Encodings;
 using Pine.Core.PineLanguage;
 using System;
 using System.Collections.Concurrent;
@@ -12,9 +11,7 @@ namespace Pine.Core.Runtime.IntermediateVM;
 /// </summary>
 public sealed class PineVMExpressionEncodingCache
 {
-    private readonly ConcurrentDictionary<Expression, Lazy<PineValue>> _entries = [];
-
-    private readonly ExpressionEncodingCache _standardEncodingCache = new();
+    private readonly ConcurrentDictionary<InternalExpression.Expression, Lazy<PineValue>> _entries = [];
 
     /// <summary>
     /// Gets the number of cached expressions.
@@ -25,13 +22,16 @@ public sealed class PineVMExpressionEncodingCache
     /// Gets or creates the standard encoding of an expression.
     /// </summary>
     public PineValue GetOrEncode(Expression expression)
+        => GetOrEncode(InternalExpression.ExpressionConversion.FromCanonicalCached(expression));
+
+    internal PineValue GetOrEncode(InternalExpression.Expression expression)
     {
         var lazyEncoding =
             _entries.GetOrAdd(
                 expression,
                 _ =>
                 new Lazy<PineValue>(
-                    () => _standardEncodingCache.EncodeExpressionAsValue(expression),
+                    () => InternalExpression.ExpressionValueEncoding.EncodeExpressionAsValue(expression),
                     LazyThreadSafetyMode.ExecutionAndPublication));
 
         return GetValue(expression, lazyEncoding);
@@ -42,6 +42,14 @@ public sealed class PineVMExpressionEncodingCache
     /// </summary>
     public void RegisterParsedEncoding(
         Expression expression,
+        PineValue encodedExpression)
+        =>
+        RegisterParsedEncoding(
+            InternalExpression.ExpressionConversion.FromCanonicalCached(expression),
+            encodedExpression);
+
+    internal void RegisterParsedEncoding(
+        InternalExpression.Expression expression,
         PineValue encodedExpression)
     {
         if (_entries.TryGetValue(expression, out _))
@@ -55,7 +63,7 @@ public sealed class PineVMExpressionEncodingCache
     }
 
     private PineValue GetValue(
-        Expression expression,
+        InternalExpression.Expression expression,
         Lazy<PineValue> lazyEncoding)
     {
         try
@@ -64,7 +72,7 @@ public sealed class PineVMExpressionEncodingCache
         }
         catch
         {
-            ((ICollection<KeyValuePair<Expression, Lazy<PineValue>>>)_entries)
+            ((ICollection<KeyValuePair<InternalExpression.Expression, Lazy<PineValue>>>)_entries)
                 .Remove(new(expression, lazyEncoding));
 
             throw;

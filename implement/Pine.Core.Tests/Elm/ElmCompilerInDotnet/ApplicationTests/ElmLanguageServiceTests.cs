@@ -988,7 +988,7 @@ public class ElmLanguageServiceTests
             BuildListCount: 1_361
             BuildListItemCount: 5_957
             LoopIterationCount: 183
-            InstructionCount: 20_967
+            InstructionCount: 20_912
             DeferredTemplateValueAllocationCount: 0
             TemplateDirectInvocationCount: 8
             DeferredTemplateValueMaterializationCount: 0
@@ -1543,7 +1543,7 @@ public class ElmLanguageServiceTests
             BuildListCount: 3_800
             BuildListItemCount: 16_804
             LoopIterationCount: 641
-            InstructionCount: 56_587
+            InstructionCount: 56_385
             DeferredTemplateValueAllocationCount: 0
             TemplateDirectInvocationCount: 22
             DeferredTemplateValueMaterializationCount: 0
@@ -1687,7 +1687,7 @@ public class ElmLanguageServiceTests
             BuildListCount: 3_815
             BuildListItemCount: 16_882
             LoopIterationCount: 642
-            InstructionCount: 56_683
+            InstructionCount: 56_481
             DeferredTemplateValueAllocationCount: 0
             TemplateDirectInvocationCount: 23
             DeferredTemplateValueMaterializationCount: 0
@@ -1894,7 +1894,7 @@ public class ElmLanguageServiceTests
             BuildListCount: 7_335
             BuildListItemCount: 32_532
             LoopIterationCount: 2_704
-            InstructionCount: 118_853
+            InstructionCount: 118_364
             DeferredTemplateValueAllocationCount: 0
             TemplateDirectInvocationCount: 35
             DeferredTemplateValueMaterializationCount: 0

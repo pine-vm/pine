@@ -29,13 +29,19 @@ public delegate ExpressionCompilationCacheEntry GetOrAddExpressionCompilation(
     Expression expression,
     Func<ExpressionCompilationCacheEntry> buildCompilation);
 
+internal delegate bool TryGetInternalExpressionCompilation(
+    InternalExpression.Expression expression, out ExpressionCompilationCacheEntry compilation);
+
+internal delegate ExpressionCompilationCacheEntry GetOrAddInternalExpressionCompilation(
+    InternalExpression.Expression expression, Func<ExpressionCompilationCacheEntry> buildCompilation);
+
 /// <summary>
 /// Thread-safe expression-compilation cache for sharing entries between VM instances.
 /// </summary>
 public sealed class ConcurrentExpressionCompilationCache
 {
     private readonly ConcurrentDictionary<
-        Expression,
+        InternalExpression.Expression,
         Lazy<ExpressionCompilationCacheEntry>>
         _entries = [];
 
@@ -47,6 +53,11 @@ public sealed class ConcurrentExpressionCompilationCache
     /// </summary>
     public bool TryGet(
         Expression expression,
+        out ExpressionCompilationCacheEntry compilation)
+        => TryGetInternal(InternalExpression.ExpressionConversion.FromCanonicalCached(expression), out compilation);
+
+    internal bool TryGetInternal(
+        InternalExpression.Expression expression,
         out ExpressionCompilationCacheEntry compilation)
     {
         if (!_entries.TryGetValue(expression, out var lazyCompilation))
@@ -65,6 +76,11 @@ public sealed class ConcurrentExpressionCompilationCache
     public ExpressionCompilationCacheEntry GetOrAdd(
         Expression expression,
         Func<ExpressionCompilationCacheEntry> buildCompilation)
+        => GetOrAddInternal(InternalExpression.ExpressionConversion.FromCanonicalCached(expression), buildCompilation);
+
+    internal ExpressionCompilationCacheEntry GetOrAddInternal(
+        InternalExpression.Expression expression,
+        Func<ExpressionCompilationCacheEntry> buildCompilation)
     {
         ArgumentNullException.ThrowIfNull(buildCompilation);
 
@@ -80,7 +96,7 @@ public sealed class ConcurrentExpressionCompilationCache
     }
 
     private ExpressionCompilationCacheEntry GetValue(
-        Expression expression,
+        InternalExpression.Expression expression,
         Lazy<ExpressionCompilationCacheEntry> lazyCompilation)
     {
         try
@@ -89,7 +105,7 @@ public sealed class ConcurrentExpressionCompilationCache
         }
         catch
         {
-            ((ICollection<KeyValuePair<Expression, Lazy<ExpressionCompilationCacheEntry>>>)_entries)
+            ((ICollection<KeyValuePair<InternalExpression.Expression, Lazy<ExpressionCompilationCacheEntry>>>)_entries)
                 .Remove(new(expression, lazyCompilation));
 
             throw;

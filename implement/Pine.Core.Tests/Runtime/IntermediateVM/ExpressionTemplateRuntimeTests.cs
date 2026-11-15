@@ -1123,7 +1123,7 @@ public class ExpressionTemplateRuntimeTests
     }
 
     [Fact]
-    public void Legacy_template_constructors_use_ordinary_evaluation()
+    public void Legacy_template_constructors_are_rejected_when_applied()
     {
         var entry =
             ExpressionEncoding2024.EncodeExpressionAsValue(
@@ -1131,12 +1131,22 @@ public class ExpressionTemplateRuntimeTests
                     ExpressionEncoding2024.EncodeExpressionAsValue(Expression.EnvironmentInstance)));
 
         var expression = BuildEvalChain(entry, PineValue.EmptyList, IntegerEncoding.EncodeSignedInteger(37));
-        var report = EvaluateWithPineVm(expression);
 
-        report.ReturnValue.Evaluate().Should().Be(EvaluateWithDirectInterpreter(expression));
-        report.Counters.TemplateConsolidatedEvalCount.Should().Be(0);
-        report.Counters.TemplateDirectInvocationCount.Should().Be(0);
-        report.Counters.InvocationCount.Should().Be(2);
+        foreach (var vm in new[] { CreateVm(enableDirectInvocation: true), CreateVm(disableDirectInvocation: true) })
+        {
+            var error =
+                vm.EvaluateExpressionOnCustomStack(
+                    expression,
+                    PineValue.EmptyList,
+                    IntermediatePineVM.EvaluationConfig.Unbounded,
+                    cancellationToken: default)
+                .IsErrOrNull();
+
+            error.Should().NotBeNull();
+            var reason = error!.Reason.Should().BeOfType<EvaluationErrorReason.ParseExpressionFailed>().Subject;
+            reason.ExpressionValue.Should().Be(entry);
+            reason.ParseError.Should().Contain("Literal");
+        }
     }
 
     private static PineValue BuildRepeatedEnvironmentTemplate(Expression terminal)

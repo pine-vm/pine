@@ -2063,13 +2063,12 @@ public class CodeAnalysis
 
         for (var i = 0; i < depthK; ++i)
         {
-            // Use a unique kernel-application sentinel that does not occur in real expressions
-            // and is opaque to the optimization's constant-folding (the kernel function name is
-            // unrecognized so no folding fires on it).
+            // Invalid-code Eval sentinels stay opaque without inventing builtin identifiers.
+            // Their environment dependence prevents constant folding.
             placeholders[i] =
-                Expression.BuiltinInst(
-                    function: "__consolidated_form_template_placeholder_" + i + "__",
-                    input: Expression.EnvironmentInstance);
+                new Expression.Eval(
+                    Expression.LitralInst(IntegerEncoding.EncodeSignedInteger(i)),
+                    Expression.EnvironmentInstance);
         }
 
         var chain =

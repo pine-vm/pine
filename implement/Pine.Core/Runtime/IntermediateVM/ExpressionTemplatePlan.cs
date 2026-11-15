@@ -14,12 +14,29 @@ namespace Pine.Core.Runtime.IntermediateVM;
 internal sealed record ExpressionTemplatePlan(
     PineValue TemplateValue,
     PineValue EncodedTerminalExpression,
-    Expression TerminalExpression,
+    InternalExpression.Expression RetainedTerminalExpression,
     int EnvironmentCount,
     IReadOnlyList<TemplateValueRecipe> IntermediateRecipes,
     TemplateValueRecipe TerminalEnvironmentRecipe,
     bool ElidesTerminalEval = false)
 {
+    public ExpressionTemplatePlan(
+        PineValue TemplateValue,
+        PineValue EncodedTerminalExpression,
+        Expression TerminalExpression,
+        int EnvironmentCount,
+        IReadOnlyList<TemplateValueRecipe> IntermediateRecipes,
+        TemplateValueRecipe TerminalEnvironmentRecipe,
+        bool ElidesTerminalEval = false)
+        : this(TemplateValue, EncodedTerminalExpression,
+            InternalExpression.ExpressionConversion.FromCanonicalCached(TerminalExpression),
+            EnvironmentCount, IntermediateRecipes, TerminalEnvironmentRecipe, ElidesTerminalEval)
+    {
+    }
+
+    public Expression TerminalExpression =>
+        InternalExpression.ExpressionConversion.ToCanonicalCached(RetainedTerminalExpression);
+
     public int RemainingEnvironmentCount => EnvironmentCount;
 
     /// <summary>
@@ -134,7 +151,7 @@ internal sealed record ExpressionTemplatePlan(
         return null;
     }
 
-    internal static Expression? ParseBounded(
+    internal static InternalExpression.Expression? ParseBounded(
         PineValue value,
         PineVMParseCache parseCache,
         RecognitionBudget budget)
@@ -142,7 +159,7 @@ internal sealed record ExpressionTemplatePlan(
         if (!parseCache.TemplateProofs.CheckValue(value, budget))
             return null;
 
-        var parsed = parseCache.ParseExpression(value).IsOkOrNull();
+        var parsed = parseCache.ParseInternalExpression(value).IsOkOrNull();
 
         if (parsed is null)
             PineVMWorkProfile.Current?.Count(PineVMWorkProfile.Metric.RecognizerTerminalParseFailures);

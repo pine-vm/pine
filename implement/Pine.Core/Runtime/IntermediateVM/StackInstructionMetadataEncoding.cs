@@ -189,7 +189,7 @@ internal static class StackInstructionMetadataEncoding
             new(
                 fields[0],
                 fields[1],
-                DecodeExpression(fields[2]),
+                InternalExpression.ExpressionConversion.FromCanonicalCached(DecodeExpression(fields[2])),
                 Int(fields[3]),
                 [.. List(fields[4]).Select(Recipe)],
                 Recipe(fields[5]),
