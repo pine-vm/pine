@@ -53,7 +53,7 @@ public static class FromCanonicalSyntax
 
         public SccLowering(IEnumerable<SccModel> models, DeclarationUnitCache cache)
         {
-            this._cache = cache;
+            _cache = cache;
             var declarations = ImmutableDictionary.CreateBuilder<DeclQualifiedName, Declaration>();
             var outward = new Dictionary<DeclQualifiedName, DeclQualifiedName>();
 

@@ -4,7 +4,6 @@ using Pine.Core.Testing;
 using Pine.Elm019;
 using System;
 using System.Collections.Generic;
-using System.Collections.Immutable;
 using System.IO;
 using System.Linq;
 using System.Text;
@@ -138,7 +137,7 @@ public partial class ElmMakeEcmascriptCoverageTests
 
                 Syntax.SyntaxAnalysis.WalkExpressionsWithScope(
                     function.Function.Declaration.Expression,
-                    ImmutableHashSet<string>.Empty,
+                    [],
                     (expression, _) =>
                     {
                         expressions.Add(expression);

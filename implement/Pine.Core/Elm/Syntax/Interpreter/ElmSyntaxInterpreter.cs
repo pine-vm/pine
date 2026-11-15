@@ -350,15 +350,15 @@ public partial class ElmSyntaxInterpreter
             DeclQualifiedName currentTopLevel,
             IReadOnlyDictionary<string, PineValueInProcess> localBindings)
         {
-            this.CurrentTopLevel = currentTopLevel;
-            this.LocalBindings = localBindings;
+            CurrentTopLevel = currentTopLevel;
+            LocalBindings = localBindings;
         }
 
         internal ApplicationContext(
             DeclQualifiedName currentTopLevel,
             LocalBindingEnvironment localBindings)
         {
-            this.CurrentTopLevel = currentTopLevel;
+            CurrentTopLevel = currentTopLevel;
             _localBindingEnvironment = localBindings;
         }
 
