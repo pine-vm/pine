@@ -17,6 +17,11 @@ Eval(External256(hash(ExpressionEncoding.EncodeExpressionAsValue(C))),
 
 Here `hash` is based on the canonical representation as specified in [pine-value-encoding-and-content-addressing.md](pine-value-encoding-and-content-addressing.md).
 Store constructor hashes as static compiler data and whitelist them on decoding.
+`StartExternalEval` emits each distinct hash once per encoder scope. Later Evals
+use an eight-byte backward reference to that external-reference entry, saving
+28 bytes per repeated constructor. Hash sharing is by all 32 content bytes,
+independent of the retained-node comparer and without allocating a key object
+per hash. Constructor programs and their hashes do not change.
 
 For canonical Elm strings, codecs can reuse
 `Pine.Core.Elm.ElmValueEncodingExpressions.StringFromAscii` and its static
@@ -56,11 +61,21 @@ limit alone cannot protect smaller OS thread stacks. The shared reader rejects
 specialized reads when `RuntimeHelpers.TryEnsureSufficientExecutionStack` fails,
 rather than allowing a process-fatal stack overflow.
 
-This is a **restricted profile**: constructor-expression entries, inline
-environments and raw scalar blobs are not referenceable. Neither emit nor accept
-references to them. Completed retained nodes remain referenceable. Ordinary Pine
+This is a **restricted profile**: constructor positions admit a direct external
+hash or a backward reference to an already-read external-reference entry.
+The shared reader tracks those entries separately from materialized retained
+nodes, passing an immutable source-backed hash slice to `EvaluateExternal` in
+both cases. The external hash is complete before its Eval's environment is
+read, so nested Evals may reuse an enclosing constructor immediately.
+Inline environments and raw scalar blobs remain unreferenceable. Constructor
+hash entries are not retained nodes and cannot substitute for a typed child.
+Completed retained nodes remain referenceable. Ordinary Pine
 decoding instead materializes every normal argument and preserves arbitrary Eval
 callbacks, including their invocation order and rejection details.
+
+Old direct-hash Evals remain readable. Re-encoding with shared hashes changes
+binary bytes and binary-derived content addresses; regenerate dependent
+persistent keys. Ordinary canonical blob/list encoding is unchanged.
 
 Dispose every scope, including on failure. Scratch reference/frame buffers may
 be pooled, but must be cleared; arrays retained by results must never be returned
@@ -74,6 +89,9 @@ up to twelve distinct reference targets inline; larger indexes rent heap arrays.
 Reuse eliminates many warmed-run allocations, not their backing storage or all
 cold/concurrent growth costs. Bound reusable dictionaries and report these costs
 separately from retained results.
+Constructor-hash lookup has its own bounded reusable dictionary with inline
+256-bit keys; its first-use/growth storage is additional scratch, not retained
+constructor-program allocation.
 
 Flattening removes temporary objects and their potential reference entries.
 Keeping an already-retained subobject can instead amortize its object and index

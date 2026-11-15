@@ -65,6 +65,8 @@ public static partial class ValueEncodingBinaryDeterministic
     {
         public int _address;
 
+        public bool _isExternalReference;
+
         public T? _value;
     }
 
@@ -349,21 +351,31 @@ public static partial class ValueEncodingBinaryDeterministic
                 Entry(index)._value = item;
         }
 
-        private TNode Reference<TNode>(int address) where TNode : class
+        private int ReferenceIndex(int address)
         {
             var addressBase = BytesRead;
             var relative = Int32("relative address of reference");
             var target = (long)addressBase + relative;
 
-            if (target >= 0 && target <= int.MaxValue)
+            if (target >= 0 && target < address)
             {
                 var index = Find((int)target);
 
-                if (index >= 0 && Entry(index)._value is TNode value)
-                    return value;
+                if (index >= 0)
+                    return index;
             }
 
             throw new DecodeException(new DecodeError.InvalidInternalReference(address, target));
+        }
+
+        private TNode Reference<TNode>(int address) where TNode : class
+        {
+            var index = ReferenceIndex(address);
+
+            if (Entry(index)._value is TNode value)
+                return value;
+
+            throw new DecodeException(new DecodeError.InvalidInternalReference(address, Entry(index)._address - 1));
         }
 
         private int Length(int address, int tag, string expected)
@@ -431,6 +443,36 @@ public static partial class ValueEncodingBinaryDeterministic
             return reference;
         }
 
+        private ReadOnlyMemory<byte> ReadConstructorReference()
+        {
+            var address = BytesRead;
+            var tag = Int32("external expression tag");
+
+            if (tag is TagReferenceExternal256)
+            {
+                var reference = ExternalReference();
+                var index = Find(address);
+
+                if (index >= 0)
+                    Entry(index)._isExternalReference = true;
+
+                return reference;
+            }
+
+            if (tag is TagReferenceInteral)
+            {
+                var index = ReferenceIndex(address);
+                var entry = Entry(index);
+
+                if (entry._isExternalReference)
+                    return _source.Slice(entry._address - 1 + TagSize, ReferenceExternal256Length);
+
+                throw new DecodeException(new DecodeError.InvalidInternalReference(address, entry._address - 1));
+            }
+
+            throw Invalid("Expected an external constructor expression or a reference to one");
+        }
+
         private struct Pending<TNode> where TNode : class
         {
             public int _referenceIndex;
@@ -491,6 +533,9 @@ public static partial class ValueEncodingBinaryDeterministic
                             throw new DecodeException(new DecodeError.ExternalReferenceNotFound(address, reference));
 
                         Complete(index, completed);
+
+                        if (index >= 0)
+                            Entry(index)._isExternalReference = true;
                     }
                     else if (tag is TagList)
                     {
@@ -520,10 +565,7 @@ public static partial class ValueEncodingBinaryDeterministic
 
                         if (adapter.HasExternalEvaluation)
                         {
-                            if (Int32("external expression tag") is not TagReferenceExternal256)
-                                throw Invalid("Expected an external constructor expression");
-
-                            var reference = ExternalReference();
+                            var reference = ReadConstructorReference();
                             completed = adapter.EvaluateExternal(ref this, reference);
                             Complete(index, completed);
                         }
@@ -650,6 +692,16 @@ public static partial class ValueEncodingBinaryDeterministic
         }
     }
 
+    private readonly record struct ExternalReferenceKey(ulong First, ulong Second, ulong Third, ulong Fourth)
+    {
+        public ExternalReferenceKey(ReadOnlySpan<byte> bytes) : this(
+            BinaryPrimitives.ReadUInt64BigEndian(bytes),
+            BinaryPrimitives.ReadUInt64BigEndian(bytes[8..]),
+            BinaryPrimitives.ReadUInt64BigEndian(bytes[16..]),
+            BinaryPrimitives.ReadUInt64BigEndian(bytes[24..]))
+        { }
+    }
+
     /// <summary>
     /// Shared streaming entry writer. No node descriptors or canonical values are required.
     /// Optional bounded dictionary reuse is intended for short-lived syntax sessions.
@@ -667,6 +719,8 @@ public static partial class ValueEncodingBinaryDeterministic
         private Dictionary<TItem, long>? _nodes;
 
         private Dictionary<TItem, long>? _blobs;
+
+        private Dictionary<ExternalReferenceKey, long>? _externalReferences;
 
         private bool _disposed;
 
@@ -709,18 +763,23 @@ public static partial class ValueEncodingBinaryDeterministic
 
             if (exists)
             {
-                var relative = address - (BytesWritten + TagSize);
-
-                if (relative < int.MinValue)
-                    throw new InvalidOperationException("Relative address exceeds the range of a 32-bit integer: " + relative);
-
-                Int32(TagReferenceInteral);
-                Int32((int)relative);
+                WriteReference(address);
                 return true;
             }
 
             address = BytesWritten;
             return false;
+        }
+
+        private void WriteReference(long address)
+        {
+            var relative = address - (BytesWritten + TagSize);
+
+            if (relative < int.MinValue)
+                throw new InvalidOperationException("Relative address exceeds the range of a 32-bit integer: " + relative);
+
+            Int32(TagReferenceInteral);
+            Int32((int)relative);
         }
 
         /// <summary>Writes an earlier-node reference, or records the start of the next new node.</summary>
@@ -738,15 +797,33 @@ public static partial class ValueEncodingBinaryDeterministic
             Int32(count);
         }
 
-        /// <summary>Writes an Eval, external expression hash, and inline environment header.</summary>
+        /// <summary>Writes an Eval, sharing each external expression hash by backward reference within the scope.</summary>
         public void StartExternalEval(ReadOnlySpan<byte> reference, int argumentCount)
         {
             if (reference.Length is not ReferenceExternal256Length)
                 throw new ArgumentException("An external reference must contain exactly 32 bytes.", nameof(reference));
 
+            ArgumentOutOfRangeException.ThrowIfNegative(argumentCount);
+            EnsureActive();
+
+            _externalReferences ??= _reuseReferences ? DictionaryPool<ExternalReferenceKey>.Rent(null) : [];
+
             Int32(TagEval);
-            Int32(TagReferenceExternal256);
-            Bytes(reference);
+
+            ref var address =
+                ref CollectionsMarshal.GetValueRefOrAddDefault(
+                _externalReferences, new(reference), out var exists);
+
+            if (exists)
+                WriteReference(address);
+
+            else
+            {
+                address = BytesWritten;
+                Int32(TagReferenceExternal256);
+                Bytes(reference);
+            }
+
             StartList(argumentCount);
         }
 
@@ -869,10 +946,14 @@ public static partial class ValueEncodingBinaryDeterministic
 
                 if (_blobs is { } blobs)
                     DictionaryPool<TItem>.Return(blobs);
+
+                if (_externalReferences is { } externalReferences)
+                    DictionaryPool<ExternalReferenceKey>.Return(externalReferences);
             }
 
             _nodes = null;
             _blobs = null;
+            _externalReferences = null;
             _disposed = true;
         }
     }

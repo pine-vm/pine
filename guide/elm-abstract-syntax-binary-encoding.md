@@ -61,10 +61,14 @@ a multiple of four. A list is tag `3`, item count and children. An internal
 reference is tag `4` followed by an Int32 offset relative to the position after
 its tag; the target must be the start of a completed retained entry.
 
-Each syntax constructor is tag `6` (Eval), tag `5` (external expression), its
-32-byte Pine expression hash, then an inline list environment. Constructor hashes
+Each syntax constructor is tag `6` (Eval), an expression reference, then an
+inline list environment. The first occurrence of a constructor hash is tag `5`
+(external expression) and its 32-byte Pine hash; later occurrences use an
+eight-byte backward reference to that entry, saving 28 bytes each. Constructor hashes
 are static compiler data; there is no AST version ID. The previous `EAS` formats
 are rejected. Regenerate stored syntax and dependent content addresses.
+Earlier direct-hash Evals remain readable, but shared-hash re-encoding changes
+binary hashes and dependent declaration/SCC/prepared-cache content addresses.
 
 `ElmSyntaxAbstractBinary.Constructors.cs` defines the canonical Pine expressions.
 They produce the Elm model in `elm-in-elm/pine-elm-syntax/src/ElmSyntax/Abstract`,
@@ -128,8 +132,12 @@ qualified names, expressions and annotations can be reused across session roots.
 Structural deduplication and fixed field order make bytes independent of prior
 heap sharing.
 
-Constructor expressions, inline environments and raw scalar fields are deliberately
-not referenceable in the specialized profile. References to them, unknown hashes,
+Constructor hash entries may be referenced in later Eval constructor positions,
+including inside the first Eval's environment. The specialized shared reader
+passes the same source-backed hash slice to the adapter without materializing
+constructor expression objects. Those entries cannot substitute for retained
+syntax children. Inline environments and raw scalar fields remain deliberately
+unreferenceable. Invalid references, unknown hashes,
 wrong retained types, invalid arities/counts/scalars and nesting beyond 512 reader
 levels fail with `InvalidDataException`. Available execution stack is checked as
 well, so smaller thread stacks can reject nesting below that limit safely.

@@ -1642,6 +1642,312 @@ public class ValueEncodingBinaryDeterministicTests
         }
     }
 
+    [Fact]
+    public void Constructor_hashes_are_shared_by_content_and_both_decoder_paths_preserve_evaluation()
+    {
+        var firstHash = ExternalReferenceBytes(1);
+        var secondHash = ExternalReferenceBytes(2);
+        using var stream = new MemoryStream();
+
+        using (var writer = new ValueEncodingBinaryDeterministic.TreeEncoder<object>(stream.Write))
+        {
+            writer.StartList(3);
+            writer.StartExternalEval(firstHash, 1);
+            writer.Integer(1);
+            writer.StartExternalEval(firstHash.ToArray(), 1);
+            writer.Integer(2);
+            writer.StartExternalEval(secondHash, 1);
+            writer.Integer(3);
+        }
+
+        var bytes = stream.ToArray();
+
+        bytes.Should().Equal(
+            Concat(
+                Int32Sequence(3, 3, 6),
+                EncodeExternalReference(firstHash),
+                Int32Sequence(3, 1, 1, 2),
+                [4, 1, 0, 0],
+                Int32Sequence(6, 4, -64, 3, 1, 1, 2),
+                [4, 2, 0, 0],
+                Int32Sequence(6),
+                EncodeExternalReference(secondHash),
+                Int32Sequence(3, 1, 1, 2),
+                [4, 3, 0, 0]));
+
+        var resolved = new List<byte[]>();
+        var evaluated = new List<PineValue>();
+
+        var generic =
+            DecodeRootExpectingOk(
+                bytes,
+                resolveExternalReference:
+                hash =>
+                {
+                    resolved.Add(hash.ToArray());
+                    return PineValue.Blob(hash);
+                },
+                evaluate:
+                (expression, environment) =>
+                {
+                    evaluated.Add(expression);
+                    return ((PineValue.ListValue)environment).Items.Span[0];
+                });
+
+        generic.Should().Be(
+            PineValue.List(
+                IntegerEncoding.EncodeSignedInteger(1),
+                IntegerEncoding.EncodeSignedInteger(2),
+                IntegerEncoding.EncodeSignedInteger(3)));
+
+        resolved.Should().HaveCount(2);
+        resolved[0].Should().Equal(firstHash);
+        resolved[1].Should().Equal(secondHash);
+        evaluated.Should().HaveCount(3);
+        evaluated[0].Should().BeSameAs(evaluated[1]);
+
+        var state = new ExternalDecodeState();
+        using var reader = new ValueEncodingBinaryDeterministic.TreeDecoder<PineValue>(bytes.AsMemory(8));
+        var adapter = new ExternalBlobDecoding(state);
+
+        for (var index = 1; index <= 3; index++)
+        {
+            reader.Read<PineValue, ExternalBlobDecoding>(adapter).Should().Be(
+                IntegerEncoding.EncodeSignedInteger(index));
+        }
+
+        reader.BytesRead.Should().Be(bytes.Length - 8);
+        state.Hashes.Should().HaveCount(3);
+        state.Hashes[0].Should().Equal(firstHash);
+        state.Hashes[1].Should().Equal(firstHash);
+        state.Hashes[2].Should().Equal(secondHash);
+    }
+
+    [Fact]
+    public void Specialized_constructor_references_share_across_nested_calls_and_rehashed_target_indexes()
+    {
+        const int count = 40;
+        var hashes = Enumerable.Range(0, count).Select(index => ExternalReferenceBytes((byte)index)).ToArray();
+        using var stream = new MemoryStream();
+
+        using (var writer = new ValueEncodingBinaryDeterministic.TreeEncoder<object>(stream.Write))
+        {
+            for (var repetition = 0; repetition < 2; repetition++)
+            {
+                for (var index = 0; index < count; index++)
+                {
+                    writer.StartExternalEval(hashes[index], 1);
+                    writer.Integer(index);
+                }
+            }
+        }
+
+        stream.Length.Should().Be(count * (60 + 32));
+        var state = new ExternalDecodeState();
+        using var reader = new ValueEncodingBinaryDeterministic.TreeDecoder<PineValue>(stream.ToArray());
+
+        for (var repetition = 0; repetition < 2; repetition++)
+        {
+            for (var index = 0; index < count; index++)
+            {
+                reader.Read<PineValue, ExternalBlobDecoding>(new(state)).Should().Be(
+                    IntegerEncoding.EncodeSignedInteger(index));
+            }
+        }
+
+        state.Hashes.Should().HaveCount(count * 2);
+
+        for (var index = 0; index < count; index++)
+            state.Hashes[count + index].Should().Equal(hashes[index]);
+
+        // The outer constructor hash is complete even while its Eval's result is not.
+        var nested =
+            Concat(
+                Int32Sequence(6),
+                EncodeExternalReference(hashes[0]),
+                Int32Sequence(3, 1, 6, 4, -52, 3, 1, 1, 2),
+                [
+                4,
+                7,
+                0,
+                0
+                ]);
+
+        var nestedState = new ExternalDecodeState();
+        using var nestedReader = new ValueEncodingBinaryDeterministic.TreeDecoder<PineValue>(nested);
+
+        nestedReader.Read<PineValue, NestedExternalDecoding>(new(nestedState)).Should().Be(
+            IntegerEncoding.EncodeSignedInteger(7));
+
+        nestedState.Hashes.Should().HaveCount(2);
+        nestedState.Hashes[0].Should().Equal(hashes[0]);
+        nestedState.Hashes[1].Should().Equal(hashes[0]);
+    }
+
+    [Fact]
+    public void Specialized_eval_can_reference_an_external_hash_previously_read_by_the_ordinary_adapter()
+    {
+        var hash = ExternalReferenceBytes(5);
+        var bytes = Concat(EncodeExternalReference(hash), Int32Sequence(6, 4, -44, 3, 1, 1, 2), [4, 9, 0, 0]);
+        var resolves = 0;
+        using var reader = new ValueEncodingBinaryDeterministic.TreeDecoder<PineValue>(bytes);
+
+        reader.Read<PineValue, ValueEncodingBinaryDeterministic.PineDecoding<PineValue>>(
+            new(
+                resolve:
+                _ =>
+                {
+                    resolves++;
+                    return PineValue.EmptyList;
+                })).Should().BeSameAs(PineValue.EmptyList);
+
+        var state = new ExternalDecodeState();
+        reader.Read<PineValue, ExternalBlobDecoding>(new(state)).Should().Be(IntegerEncoding.EncodeSignedInteger(9));
+        resolves.Should().Be(1);
+        state.Hashes.Should().HaveCount(1);
+        state.Hashes[0].Should().Equal(hash);
+    }
+
+    [Fact]
+    public void Constructor_hash_dictionary_reuse_resets_scope_and_does_not_alias_mutable_hash_input()
+    {
+        var firstHash = ExternalReferenceBytes(3);
+        var secondHash = ExternalReferenceBytes(4);
+
+        byte[] Encode()
+        {
+            var mutableHash = firstHash.ToArray();
+            using var stream = new MemoryStream();
+
+            using var writer =
+                new ValueEncodingBinaryDeterministic.TreeEncoder<object>(stream.Write, reuseReferences: true);
+
+            writer.StartExternalEval(mutableHash, 0);
+            secondHash.CopyTo(mutableHash, 0);
+            writer.StartExternalEval(mutableHash, 0);
+            writer.StartExternalEval(firstHash, 0);
+            return stream.ToArray();
+        }
+
+        var first = Encode();
+        Encode().Should().Equal(first);
+
+        first.Should().Equal(
+            Concat(
+                Int32Sequence(6),
+                EncodeExternalReference(firstHash),
+                Int32Sequence(3, 0),
+                Int32Sequence(6),
+                EncodeExternalReference(secondHash),
+                Int32Sequence(3, 0),
+                Int32Sequence(6, 4, -100, 3, 0)));
+    }
+
+    [Theory]
+    [InlineData(0)]
+    [InlineData(8)]
+    [InlineData(40)]
+    [InlineData(48)]
+    [InlineData(64)]
+    [InlineData(76)]
+    public void Specialized_constructor_references_reject_non_hash_incomplete_and_forward_targets(int target)
+    {
+        var first =
+            Concat(
+                Int32Sequence(6),
+                EncodeExternalReference(ExternalReferenceBytes(1)),
+                Int32Sequence(3, 1, 1, 2),
+                [4, 1, 0, 0]);
+
+        var bytes = Concat(first, Int32Sequence(6, 4, target - 68, 3, 1, 1, 2), [4, 2, 0, 0]);
+        var state = new ExternalDecodeState();
+
+        Action decode =
+            () =>
+            {
+                using var reader = new ValueEncodingBinaryDeterministic.TreeDecoder<PineValue>(bytes);
+                reader.Read<PineValue, ExternalBlobDecoding>(new(state));
+                reader.Read<PineValue, ExternalBlobDecoding>(new(state));
+            };
+
+        decode.Should().Throw<ValueEncodingBinaryDeterministic.DecodeException>()
+            .Which.Error.Should().Be(new DecodeError.InvalidInternalReference(64, target));
+
+        state.Hashes.Should().HaveCount(1);
+    }
+
+    private sealed class ExternalDecodeState
+    {
+        public List<byte[]> Hashes { get; } = [];
+    }
+
+    private readonly struct ExternalBlobDecoding(ExternalDecodeState state) : ValueEncodingBinaryDeterministic.IDecoding<PineValue, PineValue>
+    {
+        public PineValue Blob(ReadOnlyMemory<byte> bytes) =>
+            throw new InvalidOperationException("Unexpected generic blob decoding.");
+
+        public PineValue List(PineValue[] items) =>
+            throw new InvalidOperationException("Unexpected generic list decoding.");
+
+        public PineValue? ResolveExternal(ReadOnlyMemory<byte> reference) =>
+            throw new InvalidOperationException("Constructor was materialized.");
+
+        public ValueResult<string, PineValue> Evaluate(PineValue expression, PineValue environment) =>
+            throw new InvalidOperationException("Generic Eval was used.");
+
+        public DecodeError Rejected(long offset, PineValue expression, PineValue environment, string reason) =>
+            throw new InvalidOperationException(reason);
+
+        public bool HasExternalEvaluation => true;
+
+        public int MaximumDepth => 512;
+
+        public PineValue EvaluateExternal(
+            ref ValueEncodingBinaryDeterministic.TreeDecoder<PineValue> decoder,
+            ReadOnlyMemory<byte> reference)
+        {
+            state.Hashes.Add(reference.ToArray());
+
+            if (decoder.ReadInlineListLength() != 1)
+                throw decoder.Invalid("Expected one field");
+
+            return PineValue.Blob(decoder.ReadInlineBlob());
+        }
+    }
+
+    private readonly struct NestedExternalDecoding(ExternalDecodeState state) : ValueEncodingBinaryDeterministic.IDecoding<PineValue, PineValue>
+    {
+        public PineValue Blob(ReadOnlyMemory<byte> bytes) => PineValue.Blob(bytes);
+
+        public PineValue List(PineValue[] items) =>
+            throw new InvalidOperationException("Unexpected generic list decoding.");
+
+        public PineValue? ResolveExternal(ReadOnlyMemory<byte> reference) =>
+            throw new InvalidOperationException("Constructor was materialized.");
+
+        public ValueResult<string, PineValue> Evaluate(PineValue expression, PineValue environment) =>
+            throw new InvalidOperationException("Generic Eval was used.");
+
+        public DecodeError Rejected(long offset, PineValue expression, PineValue environment, string reason) =>
+            throw new InvalidOperationException(reason);
+
+        public bool HasExternalEvaluation => true;
+
+        public int MaximumDepth => 512;
+
+        public PineValue EvaluateExternal(
+            ref ValueEncodingBinaryDeterministic.TreeDecoder<PineValue> decoder,
+            ReadOnlyMemory<byte> reference)
+        {
+            state.Hashes.Add(reference.ToArray());
+
+            if (decoder.ReadInlineListLength() != 1)
+                throw decoder.Invalid("Expected one field");
+
+            return decoder.Read<PineValue, NestedExternalDecoding>(this);
+        }
+    }
+
     private static byte[] EncodeToBytes(PineValue value)
     {
         using var stream = new MemoryStream();
