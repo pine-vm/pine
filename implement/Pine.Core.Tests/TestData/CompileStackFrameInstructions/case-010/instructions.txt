@@ -5,6 +5,6 @@ Jump_Const (4)
 Local_Get ([ 0, 0 ])
 Skip_Const (13)
 Eval_Binary
-Build_List_With_Prefix (1, 1)
-  Blob [2] (int 47)
+Local_Set ([ 2 ]), Pop(1)
+Local_Get ([ 2 ])
 Return

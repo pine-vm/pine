@@ -51,7 +51,7 @@ public abstract record PineControlFlowTerminator
     /// <summary>
     /// Returns the value at the top of the evaluation stack.
     /// </summary>
-    public sealed record Return : PineControlFlowTerminator
+    public sealed record Return(int ValueCount = 1) : PineControlFlowTerminator
     {
         /// <summary>A shared, stateless return terminator.</summary>
         public static readonly Return Instance = new();
@@ -109,6 +109,18 @@ public abstract record PineControlFlowTerminator
         StackInstruction Instruction) : PineControlFlowTerminator;
 
     /// <summary>
+    /// Consumes a key and produces a mapped value only on the fall-through edge.
+    /// A missing key continues in <paramref name="Fallback"/> without producing a value.
+    /// </summary>
+    public sealed record ValueMap(
+        ImmutableDictionary<PineValue, PineValue> Map,
+        PineBlockId FallThrough,
+        PineBlockId Fallback,
+        ImmutableArray<PineVirtualValueId> Arguments,
+        PineVirtualValueId Input,
+        PineVirtualValueId Result) : PineControlFlowTerminator;
+
+    /// <summary>
     /// Invokes another frame and returns its result without a continuation in the current frame.
     /// </summary>
     public sealed record TailInvoke(
@@ -140,7 +152,7 @@ public sealed partial record PineControlFlowGraph(
     /// Builds a control-flow graph from structured control flow emitted by expression compilation.
     /// The graph returns the value remaining on the evaluation stack at the end of <paramref name="fragment"/>.
     /// </summary>
-    public static PineControlFlowGraph FromFragment(PineControlFlowFragment fragment)
+    public static PineControlFlowGraph FromFragment(PineControlFlowFragment fragment, int returnValueCount = 1)
     {
         var builder = new GraphBuilder();
 
@@ -148,8 +160,14 @@ public sealed partial record PineControlFlowGraph(
 
         if (builder.Emit(fragment, entry) is { } end)
         {
-            GraphBuilder.Pop(end, 1);
-            end.Terminator = PineControlFlowTerminator.Return.Instance;
+            GraphBuilder.Pop(end, returnValueCount);
+
+            end.Terminator =
+                returnValueCount == 1
+                ?
+                PineControlFlowTerminator.Return.Instance
+                :
+                new PineControlFlowTerminator.Return(returnValueCount);
         }
 
         var graph =
@@ -264,7 +282,7 @@ public sealed partial record PineControlFlowGraph(
                                 BranchArguments: arguments,
                                 Literal: conditional.Literal);
 
-                        return Join(arguments.Length + 1, [fallThroughEnd, branchEnd]);
+                        return Join(arguments.Length + conditional.ResultCount, [fallThroughEnd, branchEnd]);
                     }
 
                 case PineControlFlowNode.Switch switchNode:
@@ -306,7 +324,28 @@ public sealed partial record PineControlFlowGraph(
                                 Arguments: arguments,
                                 SkipCountMultiplier: switchNode.SkipCountMultiplier);
 
-                        return Join(arguments.Length + 1, ends);
+                        return Join(arguments.Length + switchNode.ResultCount, ends);
+                    }
+
+                case PineControlFlowNode.ValueMap valueMap:
+                    {
+                        var input = Pop(current, 1)[0];
+                        var arguments = current.Stack.ToImmutableArray();
+                        var result = NewValue();
+                        var success = StartBlock(arguments.Length + 1);
+                        var fallbackStart = StartBlock(arguments.Length);
+                        var fallbackEnd = Emit(valueMap.Fallback, fallbackStart);
+
+                        current.Terminator =
+                            new PineControlFlowTerminator.ValueMap(
+                                valueMap.Map,
+                                success.Id,
+                                fallbackStart.Id,
+                                arguments,
+                                input,
+                                result);
+
+                        return Join(arguments.Length + 1, [success, fallbackEnd]);
                     }
 
                 case PineControlFlowNode.JumpToEntry:
@@ -599,7 +638,7 @@ public sealed partial record PineControlFlowGraph(
                 (blocks?[target.Value] ?? Blocks[target.Value]) is
                 {
                     Operations.IsEmpty: true,
-                    Terminator: PineControlFlowTerminator.Return
+                    Terminator: PineControlFlowTerminator.Return targetReturn
                 })
             {
                 blocks ??= Blocks.ToBuilder();
@@ -607,7 +646,7 @@ public sealed partial record PineControlFlowGraph(
                 blocks[blockIndex] =
                     block with
                     {
-                        Terminator = PineControlFlowTerminator.Return.Instance
+                        Terminator = targetReturn
                     };
             }
         }
@@ -999,8 +1038,17 @@ public sealed partial record PineControlFlowGraph(
             PineControlFlowTerminator.Invoke invoke =>
             invoke.Continuation,
 
+            PineControlFlowTerminator.ValueMap valueMap =>
+            valueMap.FallThrough,
+
+            PineControlFlowTerminator.Return or
+            PineControlFlowTerminator.Jump or
+            PineControlFlowTerminator.TailInvoke =>
+            null,
+
             _ =>
-            null
+            throw new NotImplementedException(
+                "RequiredFallthroughTarget does not handle terminator variant: " + terminator.GetType().Name)
         };
 
     private static PineControlFlowTerminator RedirectTargets(
@@ -1034,6 +1082,13 @@ public sealed partial record PineControlFlowGraph(
 
             PineControlFlowTerminator.Invoke invoke =>
             invoke with { Continuation = redirect(invoke.Continuation) },
+
+            PineControlFlowTerminator.ValueMap valueMap =>
+            valueMap with
+            {
+                FallThrough = redirect(valueMap.FallThrough),
+                Fallback = redirect(valueMap.Fallback)
+            },
 
             PineControlFlowTerminator.TailInvoke tailInvoke =>
             tailInvoke,
@@ -1208,8 +1263,14 @@ public sealed partial record PineControlFlowGraph(
 
             switch (block.Terminator)
             {
-                case PineControlFlowTerminator.Return:
-                    result.Add(StackInstruction.Return);
+                case PineControlFlowTerminator.Return returned:
+                    result.Add(
+                        returned.ValueCount == 1
+                        ?
+                        StackInstruction.Return
+                        :
+                        StackInstruction.Return with { TakeCount = returned.ValueCount });
+
                     break;
 
                 case PineControlFlowTerminator.Jump jump:
@@ -1277,6 +1338,20 @@ public sealed partial record PineControlFlowGraph(
                     {
                         throw new InvalidOperationException(
                             $"Switch fall-through from block {block.Id.Value} is not laid out next.");
+                    }
+
+                    break;
+
+                case PineControlFlowTerminator.ValueMap valueMap:
+                    result.Add(
+                        StackInstruction.Select_Value_Const(
+                            valueMap.Map,
+                            jumpOffset: firstInstructionIndexByBlock[valueMap.Fallback] - result.Count));
+
+                    if (valueMap.FallThrough.Value != block.Id.Value + 1)
+                    {
+                        throw new InvalidOperationException(
+                            $"Value map fall-through from block {block.Id.Value} is not laid out next.");
                     }
 
                     break;
@@ -1361,6 +1436,19 @@ public sealed partial record PineControlFlowGraph(
 
                         break;
 
+                    case PineControlFlowTerminator.ValueMap valueMap:
+                        if (_index > 1)
+                            return false;
+
+                        Current =
+                            _index == 0
+                            ?
+                            (valueMap.FallThrough, [.. valueMap.Arguments, valueMap.Result])
+                            :
+                            (valueMap.Fallback, valueMap.Arguments);
+
+                        break;
+
                     case PineControlFlowTerminator.Invoke invoke:
                         if (_index > 0)
                             return false;
@@ -1404,6 +1492,7 @@ public sealed partial record PineControlFlowGraph(
             PineControlFlowTerminator.Jump jump => jump.IsFallThrough ? 0 : 1,
             PineControlFlowTerminator.ConditionalJump => 1,
             PineControlFlowTerminator.Switch => 1,
+            PineControlFlowTerminator.ValueMap => 1,
             PineControlFlowTerminator.Invoke => 1,
             PineControlFlowTerminator.TailInvoke => 2,
 

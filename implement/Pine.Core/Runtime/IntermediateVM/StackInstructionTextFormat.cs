@@ -142,6 +142,9 @@ public static class StackInstructionTextFormat
                         "TrackEnvConstraint: " + Value(StackInstructionMetadataEncoding.EncodeConstraint(constraint)));
                 }
 
+                if (!ReferenceEquals(current.ReturnLayout, ReturnValueLayout.Canonical))
+                    fields.Add("ReturnLayout: " + Value(current.ReturnLayout.Encoding));
+
                 sections.Add(
                     "frame " + Number(index) + " (" + string.Join(", ", fields) + ")\n" +
                     StackInstructionTraceRenderer.RenderSequence(current.Instructions, Instruction, Value));
@@ -218,6 +221,9 @@ public static class StackInstructionTextFormat
                         Value(StackInstructionMetadataEncoding.EncodeConstraint(invocationConstraint)));
                 }
 
+                if (!ReferenceEquals(invocation.ReturnLayout, ReturnValueLayout.Canonical))
+                    fields.Add("InvocationReturnLayout: " + Value(invocation.ReturnLayout.Encoding));
+
                 if (invocation.LinkedStackFrameInstructions is { } linked)
                     fields.Add("LinkedFrame: " + Number(FrameId(linked)));
             }
@@ -227,6 +233,9 @@ public static class StackInstructionTextFormat
 
             if (instruction.TemplateProducer)
                 fields.Add("TemplateProducer: true");
+
+            if (instruction.ValueMap is { } valueMap)
+                fields.Add("ValueMap: " + Value(StackInstructionMetadataEncoding.EncodeValueMap(valueMap)));
 
             if (instruction.SwitchJumpTable is { } table)
             {
@@ -351,11 +360,24 @@ public static class StackInstructionTextFormat
                         :
                         null;
 
+                    var returnLayoutValue = OptionalValue(fields, "ReturnLayout");
+
+                    var returnLayout =
+                        returnLayoutValue is null
+                        ?
+                        ReturnValueLayout.Canonical
+                        :
+                        ReturnValueLayout.Decode(returnLayoutValue);
+
                     NoFields(fields);
                     ++_line;
                     var instructions = Instructions();
 
-                    var frame = new StackFrameInstructions(parameters, instructions, constraint, locals, stack);
+                    var frame =
+                        new StackFrameInstructions(parameters, instructions, constraint, locals, stack)
+                        {
+                            ReturnLayout = returnLayout
+                        };
 
                     if (id < 0 || !_frames.TryAdd(id, frame))
                         throw Error("Invalid or duplicate frame identifier.");
@@ -463,6 +485,8 @@ public static class StackInstructionTextFormat
 
                 if (fields.Remove("InvocationExpression", out var expressionText))
                 {
+                    var invocationReturnLayout = OptionalValue(fields, "InvocationReturnLayout");
+
                     invocation =
                         new(
                             StackInstructionMetadataEncoding.DecodeExpression(Value(expressionText)),
@@ -471,6 +495,12 @@ public static class StackInstructionTextFormat
                                 StackInstructionMetadataEncoding.DecodePaths(
                                     Value(Required(fields, "InvocationInterface")))))
                         {
+                            ReturnLayout =
+                            invocationReturnLayout is null
+                            ?
+                            ReturnValueLayout.Canonical
+                            :
+                            ReturnValueLayout.Decode(invocationReturnLayout),
                             EnvironmentConstraint =
                             fields.Remove("InvocationConstraint", out var invocationConstraint)
                             ?
@@ -502,6 +532,22 @@ public static class StackInstructionTextFormat
                     ParseSliceCases(sliceText)
                     :
                     null;
+
+                var mapValue = OptionalValue(fields, "ValueMap");
+                ImmutableDictionary<PineValue, PineValue>? valueMap = null;
+
+                if (mapValue is not null)
+                {
+                    var map = ImmutableDictionary.CreateBuilder<PineValue, PineValue>();
+
+                    foreach (var (key, value) in StackInstructionMetadataEncoding.DecodeValueMap(mapValue))
+                    {
+                        if (!map.TryAdd(key, value))
+                            throw Error("Duplicate value map key.");
+                    }
+
+                    valueMap = map.ToImmutable();
+                }
 
                 NoFields(fields);
                 ++_line;
@@ -537,7 +583,8 @@ public static class StackInstructionTextFormat
                         JumpOffset: jump,
                         OptimizedInvocation: invocation,
                         SwitchJumpTable: table?.ToImmutable(),
-                        SliceSwitchCases: slices?.ToImmutable() ?? default)
+                        SliceSwitchCases: slices?.ToImmutable() ?? default,
+                        ValueMap: valueMap)
                     {
                         TemplatePlan =
                         planValue is null ? null : StackInstructionMetadataEncoding.DecodePlan(planValue),

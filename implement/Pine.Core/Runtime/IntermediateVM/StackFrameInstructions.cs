@@ -19,11 +19,15 @@ public record StackFrameInstructions
     /// <summary>Optional environment constraint associated with this instruction variant.</summary>
     public PineValueClass? TrackEnvConstraint { get; init; }
 
+    /// <summary>The canonical reconstruction recipe for the frame's return slots.</summary>
+    public ReturnValueLayout ReturnLayout { get; init; } = ReturnValueLayout.Canonical;
+
     /// <summary>Constructs a frame and computes its resource requirements.</summary>
     public StackFrameInstructions(
         StaticFunctionInterface Parameters,
         IReadOnlyList<StackInstruction> Instructions,
-        PineValueClass? TrackEnvConstraint = null)
+        PineValueClass? TrackEnvConstraint = null,
+        ReturnValueLayout? returnLayout = null)
         : this(
             Parameters,
             Instructions,
@@ -31,6 +35,7 @@ public record StackFrameInstructions
             ComputeLocalsCount(Instructions, Parameters),
             ComputeMaxStackUsage(Instructions))
     {
+        ReturnLayout = returnLayout ?? ReturnValueLayout.Canonical;
     }
 
     internal StackFrameInstructions(
@@ -75,7 +80,7 @@ public record StackFrameInstructions
     public static int ComputeMaxStackUsage(
         IReadOnlyList<StackInstruction> instructions)
     {
-        IEnumerable<int> GetSuccessors(
+        IEnumerable<(int Index, int? PushCount)> GetSuccessors(
             int instructionIndex)
         {
             var inst = instructions[instructionIndex];
@@ -87,10 +92,10 @@ public record StackFrameInstructions
 
                 case StackInstructionKind.Jump_Const:
 
-                    yield return
+                    yield return (
                         instructionIndex +
                         (inst.JumpOffset ?? throw new InvalidOperationException(
-                            $"Jump without offset at {instructionIndex}."));
+                            $"Jump without offset at {instructionIndex}.")), null);
 
                     break;
 
@@ -98,23 +103,32 @@ public record StackFrameInstructions
                 case StackInstructionKind.Jump_If_Length_Equal_Const:
 
                     // fall-through
-                    yield return instructionIndex + 1;
+                    yield return (instructionIndex + 1, null);
 
-                    yield return
+                    yield return (
                         instructionIndex +
                         (inst.JumpOffset ?? throw new InvalidOperationException(
-                            $"Jump without offset at {instructionIndex}."));
+                            $"Jump without offset at {instructionIndex}.")), null);
+
+                    break;
+
+                case StackInstructionKind.Select_Value_Const:
+                    if (inst.Literal is not null || inst.ValueMap is not { Count: 0 })
+                        yield return (instructionIndex + 1, 1);
+
+                    if (inst.JumpOffset is { } fallbackOffset)
+                        yield return (instructionIndex + fallbackOffset, 0);
 
                     break;
 
                 case StackInstructionKind.Switch_Jump_If_Equal_Const:
                 case StackInstructionKind.Switch_Jump_If_Slice_Skip_Var_Equal_Const:
 
-                    yield return instructionIndex + 1;
+                    yield return (instructionIndex + 1, null);
 
                     foreach (var switchCase in StackInstruction.EnumerateSwitchCases(inst))
                     {
-                        yield return instructionIndex + switchCase.Value;
+                        yield return (instructionIndex + switchCase.Value, null);
                     }
 
                     break;
@@ -122,7 +136,7 @@ public record StackFrameInstructions
                 default:
 
                     // ordinary instruction
-                    yield return instructionIndex + 1;
+                    yield return (instructionIndex + 1, null);
                     break;
             }
         }
@@ -154,27 +168,30 @@ public record StackFrameInstructions
 
             var outDepth = inDepth + delta;
 
-            if (outDepth < 0)
+            if (inDepth < instructionDetails.PopCount)
                 throw new InvalidOperationException($"Stack under-flow at instruction {instructionIndex}.");
 
             maxDepth = Math.Max(maxDepth, outDepth);
 
-            foreach (var successorIndex in GetSuccessors(instructionIndex))
+            foreach (var (successorIndex, pushCount) in GetSuccessors(instructionIndex))
             {
                 if (successorIndex >= instructions.Count)
                     continue;
 
+                var successorDepth =
+                    pushCount is { } pushes ? inDepth - instructionDetails.PopCount + pushes : outDepth;
+
                 if (stackDepthIn[successorIndex] is null)
                 {
-                    stackDepthIn[successorIndex] = outDepth;
+                    stackDepthIn[successorIndex] = successorDepth;
                     worklist.Push(successorIndex);
                 }
-                else if (stackDepthIn[successorIndex] != outDepth)
+                else if (stackDepthIn[successorIndex] != successorDepth)
                 {
                     // Byte-code would be ill-formed; surface a clear error.
                     throw new InvalidOperationException(
                         $"Inconsistent stack depth at {successorIndex} " +
-                        $"({stackDepthIn[successorIndex]} vs {outDepth}).");
+                        $"({stackDepthIn[successorIndex]} vs {successorDepth}).");
                 }
             }
         }

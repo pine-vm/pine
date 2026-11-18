@@ -933,7 +933,7 @@ public class InternalExpressionTests
 
             var construction =
                 ExpressionConversion.FromCanonical(
-                    Canonical.ListInst(value.Items.ToArray().Select(Canonical.LitralInst).ToArray()));
+                    Canonical.ListInst([.. value.Items.ToArray().Select(Canonical.LitralInst)]));
 
             ExpressionReduction.TryDecodeApplicationOfConstructedEncoding(
                 construction,
@@ -1016,7 +1016,7 @@ public class InternalExpressionTests
             {
                 Canonical.EnvironmentInstance,
                 Canonical.LitralInst(value),
-                Canonical.ListInst(value.Items.ToArray().Select(Canonical.LitralInst).ToArray())
+                Canonical.ListInst([.. value.Items.ToArray().Select(Canonical.LitralInst)])
             })
             {
                 var result =

@@ -154,8 +154,6 @@ Most of the lists used to package eval inputs and outputs are short-lived becaus
 
 And since every list creation adds significant runtime overhead, avoiding them is an important lever for improving runtime efficiency.
 
-> Note: specialized interface currently only implemented for the input side, output side remains TODO.
-
 Known recursive callees use `Invoke_StackFrame_Const` with an interface derived
 from the expression under its environment constraint. Fixed function-group
 references and other eliminated inputs are not runtime parameters. The call
@@ -185,6 +183,37 @@ arguments under different constraints must not share a cached result.
 Persistent-cache predicates can read fixed inputs from that constraint; when a
 removed input is no longer reconstructible, the size-based policy declines
 persistence rather than using incomplete input data.
+
+Known calls also carry a `ReturnValueLayout` inferred from the prepared expression
+and constraint, including across recursive calls. Varying components occupy
+independent return slots in the existing stack; fixed list structure, record
+field names, and invariant tags do not occupy slots. Nested alternatives flatten
+their payloads, and inactive payload slots are neither read nor serialized.
+Bounded inference conservatively retains canonical values when a shape cannot
+be established.
+
+The compiler projects direct consumers from those slots and constructs the
+canonical tree only where it escapes. Finite alternatives use compact keys;
+`ReturnValueTaggingPolicy.Default` controls this release-time tradeoff: blobs
+shorter than five bytes retain their original values, while larger blobs and
+lists can receive compact tags. Set `MinimumBlobSize` to `null` to disable tagging
+entirely, or change the byte threshold to tune it. Mixed alternatives use
+collision-free keys; each persisted layout records its actual keys, independently
+of the current policy.
+`Select_Value_Const` maps a key to an arbitrary literal value without a case
+count limit. A missing key either supplies the required literal fallback or
+takes the specified jump without producing a value. CFG simplification composes
+these maps with projections and comparisons.
+
+`InvocationResult` is a borrowed component view: retain it only while the frame
+storage is valid, or copy/materialize it. Representation-aware persistent cache
+entries use a versioned layout identity and encode only active components;
+reloading feeds compiled callers without constructing canonical envelopes.
+Compilation and invocation compare structural contracts without recursively
+rehashing embedded program values; the stable persistence hash is computed lazily.
+Eligible component entries bypass a legacy canonical memory tier rather than
+allocate an intermediate tree merely to populate it. Legacy cache and observer
+interfaces continue to receive canonical values when required.
 
 ### Expression Templates and Deferred Evaluation Chains
 

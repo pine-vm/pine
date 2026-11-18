@@ -31,6 +31,16 @@ internal class InternalPineIRCompiler
         PineControlFlowFragment Fragment,
         ImmutableDictionary<Expression, int> LocalsSet)
     {
+        internal ImmutableDictionary<Expression, (ReturnValueLayout Layout, int FirstLocal)> ReturnValues { get; init; } =
+            ImmutableDictionary<Expression, (ReturnValueLayout, int)>.Empty;
+
+        internal int ReservedLocals { get; init; }
+
+        internal int NextLocal(int parameterCount) =>
+            Math.Max(
+                ReservedLocals,
+                LocalsSet.IsEmpty ? parameterCount : Math.Max(parameterCount, LocalsSet.Values.Max() + 1));
+
         /// <summary>
         /// Continues compilation from the current state by compiling another expression.
         /// </summary>
@@ -43,13 +53,11 @@ internal class InternalPineIRCompiler
                 CompileExpressionTransitive(
                     expression,
                     context with { IsTailPosition = false },
-                    LocalsSet,
+                    this with { Fragment = PineControlFlowFragment.Empty },
                     parseCache);
 
             return
-                new NodeCompilationResult(
-                    Fragment.Append(exprResult.Fragment),
-                    LocalsSet.AddRange(exprResult.LocalsSet));
+                exprResult with { Fragment = Fragment.Append(exprResult.Fragment) };
         }
 
         /// <summary>
@@ -87,7 +95,8 @@ internal class InternalPineIRCompiler
         bool IsTailPosition,
         bool EnableDirectInvocation,
         Func<PineValue, bool>? SkipDirectInvocation,
-        Func<Expression, PineValue, Expression, DirectInvocation?>? ResolveStaticInvocation = null)
+        Func<Expression, PineValue, Expression, DirectInvocation?>? ResolveStaticInvocation = null,
+        bool BindReturnOnly = false)
     {
         /// <summary>
         /// Creates the initial compilation context for a function with the given parameters.
@@ -156,7 +165,8 @@ internal class InternalPineIRCompiler
         bool enableTailRecursionOptimization = false,
         bool enableDirectInvocation = true,
         Func<PineValue, bool>? skipDirectInvocation = null,
-        Func<Expression, PineValue, Expression, DirectInvocation?>? resolveStaticInvocation = null)
+        Func<Expression, PineValue, Expression, DirectInvocation?>? resolveStaticInvocation = null,
+        ReturnValueLayout? returnLayout = null)
     {
         var prior =
             new NodeCompilationResult(
@@ -173,7 +183,7 @@ internal class InternalPineIRCompiler
             .ToArray();
 
         return
-            CompileExpressionTransitive(
+            CompileReturning(
                 rootExpression,
                 context:
                 CompilationContext.Init(
@@ -193,7 +203,62 @@ internal class InternalPineIRCompiler
                     null
                 },
                 prior: prior,
-                parseCache);
+                parseCache,
+                returnLayout ?? ReturnValueLayout.Canonical);
+    }
+
+    private static NodeCompilationResult CompileReturning(
+        Expression expression,
+        CompilationContext context,
+        NodeCompilationResult prior,
+        PineVMParseCache parseCache,
+        ReturnValueLayout layout)
+    {
+        if (ReferenceEquals(layout, ReturnValueLayout.Canonical))
+            return CompileExpressionTransitive(expression, context, prior, parseCache);
+
+        if (expression is Expression.Label label)
+            return CompileReturning(label.Tagged, context, prior, parseCache, layout);
+
+        if (expression is Expression.Conditional conditional)
+            return CompileConditional(conditional, context, prior, parseCache, layout);
+
+        var compiled =
+            expression is Expression.Eval eval &&
+            (prior.ReturnValues.ContainsKey(eval) || !prior.LocalsSet.ContainsKey(eval))
+            ?
+            CompileEval(eval, context with { BindReturnOnly = true }, prior, parseCache)
+            :
+            CompileExpressionTransitive(expression, context, prior, parseCache);
+
+        if (compiled.Fragment.Nodes.LastOrDefault() is PineControlFlowNode.JumpToEntry)
+            return compiled;
+
+        if (expression is Expression.Eval returningCall &&
+            compiled.ReturnValues.TryGetValue(returningCall, out var binding))
+        {
+            if (binding.Layout.Equals(layout))
+            {
+                return
+                    compiled.AppendInstructions(
+                        Enumerable.Range(0, layout.SlotCount).Select(
+                            index => StackInstruction.Local_Get(binding.FirstLocal + index)));
+            }
+
+            compiled =
+                compiled with { Fragment = compiled.Fragment.Append(binding.Layout.Reconstruct(binding.FirstLocal)) };
+        }
+
+        var local = compiled.NextLocal(context.StackFrameParameters.ParamsPaths.Count);
+
+        return
+            compiled with
+            {
+                Fragment =
+                compiled.Fragment
+                .AppendOperation(StackInstruction.Local_Set([local], popCount: 1))
+                .Append(layout.Deconstruct(local))
+            };
     }
 
     private static TailCallToRootResolution ResolveTailCallToRoot(
@@ -452,12 +517,7 @@ internal class InternalPineIRCompiler
             context.CopyToLocal.Contains(expression) &&
             context.IsAvailableAsLocalIndex(expression) is null)
         {
-            var newLocalIndex =
-                lessCSE.LocalsSet.IsEmpty
-                ?
-                context.StackFrameParameters.ParamsPaths.Count
-                :
-                lessCSE.LocalsSet.Values.Max() + 1;
+            var newLocalIndex = lessCSE.NextLocal(context.StackFrameParameters.ParamsPaths.Count);
 
             return
                 lessCSE
@@ -494,6 +554,41 @@ internal class InternalPineIRCompiler
                 prior
                 .AppendInstruction(
                     StackInstruction.Local_Get(localIndex));
+        }
+
+        if (expr.EvalCount > 0 && expr is Expression.HeadSkip or Expression.Builtin)
+        {
+            foreach (var call in Expression.EnumerateSelfAndDescendants(expr).OfType<Expression.Eval>().Distinct())
+            {
+                if (ExpressionAnalysis.TryParseExprAsPathInExpr(expr, call) is not { Count: > 0 } path)
+                    continue;
+
+                var bound = prior;
+
+                if (!bound.ReturnValues.ContainsKey(call))
+                {
+                    if (!context.EnableDirectInvocation || call.Encoded.EvalCount > 0 ||
+                        TryEvalIndependent(call.Encoded, parseCache) is not { } encoded ||
+                        context.SkipDirectInvocation?.Invoke(encoded) is true ||
+                        ExpressionTemplatePlan.TryParseTemplate(encoded, parseCache) is not null ||
+                        parseCache.ParseInternalExpression(encoded).IsOkOrNull() is not { } target ||
+                        context.ResolveStaticInvocation?.Invoke(target, encoded, call.Environment) is not { } direct ||
+                        ReferenceEquals(direct.ReturnLayout, ReturnValueLayout.Canonical))
+                    {
+                        continue;
+                    }
+
+                    bound =
+                        CompileEval(
+                            call,
+                            context with { BindReturnOnly = true, IsTailPosition = false },
+                            bound,
+                            parseCache);
+                }
+
+                var binding = bound.ReturnValues[call];
+                return bound with { Fragment = bound.Fragment.Append(binding.Layout.Reconstruct(binding.FirstLocal, path)) };
+            }
         }
 
         switch (expr)
@@ -668,9 +763,10 @@ internal class InternalPineIRCompiler
         Expression.Conditional conditional,
         CompilationContext context,
         NodeCompilationResult prior,
-        PineVMParseCache parseCache)
+        PineVMParseCache parseCache,
+        ReturnValueLayout? returnLayout = null)
     {
-        if (TryCompileSwitchEqual(conditional, context, prior, parseCache) is { } switchCompilation)
+        if (TryCompileSwitchEqual(conditional, context, prior, parseCache, returnLayout) is { } switchCompilation)
         {
             return switchCompilation;
         }
@@ -705,7 +801,8 @@ internal class InternalPineIRCompiler
                     conditional.FalseBranch,
                     conditional.TrueBranch,
                     context,
-                    parseCache);
+                    parseCache,
+                    returnLayout);
         }
 
         while (true)
@@ -757,14 +854,16 @@ internal class InternalPineIRCompiler
                 trueBranch: conditional.TrueBranch,
                 context: context,
                 prior: prior,
-                parseCache: parseCache);
+                parseCache: parseCache,
+                returnLayout: returnLayout);
     }
 
     private static NodeCompilationResult? TryCompileSwitchEqual(
         Expression.Conditional conditional,
         CompilationContext context,
         NodeCompilationResult prior,
-        PineVMParseCache parseCache)
+        PineVMParseCache parseCache,
+        ReturnValueLayout? returnLayout)
     {
         if (TryParseEqualCondition(conditional.Condition, parseCache) is not { } firstCondition)
         {
@@ -871,13 +970,12 @@ internal class InternalPineIRCompiler
         }
 
         var defaultBranchFragment =
-            CompileExpressionTransitive(
+            CompileReturning(
                 defaultBranch,
                 context,
-                new NodeCompilationResult(
-                    Fragment: PineControlFlowFragment.Empty,
-                    LocalsSet: afterCondition.LocalsSet),
-                parseCache)
+                afterCondition with { Fragment = PineControlFlowFragment.Empty },
+                parseCache,
+                returnLayout ?? ReturnValueLayout.Canonical)
             .Fragment;
 
         var distinctCaseBranches = new List<Expression>();
@@ -902,13 +1000,12 @@ internal class InternalPineIRCompiler
         for (var branchIndex = 0; branchIndex < distinctCaseBranches.Count; branchIndex++)
         {
             caseBranchFragments.Add(
-                CompileExpressionTransitive(
+                CompileReturning(
                     distinctCaseBranches[branchIndex],
                     context,
-                    new NodeCompilationResult(
-                        Fragment: PineControlFlowFragment.Empty,
-                        LocalsSet: afterCondition.LocalsSet),
-                    parseCache)
+                    afterCondition with { Fragment = PineControlFlowFragment.Empty },
+                    parseCache,
+                    returnLayout ?? ReturnValueLayout.Canonical)
                 .Fragment);
         }
 
@@ -919,7 +1016,8 @@ internal class InternalPineIRCompiler
                     Cases: switchCases.MoveToImmutable(),
                     Default: defaultBranchFragment,
                     Branches: caseBranchFragments.MoveToImmutable(),
-                    SkipCountMultiplier: skipCountMultiplier));
+                    SkipCountMultiplier: skipCountMultiplier,
+                    ResultCount: returnLayout?.SlotCount ?? 1));
     }
 
     private static (Expression ComparedExpression, PineValue Literal)? TryParseEqualCondition(
@@ -982,7 +1080,8 @@ internal class InternalPineIRCompiler
         Expression trueBranch,
         CompilationContext context,
         NodeCompilationResult prior,
-        PineVMParseCache parseCache)
+        PineVMParseCache parseCache,
+        ReturnValueLayout? returnLayout = null)
     {
         var afterCondition =
             CompileExpressionTransitive(
@@ -991,7 +1090,15 @@ internal class InternalPineIRCompiler
                 prior,
                 parseCache);
 
-        return CompileConditionalBranches(afterCondition, jumpLiteralValue, falseBranch, trueBranch, context, parseCache);
+        return
+            CompileConditionalBranches(
+                afterCondition,
+                jumpLiteralValue,
+                falseBranch,
+                trueBranch,
+                context,
+                parseCache,
+                returnLayout);
     }
 
     private static NodeCompilationResult CompileConditionalBranches(
@@ -1000,26 +1107,25 @@ internal class InternalPineIRCompiler
         Expression falseBranch,
         Expression trueBranch,
         CompilationContext context,
-        PineVMParseCache parseCache)
+        PineVMParseCache parseCache,
+        ReturnValueLayout? returnLayout)
     {
         var falseBranchFragment =
-            CompileExpressionTransitive(
+            CompileReturning(
                 falseBranch,
                 context,
-                new NodeCompilationResult(
-                    Fragment: PineControlFlowFragment.Empty,
-                    LocalsSet: afterCondition.LocalsSet),
-                parseCache)
+                afterCondition with { Fragment = PineControlFlowFragment.Empty },
+                parseCache,
+                returnLayout ?? ReturnValueLayout.Canonical)
             .Fragment;
 
         var trueBranchFragment =
-            CompileExpressionTransitive(
+            CompileReturning(
                 trueBranch,
                 context,
-                new NodeCompilationResult(
-                    Fragment: PineControlFlowFragment.Empty,
-                    LocalsSet: afterCondition.LocalsSet),
-                parseCache)
+                afterCondition with { Fragment = PineControlFlowFragment.Empty },
+                parseCache,
+                returnLayout ?? ReturnValueLayout.Canonical)
             .Fragment;
 
         return
@@ -1027,7 +1133,8 @@ internal class InternalPineIRCompiler
                 new PineControlFlowNode.Conditional(
                     Literal: jumpLiteralValue,
                     FallThrough: falseBranchFragment,
-                    Branch: trueBranchFragment));
+                    Branch: trueBranchFragment,
+                    ResultCount: returnLayout?.SlotCount ?? 1));
     }
 
     /// <summary>
@@ -1039,6 +1146,19 @@ internal class InternalPineIRCompiler
         NodeCompilationResult prior,
         PineVMParseCache parseCache)
     {
+        var bindReturnOnly = context.BindReturnOnly;
+        context = context with { BindReturnOnly = false };
+
+        if (prior.ReturnValues.TryGetValue(evalExpr, out var binding))
+        {
+            return
+                bindReturnOnly
+                ?
+                prior
+                :
+                prior with { Fragment = prior.Fragment.Append(binding.Layout.Reconstruct(binding.FirstLocal)) };
+        }
+
         if (context.IsTailPosition &&
             context.TailLoop is { } tailLoop)
         {
@@ -1053,7 +1173,7 @@ internal class InternalPineIRCompiler
                 tailCallResolution is TailCallToRootResolution.Unresolved &&
                 tailLoop.EnvironmentClass is not null)
             {
-                return CompileNormalEval(evalExpr, context, prior, parseCache);
+                return CompileNormalEval(evalExpr, context, prior, parseCache, bindReturnOnly);
             }
 
             if (tailCallResolution is TailCallToRootResolution.Unresolved)
@@ -1079,14 +1199,15 @@ internal class InternalPineIRCompiler
                 .AppendNode(PineControlFlowNode.JumpToEntry.Instance);
         }
 
-        return CompileNormalEval(evalExpr, context, prior, parseCache);
+        return CompileNormalEval(evalExpr, context, prior, parseCache, bindReturnOnly);
     }
 
     private static NodeCompilationResult CompileNormalEval(
         Expression.Eval evalExpr,
         CompilationContext context,
         NodeCompilationResult prior,
-        PineVMParseCache parseCache)
+        PineVMParseCache parseCache,
+        bool bindReturnOnly = false)
     {
         if (ExpressionAnalysis.ParseGenericFunctionApplication(evalExpr)
             is { } genericApplication &&
@@ -1156,7 +1277,7 @@ internal class InternalPineIRCompiler
                     resolvedInvocation?.InvocationInterface ??
                     StaticFunctionInterface.FromExpression(targetExpression);
 
-                return
+                var call =
                     CompileInvocationArguments(
                         targetParameters,
                         evalExpr.Environment,
@@ -1175,6 +1296,32 @@ internal class InternalPineIRCompiler
                             StackInstructionKind.Invoke_StackFrame_Const,
                             TakeCount: targetParameters.ParamsPaths.Count,
                             OptimizedInvocation: resolvedInvocation));
+
+                if (resolvedInvocation is null ||
+                    ReferenceEquals(resolvedInvocation.ReturnLayout, ReturnValueLayout.Canonical))
+                {
+                    return call;
+                }
+
+                var firstLocal = call.NextLocal(context.StackFrameParameters.ParamsPaths.Count);
+
+                for (var index = resolvedInvocation.ReturnLayout.SlotCount - 1; index >= 0; index--)
+                    call = call.AppendInstruction(StackInstruction.Local_Set([firstLocal + index], popCount: 1));
+
+                call =
+                    call with
+                    {
+                        ReturnValues =
+                        call.ReturnValues.SetItem(evalExpr, (resolvedInvocation.ReturnLayout, firstLocal)),
+                        ReservedLocals = firstLocal + resolvedInvocation.ReturnLayout.SlotCount
+                    };
+
+                return
+                    bindReturnOnly
+                    ?
+                    call
+                    :
+                    call with { Fragment = call.Fragment.Append(resolvedInvocation.ReturnLayout.Reconstruct(firstLocal)) };
             }
 
             return
@@ -1228,7 +1375,7 @@ internal class InternalPineIRCompiler
             CompileExpressionTransitive(
                 evalExpr.Environment,
                 context,
-                new NodeCompilationResult(PineControlFlowFragment.Empty, afterEncoded.LocalsSet),
+                afterEncoded with { Fragment = PineControlFlowFragment.Empty },
                 parseCache)
             .AppendInstruction(StackInstruction.Local_Get(encodedLocalIndex))
             .AppendInstruction(StackInstruction.Eval_Binary);
@@ -1237,7 +1384,7 @@ internal class InternalPineIRCompiler
             CompileLoopArguments(
                 evalExpr.Environment,
                 context,
-                new NodeCompilationResult(PineControlFlowFragment.Empty, afterEncoded.LocalsSet),
+                afterEncoded with { Fragment = PineControlFlowFragment.Empty },
                 parseCache)
             .AppendNode(PineControlFlowNode.JumpToEntry.Instance);
 

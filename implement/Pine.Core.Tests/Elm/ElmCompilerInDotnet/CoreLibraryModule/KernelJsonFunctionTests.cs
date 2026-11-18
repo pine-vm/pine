@@ -1424,10 +1424,10 @@ public partial class KernelJsonFunctionTests
         EvalWorkCountersFormatting.FormatCounts(report).ShouldBeWithDiff(
             """
             InvocationCount: 34
-            BuildListCount: 82
-            BuildListItemCount: 229
+            BuildListCount: 80
+            BuildListItemCount: 219
             LoopIterationCount: 16
-            InstructionCount: 1_147
+            InstructionCount: 1_155
             DeferredTemplateValueAllocationCount: 1
             TemplateDirectInvocationCount: 15
             DeferredTemplateValueMaterializationCount: 1
@@ -1459,10 +1459,10 @@ public partial class KernelJsonFunctionTests
         EvalWorkCountersFormatting.FormatCounts(report).ShouldBeWithDiff(
             """
             InvocationCount: 12
-            BuildListCount: 45
-            BuildListItemCount: 122
+            BuildListCount: 44
+            BuildListItemCount: 119
             LoopIterationCount: 18
-            InstructionCount: 774
+            InstructionCount: 776
             DeferredTemplateValueAllocationCount: 0
             TemplateDirectInvocationCount: 4
             DeferredTemplateValueMaterializationCount: 0
@@ -1529,10 +1529,10 @@ public partial class KernelJsonFunctionTests
         formattedCounts.ShouldBeWithDiff(
             """
             InvocationCount: 12
-            BuildListCount: 50
-            BuildListItemCount: 139
+            BuildListCount: 49
+            BuildListItemCount: 134
             LoopIterationCount: 22
-            InstructionCount: 817
+            InstructionCount: 814
             DeferredTemplateValueAllocationCount: 0
             TemplateDirectInvocationCount: 6
             DeferredTemplateValueMaterializationCount: 0
@@ -1565,10 +1565,10 @@ public partial class KernelJsonFunctionTests
         formattedCounts.ShouldBeWithDiff(
             """
             InvocationCount: 31
-            BuildListCount: 108
-            BuildListItemCount: 299
+            BuildListCount: 105
+            BuildListItemCount: 286
             LoopIterationCount: 35
-            InstructionCount: 1_574
+            InstructionCount: 1_570
             DeferredTemplateValueAllocationCount: 0
             TemplateDirectInvocationCount: 18
             DeferredTemplateValueMaterializationCount: 0
@@ -1601,10 +1601,10 @@ public partial class KernelJsonFunctionTests
         EvalWorkCountersFormatting.FormatCounts(report).ShouldBeWithDiff(
             """
             InvocationCount: 16
-            BuildListCount: 65
-            BuildListItemCount: 176
+            BuildListCount: 64
+            BuildListItemCount: 173
             LoopIterationCount: 16
-            InstructionCount: 897
+            InstructionCount: 902
             DeferredTemplateValueAllocationCount: 0
             TemplateDirectInvocationCount: 6
             DeferredTemplateValueMaterializationCount: 0
@@ -1638,7 +1638,7 @@ public partial class KernelJsonFunctionTests
             BuildListCount: 66
             BuildListItemCount: 178
             LoopIterationCount: 16
-            InstructionCount: 901
+            InstructionCount: 904
             DeferredTemplateValueAllocationCount: 0
             TemplateDirectInvocationCount: 5
             DeferredTemplateValueMaterializationCount: 0
@@ -1711,14 +1711,14 @@ public partial class KernelJsonFunctionTests
         EvalWorkCountersFormatting.FormatCounts(report).ShouldBeWithDiff(
             """
             InvocationCount: 32
-            BuildListCount: 72
-            BuildListItemCount: 221
-            LoopIterationCount: 12
-            InstructionCount: 1_127
+            BuildListCount: 75
+            BuildListItemCount: 230
+            LoopIterationCount: 10
+            InstructionCount: 1_134
             DeferredTemplateValueAllocationCount: 0
             TemplateDirectInvocationCount: 6
             DeferredTemplateValueMaterializationCount: 0
-            TemplateConsolidatedEvalCount: 8
+            TemplateConsolidatedEvalCount: 6
             DirectInterpreterInvocationCount: 0
             DirectInterpreterExpressionCount: 0
             DirectInterpreterLiteralCount: 0
@@ -1744,14 +1744,14 @@ public partial class KernelJsonFunctionTests
         EvalWorkCountersFormatting.FormatCounts(report).ShouldBeWithDiff(
             """
             InvocationCount: 30
-            BuildListCount: 63
-            BuildListItemCount: 191
-            LoopIterationCount: 13
-            InstructionCount: 1_076
+            BuildListCount: 66
+            BuildListItemCount: 200
+            LoopIterationCount: 11
+            InstructionCount: 1_084
             DeferredTemplateValueAllocationCount: 0
             TemplateDirectInvocationCount: 4
             DeferredTemplateValueMaterializationCount: 0
-            TemplateConsolidatedEvalCount: 6
+            TemplateConsolidatedEvalCount: 4
             DirectInterpreterInvocationCount: 0
             DirectInterpreterExpressionCount: 0
             DirectInterpreterLiteralCount: 0
@@ -1805,10 +1805,10 @@ public partial class KernelJsonFunctionTests
         EvalWorkCountersFormatting.FormatCounts(report).ShouldBeWithDiff(
             """
             InvocationCount: 34
-            BuildListCount: 60
-            BuildListItemCount: 166
-            LoopIterationCount: 2
-            InstructionCount: 780
+            BuildListCount: 61
+            BuildListItemCount: 168
+            LoopIterationCount: 0
+            InstructionCount: 768
             DeferredTemplateValueAllocationCount: 0
             TemplateDirectInvocationCount: 2
             DeferredTemplateValueMaterializationCount: 0
@@ -1863,8 +1863,8 @@ public partial class KernelJsonFunctionTests
         EvalWorkCountersFormatting.FormatCounts(report).ShouldBeWithDiff(
             """
             InvocationCount: 24
-            BuildListCount: 55
-            BuildListItemCount: 152
+            BuildListCount: 52
+            BuildListItemCount: 143
             LoopIterationCount: 16
             InstructionCount: 1_298
             DeferredTemplateValueAllocationCount: 0

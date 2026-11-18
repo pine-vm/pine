@@ -269,11 +269,14 @@ public sealed partial record PineControlFlowGraph
 
             switch (block.Terminator)
             {
-                case PineControlFlowTerminator.Return:
-                    Escape(TerminatorInput(block, values, 1));
+                case PineControlFlowTerminator.Return returned:
+                    for (var depth = 1; depth <= returned.ValueCount; depth++)
+                        Escape(TerminatorInput(block, values, depth));
+
                     break;
 
                 case PineControlFlowTerminator.ConditionalJump:
+                case PineControlFlowTerminator.ValueMap:
                     Escape(TerminatorInput(block, values, 1));
                     break;
 

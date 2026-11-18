@@ -58,6 +58,25 @@ internal static class StackInstructionMetadataEncoding
                 entry => Convert.ToHexStringLower(PineValueHashTree.ComputeHash(entry.Key).Span),
                 StringComparer.Ordinal));
 
+    public static PineValue EncodeValueMap(IEnumerable<KeyValuePair<PineValue, PineValue>> map) =>
+        PineValue.List(
+            [
+            .. map.OrderBy(
+                entry => Convert.ToHexStringLower(PineValueHashTree.ComputeHash(entry.Key).Span),
+                StringComparer.Ordinal)
+            .Select(entry => PineValue.List([entry.Key, entry.Value]))
+            ]);
+
+    public static IReadOnlyList<KeyValuePair<PineValue, PineValue>> DecodeValueMap(PineValue value) =>
+        [
+        .. List(value).Select(
+            item =>
+            {
+                var pair = List(item, 2);
+                return new KeyValuePair<PineValue, PineValue>(pair[0], pair[1]);
+            })
+        ];
+
     public static PineValue EncodeSliceCases(IEnumerable<SliceSwitchCase> cases) =>
         EncodeSwitchCases(cases.Select(item => new KeyValuePair<PineValue, int>(item.Literal, item.JumpOffset)));
 

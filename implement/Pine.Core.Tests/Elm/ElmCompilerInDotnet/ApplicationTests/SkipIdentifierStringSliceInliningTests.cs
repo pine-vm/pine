@@ -388,7 +388,7 @@ public class SkipIdentifierStringSliceInliningTests
                     prefix.Items.Length == 2 &&
                     prefix.Items.Span[0].Equals(StringEncoding.ValueFromString("<Choice>")) &&
                     prefix.Items.Span[1].Equals(StringEncoding.ValueFromString("Just")))
-                    .Should().Be(4);
+                    .Should().Be(0);
 
                 AssertFrameSnapshot(frames, nameof(ParseApplicationExpression_values_and_all_stack_frame_instructions));
             }

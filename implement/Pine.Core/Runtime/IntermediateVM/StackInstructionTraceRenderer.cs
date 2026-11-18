@@ -510,7 +510,8 @@ public static class StackInstructionTraceRenderer
                 {
                     StackInstructionKind.Jump_Const or
                     StackInstructionKind.Jump_If_Equal_Const or
-                    StackInstructionKind.Jump_If_Length_Equal_Const =>
+                    StackInstructionKind.Jump_If_Length_Equal_Const or
+                    StackInstructionKind.Select_Value_Const =>
                     instruction.JumpOffset is { } jumpOffset ? [jumpOffset] : [],
 
                     StackInstructionKind.Switch_Jump_If_Equal_Const or

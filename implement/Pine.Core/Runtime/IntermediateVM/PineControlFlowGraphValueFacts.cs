@@ -345,6 +345,27 @@ public sealed partial record PineControlFlowGraph
                                     locals.GetValueOrDefault(projectedLocal, ValueFacts.Unknown)
                                     .KnownListElement(Math.Max(0, skip));
                             }
+                            else if (instruction.Kind is StackInstructionKind.Select_Value_Const &&
+                                operation.Inputs is [var mapInput] &&
+                                KnownValueMapResult(
+                                    instruction,
+                                    values.GetValueOrDefault(mapInput, ValueFacts.Unknown).ExactValue) is { } selected)
+                            {
+                                literal = selected;
+
+                                if (operations.Count > 0 &&
+                                    operations[^1] is { } previous &&
+                                    previous.Instruction.Kind is StackInstructionKind.Push_Literal &&
+                                    previous.Results is [var pushed] && pushed == mapInput)
+                                {
+                                    operations.RemoveAt(operations.Count - 1);
+                                }
+                                else
+                                {
+                                    operations.Add(
+                                        new PineControlFlowOperation(StackInstruction.Pop, [mapInput], []));
+                                }
+                            }
                             else if (instruction.Kind is StackInstructionKind.Head_Generic ||
                                 instruction.Kind is StackInstructionKind.Skip_Head_Const &&
                                 instruction.SkipCount is not null)
@@ -474,6 +495,7 @@ public sealed partial record PineControlFlowGraph
                             break;
 
                         case PineControlFlowTerminator.Return:
+                        case PineControlFlowTerminator.ValueMap:
                         case PineControlFlowTerminator.Jump:
                         case PineControlFlowTerminator.ConditionalJump:
                         case PineControlFlowTerminator.Switch:
@@ -555,6 +577,15 @@ public sealed partial record PineControlFlowGraph
         return result.RemoveUnreachableBlocks(context);
     }
 
+    private static PineValue? KnownValueMapResult(StackInstruction instruction, PineValue? key) =>
+        instruction.Kind is StackInstructionKind.Select_Value_Const &&
+        instruction.ValueMap is { } map && instruction.Literal is { } fallback &&
+        instruction.JumpOffset is null && key is not null
+        ?
+        map.TryGetValue(key, out var selected) ? selected : fallback.Evaluate()
+        :
+        null;
+
     private static (
         Dictionary<PineVirtualValueId, ValueFacts> Values,
         Dictionary<int, ValueFacts> Locals,
@@ -611,6 +642,16 @@ public sealed partial record PineControlFlowGraph
                 case StackInstructionKind.Local_Get when instruction.LocalIndices.Length is 1:
                     var index = instruction.SingleLocalIndex;
                     facts = locals.GetValueOrDefault(index, ValueFacts.Unknown);
+                    break;
+
+                case StackInstructionKind.Select_Value_Const when operation.Inputs is [var mapInput]:
+                    if (KnownValueMapResult(
+                        instruction,
+                        values.GetValueOrDefault(mapInput, ValueFacts.Unknown).ExactValue) is { } selected)
+                    {
+                        facts = ValueFacts.ForLiteral(selected);
+                    }
+
                     break;
 
                 case StackInstructionKind.Build_List when instruction.TakeCount is >= 0:

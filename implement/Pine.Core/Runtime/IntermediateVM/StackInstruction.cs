@@ -505,6 +505,14 @@ public enum StackInstructionKind
     /// Leaves the evaluation stack unchanged.
     /// </summary>
     Local_Int_Add_Const,
+
+    /// <summary>
+    /// Pops a key and pushes its mapped value from <see cref="StackInstruction.ValueMap"/>.
+    /// On a missing key, either pushes <see cref="StackInstruction.Literal"/> and falls through,
+    /// or jumps by <see cref="StackInstruction.JumpOffset"/> without pushing a value.
+    /// Exactly one of these fallback fields must be present.
+    /// </summary>
+    Select_Value_Const,
 }
 
 /// <summary>
@@ -538,6 +546,9 @@ public record DirectInvocation
 
     /// <summary>The assumptions pinned by a statically specialized call.</summary>
     public PineValueClass? EnvironmentConstraint { get; init; }
+
+    /// <summary>The statically established return representation.</summary>
+    public ReturnValueLayout ReturnLayout { get; init; } = ReturnValueLayout.Canonical;
 
     internal Lazy<StackFrameInstructions>? StaticInstructions { get; init; }
 
@@ -573,6 +584,7 @@ public record DirectInvocation
         other is not null && InternalExpression.Equals(other.InternalExpression) &&
         ExpressionEncoded.Equals(other.ExpressionEncoded) && InvocationInterface.Equals(other.InvocationInterface) &&
         Equals(EnvironmentConstraint, other.EnvironmentConstraint) &&
+        ReturnLayout.Equals(other.ReturnLayout) &&
         ReferenceEquals(_linkedStackFrameInstructions, other._linkedStackFrameInstructions);
 
     /// <inheritdoc/>
@@ -582,6 +594,7 @@ public record DirectInvocation
             ExpressionEncoded,
             InvocationInterface,
             EnvironmentConstraint,
+            ReturnLayout,
             _linkedStackFrameInstructions is null
             ?
             0
@@ -663,6 +676,7 @@ public readonly record struct SliceSwitchCase(
 /// Ordered cases for predicate-based slice matching, see
 /// <see cref="StackInstructionKind.Switch_Jump_If_Slice_Skip_Var_Equal_Const"/>.
 /// </param>
+/// <param name="ValueMap">Constant key/value mapping for <see cref="StackInstructionKind.Select_Value_Const"/>.</param>
 public record StackInstruction(
     StackInstructionKind Kind,
     PineValueInProcess? Literal = null,
@@ -675,7 +689,8 @@ public record StackInstruction(
     ImmutableDictionary<PineValue, int>? SwitchJumpTable = null,
     ImmutableArray<SliceSwitchCase> SliceSwitchCases = default,
     ImmutableArray<int> LocalIndices = default,
-    int? PopCount = null)
+    int? PopCount = null,
+    ImmutableDictionary<PineValue, PineValue>? ValueMap = null)
 {
     internal const int MaxInlineSwitchCases = 32;
 
@@ -716,6 +731,7 @@ public record StackInstruction(
             ShiftCount != other.ShiftCount ||
             TemplateProducer != other.TemplateProducer ||
             OptimizedInvocation != other.OptimizedInvocation ||
+            !ValueMapsEqual(ValueMap, other.ValueMap) ||
             !EqualityComparer<ImmutableDictionary<PineValue, int>?>.Default.Equals(
                 SwitchJumpTable,
                 other.SwitchJumpTable) ||
@@ -755,7 +771,47 @@ public record StackInstruction(
         hashCode.Add(SwitchJumpTable);
         hashCode.Add(SliceSwitchCases);
 
+        if (ValueMap is { } valueMap)
+        {
+            var mapHash = 0;
+
+            foreach (var (key, value) in valueMap)
+                mapHash ^= HashCode.Combine(key, value);
+
+            hashCode.Add(valueMap.Count);
+            hashCode.Add(mapHash);
+        }
+
         return hashCode.ToHashCode();
+    }
+
+    private static bool ValueMapsEqual(
+        ImmutableDictionary<PineValue, PineValue>? left,
+        ImmutableDictionary<PineValue, PineValue>? right) =>
+        ReferenceEquals(left, right) ||
+        left is not null && right is not null && left.Count == right.Count &&
+        left.All(entry => right.TryGetValue(entry.Key, out var value) && entry.Value.Equals(value));
+
+    /// <summary>
+    /// Creates a constant value selection with exactly one missing-key fallback:
+    /// a literal result, or a relative jump that produces no result.
+    /// </summary>
+    public static StackInstruction Select_Value_Const(
+        ImmutableDictionary<PineValue, PineValue> map,
+        PineValue? fallbackValue = null,
+        int? jumpOffset = null)
+    {
+        ArgumentNullException.ThrowIfNull(map);
+
+        if ((fallbackValue is null) == (jumpOffset is null))
+            throw new ArgumentException("Exactly one of fallbackValue and jumpOffset must be supplied.");
+
+        return
+            new(
+                StackInstructionKind.Select_Value_Const,
+                Literal: fallbackValue is null ? null : PineValueInProcess.CreateFullyRepresented(fallbackValue),
+                JumpOffset: jumpOffset,
+                ValueMap: map);
     }
 
     /// <summary>
@@ -1617,6 +1673,8 @@ public record StackInstruction(
 
     /// <summary>
     /// Describes the stack effects and display arguments of a single instruction.
+    /// For <see cref="StackInstructionKind.Select_Value_Const"/>, the push count describes
+    /// fall-through; its missing-key jump produces no value.
     /// </summary>
     public record struct InstructionDetails(
         int PopCount,
@@ -2153,9 +2211,14 @@ public record StackInstruction(
 
             StackInstructionKind.Return =>
             new InstructionDetails(
-                PopCount: 1,
+                PopCount: instruction.TakeCount ?? 1,
                 PushCount: 0,
-                Display: InstructionDetails.DisplayNoDetails),
+                Display:
+                instruction.TakeCount is { } returnCount
+                ?
+                () => InstructionDisplay.WithoutDetailLines([returnCount.ToString(CultureInfo.InvariantCulture)])
+                :
+                InstructionDetails.DisplayNoDetails),
 
             StackInstructionKind.Eval_Binary =>
             new InstructionDetails(
@@ -2196,7 +2259,7 @@ public record StackInstruction(
                 instruction.TakeCount
                 ?? throw new Exception(
                     "Missing TakeCount for Invoke_StackFrame_Const instruction"),
-                PushCount: 1,
+                PushCount: instruction.OptimizedInvocation?.ReturnLayout.SlotCount ?? 1,
                 Display:
                 () => InstructionDisplay.WithoutDetailLines(
                     [
@@ -2436,6 +2499,32 @@ public record StackInstruction(
                 PushCount: 0,
                 Display:
                 () => Render_Switch_Jump_If_Equal_Const_Details(instruction, literalDisplayString, instructionIndex)),
+
+            StackInstructionKind.Select_Value_Const =>
+            new InstructionDetails(
+                PopCount: 1,
+                PushCount: 1,
+                Display:
+                () => new InstructionDisplay(
+                    Arguments:
+                    [
+                    (instruction.ValueMap ?? throw new Exception("Missing ValueMap for Select_Value_Const")).Count
+                    .ToString(CultureInfo.InvariantCulture),
+                    instruction.Literal is { } fallback
+                    ?
+                    "fallback " + literalDisplayString(fallback.Evaluate())
+                    :
+                    "fallback jump " +
+                    RenderJumpOffset(
+                        instruction.JumpOffset ?? throw new Exception("Missing fallback for Select_Value_Const"),
+                        instructionIndex)
+                    ],
+                    DetailLines:
+                    [
+                    "map " +
+                    literalDisplayString(
+                        StackInstructionMetadataEncoding.EncodeValueMap(instruction.ValueMap!))
+                    ])),
 
             StackInstructionKind.Switch_Jump_If_Slice_Skip_Var_Equal_Const =>
             new InstructionDetails(

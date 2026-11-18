@@ -220,7 +220,7 @@ public class PineVMInstructionTraceTests
     }
 
     [Fact]
-    public void Build_List_With_Prefix_prepends_literal_items()
+    public void Fixed_list_structure_is_omitted_from_return_slots()
     {
         var trace = new List<ExecutedStackInstruction>();
 
@@ -265,10 +265,6 @@ public class PineVMInstructionTraceTests
 
         trace.Select(item => item.Instruction).Should().Equal(
             StackInstruction.Local_Get(0),
-            StackInstruction.Push_Literal(suffixLiteral),
-            StackInstruction.Build_List_With_Prefix(
-                PineValue.List([prefixItemOne, prefixItemTwo]),
-                2),
             StackInstruction.Return);
     }
 

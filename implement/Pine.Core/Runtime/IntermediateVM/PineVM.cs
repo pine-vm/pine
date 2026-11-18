@@ -1425,9 +1425,9 @@ public partial class PineVM : ICancellablePineVM
             {
                 var cacheKey = new EvalCacheEntryKey(expressionValue, stackFrameInput);
 
-                if (invocationCache.TryGet(cacheKey, out var fromCache))
+                if (invocationCache.TryGetResult(cacheKey, instructions.ReturnLayout, out var fromCache))
                 {
-                    currentFrame.PushInstructionResult(PineValueInProcess.Create(fromCache));
+                    CompleteInvocation(currentFrame, fromCache);
 
                     return null;
                 }
@@ -1524,14 +1524,38 @@ public partial class PineVM : ICancellablePineVM
             return null;
         }
 
-        EvaluationReport? ReturnFromStackFrame(PineValueInProcess frameReturnValue)
+        void CompleteInvocation(StackFrame parent, InvocationResult result)
+        {
+            if (parent.Specialization is not null)
+            {
+                parent.ReturnFromChildFrame(result.Materialize());
+                return;
+            }
+
+            var instruction = parent.Instructions.Instructions[parent.InstructionPointer];
+
+            if (instruction.Kind is StackInstructionKind.Invoke_StackFrame_Const &&
+                instruction.OptimizedInvocation is { } direct)
+            {
+                var count = direct.ReturnLayout.SlotCount;
+                result.CopyTo(direct.ReturnLayout, parent.StackValues.Span.Slice(parent.StackPointer, count));
+                parent.StackPointer += count;
+                parent.InstructionPointer++;
+            }
+            else
+                parent.ReturnFromChildFrame(result.Materialize());
+        }
+
+        EvaluationReport? ReturnFromStackFrame(InvocationResult result)
         {
             var currentFrame = stack.Peek();
+            PineValueInProcess? materialized = null;
+            PineValueInProcess Canonical() => materialized ??= result.Materialize();
 
             if (stack.Count is 1 && config.MaterializeResult)
             {
                 using var cause = _workProfile?.WithCause(PineVMWorkProfile.MaterializationCause.RootReturn);
-                frameReturnValue.Evaluate();
+                Canonical().Evaluate();
             }
 
             FireEvaluationEvent(EvaluationEventKind.FrameExited, currentFrame);
@@ -1561,9 +1585,9 @@ public partial class PineVM : ICancellablePineVM
                 {
                     using var cause = _workProfile?.WithCause(PineVMWorkProfile.MaterializationCause.InvocationCache);
 
-                    if (invocationCache.TryAdd(
+                    if (invocationCache.TryAddResult(
                         new EvalCacheEntryKey(currentFrameExprValue, currentFrame.InputValues),
-                        frameReturnValue.Evaluate()))
+                        result))
                     {
                         lastCacheEntryInstructionCount = instructionCount;
                         lastCacheEntryEvalCount = evalCount;
@@ -1589,7 +1613,7 @@ public partial class PineVM : ICancellablePineVM
                             Identity: currentFrame.Identity,
                             currentFrame.InputValues,
                             Counters: frameOrigins.Total,
-                            ReturnValue: frameReturnValue,
+                            ReturnValue: Canonical(),
                             ExpressionStackTrace: CompileStackTrace(10))
                         {
                             CountersByOrigin = frameOrigins
@@ -1606,7 +1630,7 @@ public partial class PineVM : ICancellablePineVM
                         Identity: _expressionEncodingCache.GetIdentity(rootExpression),
                         Input: rootStackFrameInput,
                         Counters: CurrentCounters(),
-                        ReturnValue: frameReturnValue,
+                        ReturnValue: Canonical(),
                         ExpressionStackTrace: [])
                     {
                         CountersByOrigin = CurrentCountersByOrigin()
@@ -1615,7 +1639,7 @@ public partial class PineVM : ICancellablePineVM
 
             var previousFrame = stack.Peek();
 
-            previousFrame.ReturnFromChildFrame(frameReturnValue);
+            CompleteInvocation(previousFrame, result);
 
             return null;
         }
@@ -2689,7 +2713,11 @@ public partial class PineVM : ICancellablePineVM
                     case StackInstructionKind.Return:
                         {
                             var frameReturnValue =
-                                currentFrame.PopTopmostFromStack();
+                                new InvocationResult(
+                                    currentFrame.Instructions.ReturnLayout,
+                                    currentFrame.StackValues.Slice(
+                                        currentFrame.StackPointer - currentFrame.Instructions.ReturnLayout.SlotCount,
+                                        currentFrame.Instructions.ReturnLayout.SlotCount));
 
                             var returnOverall =
                                 ReturnFromStackFrame(frameReturnValue);
@@ -3202,6 +3230,46 @@ public partial class PineVM : ICancellablePineVM
                             }
 
                             currentFrame.InstructionPointer++;
+                            continue;
+                        }
+
+                    case StackInstructionKind.Select_Value_Const:
+                        {
+                            if (CheckCancellation() is { } cancellationError)
+                                return cancellationError;
+
+                            var key = currentFrame.PopTopmostFromStack().Evaluate();
+
+                            var map =
+                                currentInstruction.ValueMap
+                                ?? throw new Exception("Invalid operation form: Missing value map");
+
+                            if (map.TryGetValue(key, out var mappedValue))
+                            {
+                                currentFrame.PushInstructionResult(
+                                    PineValueInProcess.CreateFullyRepresented(mappedValue));
+
+                                continue;
+                            }
+
+                            if (currentInstruction.Literal is { } fallback)
+                            {
+                                currentFrame.PushInstructionResult(fallback);
+                                continue;
+                            }
+
+                            var jumpOffset =
+                                currentInstruction.JumpOffset
+                                ?? throw new Exception("Invalid operation form: Missing value map fallback");
+
+                            currentFrame.InstructionPointer += jumpOffset;
+
+                            if (jumpOffset < 0 &&
+                                IncrementLoopIterationCountAndEnforceLimits(currentFrame) is { } loopLimitError)
+                            {
+                                return loopLimitError;
+                            }
+
                             continue;
                         }
 

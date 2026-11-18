@@ -36,7 +36,7 @@ public sealed partial record PineControlFlowGraph
             throw new ArgumentException("Callee cannot be spliced into this invocation.", nameof(callee));
         }
 
-        var baseStack = call.Arguments[..^1];
+        var baseStack = call.Arguments[..^StackInstruction.GetDetails(call.Instruction).PushCount];
         var baseDepth = baseStack.Length;
 
         static int MaxValueId(PineControlFlowGraph graph)
@@ -64,6 +64,10 @@ public sealed partial record PineControlFlowGraph
 
                 switch (block.Terminator)
                 {
+                    case PineControlFlowTerminator.ValueMap valueMap:
+                        Include([valueMap.Input, valueMap.Result]);
+                        break;
+
                     case PineControlFlowTerminator.Invoke invoke:
                         Include(invoke.Inputs);
                         break;
@@ -139,7 +143,7 @@ public sealed partial record PineControlFlowGraph
 
             switch (block.Terminator)
             {
-                case PineControlFlowTerminator.Return:
+                case PineControlFlowTerminator.Return returned:
                     var stack = block.Parameters.ToList();
 
                     foreach (var operation in block.Operations)
@@ -149,15 +153,15 @@ public sealed partial record PineControlFlowGraph
                         stack.AddRange(operation.Results);
                     }
 
-                    if (stack.Count is not 1)
+                    if (stack.Count != returned.ValueCount)
                     {
-                        throw new InvalidOperationException("Inlined callee must return one value.");
+                        throw new InvalidOperationException("Inlined callee return stack does not match its return count.");
                     }
 
                     terminator =
                         new PineControlFlowTerminator.Jump(
                             call.Continuation,
-                            [.. prefix, RemapValue(stack[0])],
+                            EdgeArguments([.. stack]),
                             IsFallThrough: false);
 
                     break;
@@ -195,6 +199,19 @@ public sealed partial record PineControlFlowGraph
                                 switchCase => switchCase with { Target = oldToNew[switchCase.Target] })
                             ],
                             Arguments = EdgeArguments(switchTerminator.Arguments)
+                        };
+
+                    break;
+
+                case PineControlFlowTerminator.ValueMap valueMap:
+                    terminator =
+                        valueMap with
+                        {
+                            FallThrough = oldToNew[valueMap.FallThrough],
+                            Fallback = oldToNew[valueMap.Fallback],
+                            Arguments = EdgeArguments(valueMap.Arguments),
+                            Input = RemapValue(valueMap.Input),
+                            Result = RemapValue(valueMap.Result)
                         };
 
                     break;

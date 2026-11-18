@@ -32,12 +32,12 @@ internal static class ExpressionAnalysis
         Expression pathExpression,
         Expression rootExpression)
     {
-        if (pathExpression.ConditionCount > 0)
+        if (pathExpression.ConditionCount > rootExpression.ConditionCount)
         {
             return null;
         }
 
-        if (pathExpression.EvalCount > 0)
+        if (pathExpression.EvalCount > rootExpression.EvalCount)
         {
             return null;
         }

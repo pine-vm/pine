@@ -16,6 +16,7 @@ internal static partial class InternalExpressionCompilation
     internal sealed record StaticFunction(
         Expression PreparedExpression,
         StaticFunctionInterface Parameters,
+        ReturnValueLayout Returns,
         Lazy<StackFrameInstructions> Instructions);
 
     internal sealed class StaticDispatchCache
@@ -27,6 +28,10 @@ internal static partial class InternalExpressionCompilation
         public readonly ConcurrentDictionary<PineValue, bool> ContainsCode = new();
 
         public readonly ConcurrentDictionary<Expression, IReadOnlyList<IReadOnlyList<int>>> CodePaths = new();
+
+        public readonly ConcurrentDictionary<(Expression, PineValueClass?), Expression> Prepared = new();
+
+        public readonly ConcurrentDictionary<Expression, ReturnValueLayout> Returns = new();
     }
 
     internal sealed class StaticDispatchCompilation(
@@ -56,6 +61,11 @@ internal static partial class InternalExpressionCompilation
 
         private readonly ConcurrentDictionary<(Expression, PineValueClass), byte> _inferredFunctions = new();
 
+        private readonly ConcurrentDictionary<(Expression, PineValueClass?), Expression> _prepared =
+            sharedCache?.Prepared ?? new();
+
+        private readonly ConcurrentDictionary<Expression, ReturnValueLayout> _returns = sharedCache?.Returns ?? new();
+
         public ExpressionCompilation CompileExpression()
         {
             var generic = GetFunction(rootExpression, null).Instructions.Value;
@@ -66,8 +76,7 @@ internal static partial class InternalExpressionCompilation
                 .Select(
                     constraint =>
                     ((IReadOnlyList<EnvConstraintItem>)
-                    constraint.ParsedItems
-                    .Select(item => new EnvConstraintItem(item.Key.ToArray(), item.Value)).ToArray(),
+                    [.. constraint.ParsedItems.Select(item => new EnvConstraintItem(item.Key.ToArray(), item.Value))],
                     GetFunction(rootExpression, constraint).Instructions.Value))
                 .ToArray();
 
@@ -96,27 +105,52 @@ internal static partial class InternalExpressionCompilation
                 (expression, constraint),
                 key => new Lazy<StaticFunction>(() => PrepareFunction(key.Item1, key.Item2))).Value;
 
-        private StaticFunction PrepareFunction(Expression expression, PineValueClass? constraint)
-        {
-            var prepared =
+        private Expression PrepareBody(Expression expression, PineValueClass? constraint) =>
+            _prepared.GetOrAdd(
+                (expression, constraint),
+                key =>
                 PrepareExpression(
-                    expression,
-                    constraint,
+                    key.Item1,
+                    key.Item2,
                     parseCache,
                     disableReduction,
                     skipInlining,
                     reducedExpressionCache,
                     pathMaxLowExclusive,
                     pathMaxHighInclusive,
-                    disableGenericApplicationChainConsolidation);
+                    disableGenericApplicationChainConsolidation));
+
+        private StaticFunction PrepareFunction(Expression expression, PineValueClass? constraint)
+        {
+            var prepared = PrepareBody(expression, constraint);
 
             var parameters =
                 StaticFunctionInterface.FromExpression(constraint is null ? expression : prepared);
+
+            var returns =
+                !enableDirectInvocation ||
+                ExpressionTemplatePlan.TryParseTemplate(
+                    ExpressionValueEncoding.EncodeExpressionAsValue(prepared), parseCache) is { EnvironmentCount: > 1 }
+                ?
+                ReturnValueLayout.Canonical
+                :
+                _returns.GetOrAdd(
+                    prepared,
+                    body => ReturnShapeInference.Infer(
+                        body,
+                        parseCache,
+                        (callee, encoded, environment) =>
+                        skipDirectInvocation?.Invoke(encoded) is true
+                        ?
+                        null
+                        :
+                        PrepareBody(callee, InferConstraint(callee, path => KnownValue(path, environment)))));
 
             return
                 new(
                     prepared,
                     parameters,
+                    returns,
                     new Lazy<StackFrameInstructions>(
                         () =>
                         new StackFrameInstructions(
@@ -136,8 +170,10 @@ internal static partial class InternalExpressionCompilation
                                 enableDirectInvocation,
                                 skipDirectInvocation,
                                 ResolveInvocation,
-                                prepared),
-                            constraint)));
+                                prepared,
+                                returns),
+                            constraint,
+                            returns)));
         }
 
         private DirectInvocation? ResolveInvocation(
@@ -147,12 +183,9 @@ internal static partial class InternalExpressionCompilation
         {
             var constraint = InferConstraint(expression, path => KnownValue(path, environment));
 
-            if (constraint is null)
-                return null;
-
             // Only code-bearing constants are inferred, not changing counters or captures.
             // Bound unusual programs that construct an unending sequence of different code values.
-            if (!_functions.ContainsKey((expression, constraint)))
+            if (constraint is not null && !_functions.ContainsKey((expression, constraint)))
             {
                 if (_inferredFunctions.Count >= 1_024)
                     return null;
@@ -167,6 +200,7 @@ internal static partial class InternalExpressionCompilation
                 {
                     EnvironmentConstraint = constraint,
                     PreparedExpression = target.PreparedExpression,
+                    ReturnLayout = target.Returns,
                     StaticInstructions = target.Instructions
                 };
         }
@@ -202,11 +236,12 @@ internal static partial class InternalExpressionCompilation
                         var seen = new HashSet<Expression>();
 
                         return
-                            Expression.EnumerateSelfAndDescendants(body, skipDescendants: item => !seen.Add(item))
+                            [
+                            .. Expression.EnumerateSelfAndDescendants(body, skipDescendants: item => !seen.Add(item))
                             .OfType<Expression.Eval>()
                             .Select(eval => ExpressionAnalysis.TryParseExprAsPathInEnv(eval.Encoded))
                             .OfType<IReadOnlyList<int>>()
-                            .ToArray();
+                            ];
                     });
 
             foreach (var path in StaticFunctionInterface.FromExpression(expression).ParamsPaths)

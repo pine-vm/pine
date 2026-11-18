@@ -29,7 +29,8 @@ public sealed partial record PineControlFlowGraph
         Projection = 32,
         IntegerAdd = 64,
         Literal = 128,
-        EqualityBranch = 256
+        EqualityBranch = 256,
+        ValueMap = 512
     }
 
     private sealed record BlockSummary(
@@ -42,7 +43,7 @@ public sealed partial record PineControlFlowGraph
         EmptyBlocks, JumpsToReturn, BooleanBranches, Unreachable,
         ScalarReplacement, LocalCopies, RedundantWrites, EquivalentReads,
         ListProjections, EqualityBranches, DeadStores, DiscardedValues,
-        ForwardJumps, DescendingAdditions, LocalAdditions, LiteralValues, LiteralStores
+        ForwardJumps, DescendingAdditions, LocalAdditions, LiteralValues, ValueMaps, LiteralStores
     }
 
     // This context owns only one compilation's snapshots. Nothing is attached to graph record equality.
@@ -170,6 +171,7 @@ public sealed partial record PineControlFlowGraph
 
                             StackInstructionKind.Int_Add_Const => OperationFlags.IntegerAdd,
                             StackInstructionKind.Push_Literal => OperationFlags.Literal,
+                            StackInstructionKind.Select_Value_Const => OperationFlags.ValueMap,
 
                             _ =>
                             OperationFlags.None
@@ -185,6 +187,7 @@ public sealed partial record PineControlFlowGraph
 
                     case PineControlFlowTerminator.Return:
                     case PineControlFlowTerminator.Jump:
+                    case PineControlFlowTerminator.ValueMap:
                     case PineControlFlowTerminator.Invoke:
                     case PineControlFlowTerminator.TailInvoke:
                         break;
@@ -317,6 +320,7 @@ public sealed partial record PineControlFlowGraph
 
                 OptimizationPass.EquivalentReads => Has(OperationFlags.LocalRead),
                 OptimizationPass.ListProjections => Has(OperationFlags.LocalRead | OperationFlags.Projection),
+                OptimizationPass.ValueMaps => Has(OperationFlags.ValueMap),
                 OptimizationPass.EqualityBranches => Has(OperationFlags.EqualityBranch),
                 OptimizationPass.DeadStores => (flags & (OperationFlags.LocalStore | OperationFlags.LiteralStore)) != 0,
                 OptimizationPass.DiscardedValues => Has(OperationFlags.Pop),
@@ -324,7 +328,8 @@ public sealed partial record PineControlFlowGraph
                 OptimizationPass.DescendingAdditions or OptimizationPass.LocalAdditions =>
                 Has(OperationFlags.IntegerAdd | OperationFlags.LocalRead | OperationFlags.LocalStore | OperationFlags.Pop),
 
-                OptimizationPass.LiteralValues => (flags & (OperationFlags.LocalRead | OperationFlags.Projection)) != 0,
+                OptimizationPass.LiteralValues =>
+                (flags & (OperationFlags.LocalRead | OperationFlags.Projection | OperationFlags.ValueMap)) != 0,
 
                 OptimizationPass.LiteralStores =>
                 Has(OperationFlags.Literal | OperationFlags.LocalStore | OperationFlags.Pop),
@@ -369,6 +374,7 @@ public sealed partial record PineControlFlowGraph
 
                     OptimizationPass.LocalAdditions => graph.FuseLocalIntegerAdditions(this),
                     OptimizationPass.LiteralValues => graph.FoldKnownLiteralValues(parameterCount, this),
+                    OptimizationPass.ValueMaps => graph.ComposeValueMaps(this),
                     OptimizationPass.LiteralStores => graph.FuseLiteralLocalStores(this),
 
                     _ =>
@@ -395,9 +401,11 @@ public sealed partial record PineControlFlowGraph
                     OptimizationPass.EmptyBlocks, OptimizationPass.JumpsToReturn,
                     OptimizationPass.BooleanBranches, OptimizationPass.Unreachable,
                     OptimizationPass.ScalarReplacement, OptimizationPass.LocalCopies,
+                    OptimizationPass.ValueMaps,
                     OptimizationPass.RedundantWrites, OptimizationPass.EquivalentReads,
                     OptimizationPass.ListProjections, OptimizationPass.EqualityBranches,
                     OptimizationPass.DeadStores, OptimizationPass.RedundantWrites,
+                    OptimizationPass.ValueMaps,
                     OptimizationPass.DiscardedValues, OptimizationPass.DeadStores,
                     OptimizationPass.RedundantWrites, OptimizationPass.DiscardedValues,
                     OptimizationPass.ForwardJumps, OptimizationPass.Unreachable,
@@ -409,6 +417,20 @@ public sealed partial record PineControlFlowGraph
 
             foreach (var pass in order)
                 graph = Apply(graph, pass, parameterCount);
+
+            // Removing an outer envelope can expose a nested value as non-escaping.
+            while (true)
+            {
+                var scalarized = Apply(graph, OptimizationPass.ScalarReplacement, parameterCount);
+
+                if (ReferenceEquals(scalarized, graph))
+                    break;
+
+                graph = scalarized;
+
+                foreach (var pass in order)
+                    graph = Apply(graph, pass, parameterCount);
+            }
 
             return graph;
         }

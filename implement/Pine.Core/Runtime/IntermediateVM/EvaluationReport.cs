@@ -127,7 +127,7 @@ public record EvaluationReport(
 
     /// <summary>Materializes the captured canonical stack only when requested.</summary>
     public IReadOnlyList<Expression> StackTrace =>
-        ExpressionStackTrace.Select(identity => identity.CanonicalExpression).ToArray();
+        [.. ExpressionStackTrace.Select(identity => identity.CanonicalExpression)];
 
     /// <summary>Disjoint work totals for this evaluation, including work performed by direct interpreters.</summary>
     public EvalWorkCountersByOrigin CountersByOrigin { get; init; }

@@ -27,7 +27,7 @@ public class PineValueCompositionTests
             var subtree = PineValue.List([blob, PineValue.EmptyList, PineValue.Blob([1, 2, 3])]);
 
             var equalSubtree =
-                PineValue.List([PineValue.Blob(bytes.ToArray()), PineValue.EmptyList, PineValue.Blob([1, 2, 3])]);
+                PineValue.List([PineValue.Blob([.. bytes]), PineValue.EmptyList, PineValue.Blob([1, 2, 3])]);
 
             var value = PineValue.List([subtree, subtree, equalSubtree, blob, PineValue.EmptyBlob]);
 

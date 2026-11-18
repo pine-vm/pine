@@ -387,7 +387,8 @@ public class CompileExpressionTests
             instruction =>
             instruction.Kind is
             StackInstructionKind.Switch_Jump_If_Slice_Skip_Var_Equal_Const)
-            .SliceSwitchCases.Should().Equal(switchInstruction.SliceSwitchCases);
+            .SliceSwitchCases.Select(item => item.Literal).Should().Equal(
+            switchInstruction.SliceSwitchCases.Select(item => item.Literal));
 
         var instructionDetails = StackInstruction.GetDetails(switchInstruction);
 

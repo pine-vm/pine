@@ -81,6 +81,7 @@ internal static partial class InternalExpressionCompilation
     /// <param name="skipDirectInvocation">Optional predicate identifying values that should skip direct invocation.</param>
     /// <param name="resolveStaticInvocation">Resolves constrained callees without compiling their bodies recursively.</param>
     /// <param name="preparedExpression">An already reduced expression for this environment constraint.</param>
+    /// <param name="returnLayout">The proven canonical reconstruction recipe for returned stack slots.</param>
     public static IReadOnlyList<StackInstruction> InstructionsFromExpressionTransitive(
         Expression rootExpression,
         PineValueClass? envConstraintId,
@@ -96,7 +97,8 @@ internal static partial class InternalExpressionCompilation
         bool enableDirectInvocation = true,
         Func<PineValue, bool>? skipDirectInvocation = null,
         Func<Expression, PineValue, Expression, DirectInvocation?>? resolveStaticInvocation = null,
-        Expression? preparedExpression = null)
+        Expression? preparedExpression = null,
+        ReturnValueLayout? returnLayout = null)
     {
         var reducedExpression =
             preparedExpression ??
@@ -121,7 +123,8 @@ internal static partial class InternalExpressionCompilation
                 enableTailRecursionOptimization,
                 enableDirectInvocation,
                 skipDirectInvocation,
-                resolveStaticInvocation);
+                resolveStaticInvocation,
+                returnLayout);
 
         var optimizedGraph =
             enableTailRecursionOptimization
@@ -291,7 +294,8 @@ internal static partial class InternalExpressionCompilation
                     parseCache,
                     enableTailRecursionOptimization: true,
                     enableDirectInvocation,
-                    skipDirectInvocation);
+                    skipDirectInvocation,
+                    returnLayout: direct.ReturnLayout);
 
             var callee =
                 InlineStaticInvocations(
@@ -1256,7 +1260,8 @@ internal static partial class InternalExpressionCompilation
         bool enableTailRecursionOptimization = false,
         bool enableDirectInvocation = true,
         Func<PineValue, bool>? skipDirectInvocation = null,
-        Func<Expression, PineValue, Expression, DirectInvocation?>? resolveStaticInvocation = null)
+        Func<Expression, PineValue, Expression, DirectInvocation?>? resolveStaticInvocation = null,
+        ReturnValueLayout? returnLayout = null)
     {
         var compiled =
             InternalPineIRCompiler.CompileExpression(
@@ -1268,9 +1273,10 @@ internal static partial class InternalExpressionCompilation
                 enableTailRecursionOptimization,
                 enableDirectInvocation,
                 skipDirectInvocation,
-                resolveStaticInvocation);
+                resolveStaticInvocation,
+                returnLayout);
 
-        return PineControlFlowGraph.FromFragment(compiled.Fragment);
+        return PineControlFlowGraph.FromFragment(compiled.Fragment, returnLayout?.SlotCount ?? 1);
     }
 
     /// <summary>

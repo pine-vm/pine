@@ -428,12 +428,14 @@ public class ExpressionCompiledCallbackTests
         var rootExpression =
             new Expression.Eval(
                 encoded:
-                Expression.LitralInst(
-                    ExpressionEncoding.EncodeExpressionAsValue(Expression.EnvironmentInstance)),
+                Expression.EnvironmentInstance,
                 environment:
                 Expression.LitralInst(nestedEnvironment));
 
-        var result = vm.EvaluateExpression(rootExpression, PineValue.EmptyBlob);
+        var result =
+            vm.EvaluateExpression(
+                rootExpression,
+                ExpressionEncoding.EncodeExpressionAsValue(Expression.EnvironmentInstance));
 
         result.IsOkOrNull().Should().Be(nestedEnvironment);
 

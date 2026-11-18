@@ -11,5 +11,6 @@ Push_Literal (Blob [2] (int 19))
 Jump_Const (3)
 Local_Get ([ 0 ])
 Eval_Const (Blob [2] (int 43))
-Build_List (2)
-Return
+Local_Set ([ 3, 2 ]), Pop(2)
+Local_Get ([ 2, 3 ])
+Return (2)

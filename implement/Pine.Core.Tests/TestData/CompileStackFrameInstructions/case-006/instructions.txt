@@ -5,5 +5,6 @@ Build_List (2)
 Local_Get ([ 0 ])
 Eval_Binary
 Push_Literal (Blob [0] (0x | hash 0x473a0f4c))
-Build_List (2)
+Local_Set ([ 3, 2 ]), Pop(2)
+Local_Get ([ 2 ])
 Return

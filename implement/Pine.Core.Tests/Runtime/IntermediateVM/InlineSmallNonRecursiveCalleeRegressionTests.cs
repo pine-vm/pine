@@ -403,7 +403,8 @@ public class InlineSmallNonRecursiveCalleeRegressionTests
                 rootIR.Contains("Int_Unsigned_Less_Than_Or_Equal_Const (122)");
 
             var fullyConstantFolded =
-                rootIR.Contains("Push_Literal") && rootIR.Contains("Return");
+                (rootIR.Contains("Push_Literal") || rootCompiled.Compilation.Generic.ReturnLayout.SlotCount == 0) &&
+                rootIR.Contains("Return");
 
             (hasInlinedRangeChecks || fullyConstantFolded)
                 .Should().BeTrue(

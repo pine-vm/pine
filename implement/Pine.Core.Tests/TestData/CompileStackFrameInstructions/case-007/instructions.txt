@@ -4,6 +4,6 @@ Push_Literal (Blob [2] (int 23))
 Jump_Const (2)
 Push_Literal (Blob [2] (int 21))
 Push_Literal (Blob [2] (int 27))
-Build_List_With_Prefix (1, 2)
-  Blob [2] (int 17)
+Local_Set ([ 3, 2 ]), Pop(2)
+Local_Get ([ 2 ])
 Return

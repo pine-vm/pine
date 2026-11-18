@@ -4,6 +4,7 @@ using Pine.Core.PineLanguage;
 using Pine.Core.Runtime.IntermediateVM;
 using System;
 using System.Linq;
+using System.Runtime.CompilerServices;
 using Xunit;
 
 namespace Pine.Core.Tests.Elm.ElmCompilerInDotnet;
@@ -288,21 +289,20 @@ public class SequentialIREfficiencyTests
 
         renderedFrame.Should().Be(
             """
-            expr-0x658be8d6-no-constraint (9):
+            expr-0x658be8d6-no-constraint (10):
             0: Local_Get_Skip_Head_Const ([ 0 ], 2)
             1: Take_Const (4)
-            2: Local_Set ([ 1 ])
-            3: Switch_Jump_If_Equal_Const (2)
-              case Blob [4] (0x00000041 | UTF32 "A"): jump (4, 7)
-              case Blob [4] (0x00000042 | UTF32 "B"): jump (4, 7)
-            4: Local_Get ([ 1 ])
-            5: Build_List_With_Prefix (2, 1)
-              Blob [32] (0x0000003c00000043000000680000006f0000006900000063000000650000003e | UTF32 "\u003CChoice\u003E")
-              Blob [24] (0x000000530000007400000072000000690000006e00000067 | UTF32 "String")
-            6: Return
-            jumps_arriving_from 1 (3)
-            7: Push_Literal (List [3] (3 | hash 0xe24c06b3))
-            8: Return
+            2: Switch_Jump_If_Equal_Const (2)
+              case Blob [4] (0x00000041 | UTF32 "A"): jump (6, 8)
+              case Blob [4] (0x00000042 | UTF32 "B"): jump (6, 8)
+            3: Local_Get_Skip_Head_Const ([ 0 ], 2)
+            4: Take_Const (4)
+            5: Local_Set ([ 2 ]), Pop(1)
+            6: Local_Get ([ 2 ])
+            7: Return
+            jumps_arriving_from 1 (2)
+            8: Push_Literal (Blob [12] (0x000000790000006500000073 | UTF32 "yes"))
+            9: Return
             """);
     }
 
@@ -436,16 +436,15 @@ public class SequentialIREfficiencyTests
 
         renderedFrame.Should().Be(
             """
-            expr-0x0dbec914-no-constraint (7):
+            expr-0x0dbec914-no-constraint (8):
             0: Local_Get ([ 2, 1 ])
             1: Int_Mul_Const (4)
             2: Local_Get ([ 0 ])
             3: Int_Mul_Const (4)
             4: Slice_Skip_Var_Take_Var
-            5: Build_List_With_Prefix (2, 1)
-              Blob [32] (0x0000003c00000043000000680000006f0000006900000063000000650000003e | UTF32 "\u003CChoice\u003E")
-              Blob [24] (0x000000530000007400000072000000690000006e00000067 | UTF32 "String")
-            6: Return
+            5: Local_Set ([ 4 ]), Pop(1)
+            6: Local_Get ([ 4 ])
+            7: Return
             """);
     }
 
@@ -484,20 +483,20 @@ public class SequentialIREfficiencyTests
 
         renderedFrame.Should().Be(
             """
-            expr-0x8f52db35-no-constraint (5):
+            expr-0x8f52db35-no-constraint (6):
             0: Local_Get ([ 1, 0 ])
             1: Int_Mul_Const (4)
             2: Slice_Skip_Var_Take_Const (12)
-            3: Build_List_With_Prefix (2, 1)
-              Blob [32] (0x0000003c00000043000000680000006f0000006900000063000000650000003e | UTF32 "\u003CChoice\u003E")
-              Blob [24] (0x000000530000007400000072000000690000006e00000067 | UTF32 "String")
-            4: Return
+            3: Local_Set ([ 3 ]), Pop(1)
+            4: Local_Get ([ 3 ])
+            5: Return
             """);
     }
 
     private static string RenderFrame(
         Expression rootExpression,
-        PineVMParseCache parseCache)
+        PineVMParseCache parseCache,
+        [CallerMemberName] string memberName = "")
     {
         var frameInstructions =
             ExpressionCompilation.CompileExpression(
@@ -509,11 +508,13 @@ public class SequentialIREfficiencyTests
                 skipInlining: (_, _) => false).Generic;
 
         return
-            string.Concat(
-                StackInstructionTraceRenderer.RenderStackFrameIdentifier(rootExpression, frameInstructions),
-                " (",
-                frameInstructions.Instructions.Count.ToString(),
-                "):\n",
-                StackInstructionTraceRenderer.RenderStackFrameInstructions(frameInstructions));
+            SnapshotRecorder.LogString(
+                string.Concat(
+                    StackInstructionTraceRenderer.RenderStackFrameIdentifier(rootExpression, frameInstructions),
+                    " (",
+                    frameInstructions.Instructions.Count.ToString(),
+                    "):\n",
+                    StackInstructionTraceRenderer.RenderStackFrameInstructions(frameInstructions)),
+                memberName);
     }
 }

@@ -2,6 +2,7 @@ using Pine.Core.Addressing;
 using Pine.Core.CodeAnalysis;
 using Pine.Core.Encodings;
 using Pine.Core.Functional;
+using Pine.Core.Internal;
 using Pine.Core.IO;
 using Pine.Core.PineLanguage;
 using Pine.Core.PineVM;
@@ -320,6 +321,147 @@ public sealed class PersistentInvocationCacheAccess : IInvocationCacheAccess
     }
 
     /// <inheritdoc/>
+    public bool TryGetResult(EvalCacheEntryKey key, ReturnValueLayout layout, out InvocationResult result)
+    {
+        if (ReferenceEquals(layout, ReturnValueLayout.Canonical))
+        {
+            if (TryGet(key, out var canonical))
+            {
+                result = new(PineValueInProcess.Create(canonical));
+                return true;
+            }
+
+            result = default;
+            return false;
+        }
+
+        if (_memoryCache?.TryGetResult(key, layout, out result) is true)
+            return true;
+
+        if (BuildPersistentFileName(key) is not { } name ||
+            _fileStore.GetFileContent([name + "_return1_" + layout.Hash]) is not { } content)
+        {
+            result = default;
+            return false;
+        }
+
+        using var stream = new MemoryStream(content.ToArray(), writable: false);
+        using var reader = new BinaryReader(stream);
+        var slots = new PineValueInProcess?[layout.SlotCount];
+        Array.Fill(slots, PineValueInProcess.EmptyList);
+
+        void Read(ReturnValueLayout.Node node)
+        {
+            switch (node)
+            {
+                case ReturnValueLayout.Node.Fixed:
+                    break;
+
+                case ReturnValueLayout.Node.Component component:
+                    slots[component.Index] = ReadComponent();
+
+                    if (!component.Values.IsEmpty)
+                        layout.Slots[component.Index].KeyIndex(slots[component.Index]!);
+
+                    break;
+
+                case ReturnValueLayout.Node.List list:
+                    foreach (var item in list.Items)
+                        Read(item);
+
+                    break;
+
+                case ReturnValueLayout.Node.Variant variant:
+                    slots[variant.Index] = ReadComponent();
+                    Read(variant.Cases[layout.Slots[variant.Index].KeyIndex(slots[variant.Index]!)]);
+                    break;
+
+                default:
+                    throw new NotImplementedException("TryGetResult does not handle return node: " + node.GetType().Name);
+            }
+        }
+
+        PineValueInProcess ReadComponent()
+        {
+            var size = reader.ReadInt32();
+
+            if (size < 0 || size > stream.Length - stream.Position)
+                throw new FormatException("Invalid persisted return component length.");
+
+            var encoded = reader.ReadBytes(size);
+
+            return
+                PineValueInProcess.Create(
+                    PineTreeBinaryEncoding.DecodeRoot(encoded)
+                    .Extract(error => throw new FormatException("Invalid persisted return component: " + error)));
+        }
+
+        Read(layout.Recipe);
+
+        if (stream.Position != stream.Length)
+            throw new FormatException("Unexpected bytes following persisted return components.");
+
+        result = new(layout, slots);
+        return true;
+    }
+
+    /// <inheritdoc/>
+    public bool TryAddResult(EvalCacheEntryKey key, in InvocationResult result)
+    {
+        if (ReferenceEquals(result.Layout, ReturnValueLayout.Canonical))
+            return TryAdd(key, result.Materialize().Evaluate());
+
+        if (BuildPersistentFileName(key) is not { } name)
+            return _memoryCache?.TryAddResult(key, result) ?? false;
+
+        using var stream = new MemoryStream();
+        using var writer = new BinaryWriter(stream);
+        var borrowed = result;
+
+        void WriteComponent(int index)
+        {
+            var start = stream.Position;
+            writer.Write(0);
+            PineTreeBinaryEncoding.Encode(stream, borrowed.Component(index).Evaluate());
+            var end = stream.Position;
+            stream.Position = start;
+            writer.Write(checked((int)(end - start - sizeof(int))));
+            stream.Position = end;
+        }
+
+        void Write(ReturnValueLayout.Node node)
+        {
+            switch (node)
+            {
+                case ReturnValueLayout.Node.Fixed:
+                    break;
+
+                case ReturnValueLayout.Node.Component component:
+                    WriteComponent(component.Index);
+                    break;
+
+                case ReturnValueLayout.Node.List list:
+                    foreach (var item in list.Items)
+                        Write(item);
+
+                    break;
+
+                case ReturnValueLayout.Node.Variant variant:
+                    WriteComponent(variant.Index);
+                    Write(variant.Cases[borrowed.Layout.Slots[variant.Index].KeyIndex(borrowed.Component(variant.Index))]);
+                    break;
+
+                default:
+                    throw new NotImplementedException("TryAddResult does not handle return node: " + node.GetType().Name);
+            }
+        }
+
+        Write(result.Layout.Recipe);
+        _fileStore.SetFileContent([name + "_return1_" + result.Layout.Hash], stream.ToArray());
+        return true;
+    }
+
+    /// <inheritdoc/>
     public void Merge(IReadOnlyDictionary<EvalCacheEntryKey, PineValue> entries)
     {
         _memoryCache?.Merge(entries);
@@ -412,6 +554,25 @@ public sealed class PersistentInvocationCacheAccess : IInvocationCacheAccess
 /// </summary>
 public interface IInvocationCacheAccess
 {
+    /// <summary>Reads a result using the selected return layout when supported.</summary>
+    bool TryGetResult(EvalCacheEntryKey key, ReturnValueLayout layout, out InvocationResult result)
+    {
+        if (TryGet(key, out var value))
+        {
+            result = new(PineValueInProcess.Create(value));
+            return true;
+        }
+
+        result = default;
+        return false;
+    }
+
+    /// <summary>
+    /// Consumes a borrowed return-slot view synchronously. Legacy caches request its canonical value.
+    /// </summary>
+    bool TryAddResult(EvalCacheEntryKey key, in InvocationResult result) =>
+        TryAdd(key, result.Materialize().Evaluate());
+
     /// <summary>
     /// Optional publication version for caching negative expression-membership answers.
     /// Every change that can make a previous negative positive must advance this version

@@ -91,7 +91,8 @@ public abstract record PineControlFlowNode
         /// </summary>
         public Operation(StackInstruction instruction)
         {
-            if (IsControlTransfer(instruction.Kind))
+            if (IsControlTransfer(instruction.Kind) ||
+                instruction.Kind is StackInstructionKind.Select_Value_Const && instruction.JumpOffset is not null)
             {
                 throw new ArgumentException(
                     "Control transfers must be modeled structurally, not as operation: " + instruction.Kind,
@@ -115,7 +116,8 @@ public abstract record PineControlFlowNode
     public sealed record Conditional(
         PineValue Literal,
         PineControlFlowFragment FallThrough,
-        PineControlFlowFragment Branch)
+        PineControlFlowFragment Branch,
+        int ResultCount = 1)
         : PineControlFlowNode;
 
     /// <summary>
@@ -129,8 +131,18 @@ public abstract record PineControlFlowNode
         ImmutableArray<PineSwitchFragmentCase> Cases,
         PineControlFlowFragment Default,
         ImmutableArray<PineControlFlowFragment> Branches,
-        BigInteger SkipCountMultiplier)
+        BigInteger SkipCountMultiplier,
+        int ResultCount = 1)
         : PineControlFlowNode;
+
+    /// <summary>
+    /// Pops a key and produces its mapped value, or executes <see cref="Fallback"/> on a miss.
+    /// The fallback must produce one value or end in a control transfer.
+    /// Lowering retains a single value-map instruction with a structural missing-key edge.
+    /// </summary>
+    public sealed record ValueMap(
+        ImmutableDictionary<PineValue, PineValue> Map,
+        PineControlFlowFragment Fallback) : PineControlFlowNode;
 
     /// <summary>
     /// Transfers control to the start of the frame (loop back-edge). The evaluation stack must be empty.
