@@ -115,9 +115,6 @@ parseExpressionFromValue value =
                             ( "Conditional", [ condition, falseBranch, trueBranch ] ) ->
                                 parseConditional condition falseBranch trueBranch
 
-                            ( "Condition", [ condition, falseBranch, trueBranch ] ) ->
-                                parseConditional condition falseBranch trueBranch
-
                             ( "Environment", [] ) ->
                                 Ok EnvironmentExpression
 

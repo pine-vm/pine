@@ -1,4 +1,6 @@
+using Pine.Core.Functional;
 using Pine.Core.PineLanguage;
+using System;
 using System.Collections.Concurrent;
 
 namespace Pine.Core.Runtime.IntermediateVM;
@@ -29,23 +31,33 @@ public sealed class PineVMExpressionEncodingCache
         _entries.GetOrAdd(expression, static expression => new(expression));
 
     /// <summary>
-    /// Registers an encoded value that was successfully parsed as the supplied expression.
+    /// Registers a standard compact encoding of the supplied expression. Legacy or mismatched
+    /// encodings are rejected, without changing the public legacy expression codecs.
     /// </summary>
     public void RegisterParsedEncoding(
         Expression expression,
         PineValue encodedExpression)
-        =>
-        RegisterParsedEncoding(
-            InternalExpression.ExpressionConversion.FromCanonicalCached(expression),
-            encodedExpression);
+    {
+        var retained = InternalExpression.ExpressionConversion.FromCanonicalCached(expression);
+        var parsed = InternalExpression.ExpressionValueEncoding.ParseExpressionFromValue(encodedExpression);
+
+        if (parsed.IsErrOrNull() is { } error)
+            throw new ArgumentException("Invalid compact expression encoding: " + error, nameof(encodedExpression));
+
+        if (!retained.Equals(parsed.IsOkOrNull()))
+        {
+            throw new ArgumentException(
+                "The encoding does not match the supplied expression.",
+                nameof(encodedExpression));
+        }
+
+        RegisterParsedEncoding(retained, encodedExpression);
+    }
 
     internal void RegisterParsedEncoding(
         InternalExpression.Expression expression,
         PineValue encodedExpression)
     {
-        if (_entries.TryGetValue(expression, out _))
-            return;
-
-        _entries.TryAdd(expression, new(expression, encodedExpression));
+        GetIdentity(expression).RegisterEncodedValue(encodedExpression);
     }
 }

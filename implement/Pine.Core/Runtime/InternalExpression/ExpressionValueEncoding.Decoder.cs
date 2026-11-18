@@ -45,8 +45,9 @@ public static partial class ExpressionValueEncoding
     private readonly record struct Work(PineValue Node, Shape Shape = default, bool Expanded = false);
 
     /// <summary>
-    /// Parses 2026 canonical values directly, retaining payloads and shared children.
-    /// Fusion skips discarded builtin/list/literal wrappers. Errors are returned explicitly.
+    /// Parses only the standard compact encoding, retaining exact payloads and shared children.
+    /// Re-encoding every successful result is structurally equal to the input, including fused
+    /// builtin/list/literal wrappers. Alternate tags and legacy name strings are rejected.
     /// </summary>
     public static Result<string, Expression> ParseExpressionFromValue(PineValue value, bool fusePopularShapes = true)
     {
@@ -173,7 +174,7 @@ public static partial class ExpressionValueEncoding
                 "Invalid Eval arity.";
         }
 
-        if (tag.Equals(s_conditionalTag) || tag.Equals(s_conditionTag))
+        if (tag.Equals(s_conditionalTag))
         {
             return
                 fields.Length is 3
@@ -196,23 +197,11 @@ public static partial class ExpressionValueEncoding
             if (fields.Length != 2)
                 return "Invalid builtin arity.";
 
-            var function = Array.IndexOf(s_builtinNames, fields.Span[0]);
-
-            if (function < 0)
-            {
-                var name = StringEncoding.StringFromValueWithoutResultAllocation(fields.Span[0]);
-
-                if (!name.IsOk)
-                    return "Invalid builtin name: " + name.Error;
-
-                if (!BuiltinFunctions.TryFromName(name.Value!, out var identifier))
-                    return "Unknown Pine builtin function: " + name.Value;
-
-                function = (int)identifier;
-            }
+            if (!TryParseBuiltinName(fields.Span[0], out var function))
+                return "Unknown Pine builtin function or noncanonical name.";
 
             var input = fields.Span[1];
-            var builtin = new Shape(Kind.Builtin, First: input, Function: (BuiltinFunction)function);
+            var builtin = new Shape(Kind.Builtin, First: input, Function: function);
             return fuse ? Fuse(builtin) : builtin;
         }
 

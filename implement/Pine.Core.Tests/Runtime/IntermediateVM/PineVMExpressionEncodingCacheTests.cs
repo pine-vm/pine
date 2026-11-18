@@ -12,21 +12,20 @@ namespace Pine.Core.Tests.Runtime.IntermediateVM;
 public class PineVMExpressionEncodingCacheTests
 {
     [Fact]
-    public void Repeated_registration_preserves_existing_encoding()
+    public void Parsed_encodings_populate_existing_identities_without_materializing_views()
     {
         var cache = new PineVMExpressionEncodingCache();
-        var expression = Expression.EnvironmentInstance;
-        var firstEncoding = ExpressionEncoding2024.EncodeExpressionAsValue(expression);
-        var secondEncoding = ExpressionEncoding2026.EncodeExpressionAsValue(expression);
-
-        cache.RegisterParsedEncoding(expression, firstEncoding);
-        cache.RegisterParsedEncoding(expression, secondEncoding);
-
-        cache.Count.Should().Be(1);
+        var expression = Expression.BuiltinInst("length", Expression.EnvironmentInstance);
 
         var identity =
             cache.GetIdentity(Core.Runtime.InternalExpression.ExpressionConversion.FromCanonicalCached(expression));
 
+        var firstEncoding = ExpressionEncoding2026.EncodeExpressionAsValue(expression);
+        var secondEncoding = new PineValue.ListValue(firstEncoding.Items.ToArray());
+        cache.RegisterParsedEncoding(expression, firstEncoding);
+        cache.RegisterParsedEncoding(expression, secondEncoding);
+        cache.Count.Should().Be(1);
+        cache.GetIdentity(identity.InternalExpression).Should().BeSameAs(identity);
         identity.IsCanonicalExpressionCreated.Should().BeFalse();
         identity.IsEncodedValueCreated.Should().BeFalse();
         identity.IsHashCreated.Should().BeFalse();
@@ -36,6 +35,26 @@ public class PineVMExpressionEncodingCacheTests
 
         identity.HashBase16.Should().Be(
             Convert.ToHexStringLower(PineValueHashFlat.ComputeHashForValue(firstEncoding).hashBytes.Span));
+    }
+
+    [Fact]
+    public void Public_registration_rejects_legacy_and_mismatched_values_without_poisoning_the_cache()
+    {
+        var expression = Expression.EnvironmentInstance;
+        var cache = new PineVMExpressionEncodingCache();
+
+        foreach (var invalid in new[]
+        {
+            ExpressionEncoding2024.EncodeExpressionAsValue(expression),
+            ExpressionEncoding2026.EncodeExpressionAsValue(Expression.EmptyList)
+        })
+        {
+            Action register = () => cache.RegisterParsedEncoding(expression, invalid);
+            register.Should().Throw<ArgumentException>();
+            cache.Count.Should().Be(0);
+        }
+
+        cache.GetOrEncode(expression).Should().Be(ExpressionEncoding2026.EncodeExpressionAsValue(expression));
     }
 
     [Fact]
@@ -64,6 +83,7 @@ public class PineVMExpressionEncodingCacheTests
             32,
             _ =>
             {
+                cache.RegisterParsedEncoding(expression, expectedValue);
                 cache.GetIdentity(expression).Should().BeSameAs(identity);
                 identity.HashBase16.Should().Be(expectedHash);
                 identity.CanonicalExpression.Should().Be(canonical);

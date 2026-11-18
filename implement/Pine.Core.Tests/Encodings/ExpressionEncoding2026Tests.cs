@@ -221,6 +221,19 @@ public class ExpressionEncoding2026Tests
                 PineValue.List([StringEncoding.ValueFromString("Litral")]),
                 PineValue.List(
                     [
+                    StringEncoding.ValueFromString("Condition"),
+                    ExpressionEncoding2026.EncodeExpressionAsValue(s_literal),
+                    ExpressionEncoding2026.EncodeExpressionAsValue(s_literal),
+                    ExpressionEncoding2026.EncodeExpressionAsValue(s_literal)
+                    ]),
+                PineValue.List(
+                    [
+                    StringEncoding.ValueFromString("Builtin"),
+                    StringEncoding.ValueFromString_2024("length"),
+                    ExpressionEncoding2026.EncodeExpressionAsValue(s_literal)
+                    ]),
+                PineValue.List(
+                    [
                     StringEncoding.ValueFromString("Builtin"),
                     StringEncoding.ValueFromString("length")
                     ]),

@@ -263,10 +263,11 @@ public class ExpressionCompiledCallbackTests
     }
 
     [Fact]
-    public void Invocation_reports_preserve_distinct_encodings_sharing_one_compilation()
+    public void Equal_invoked_values_share_the_compilation_identity_and_lazy_views()
     {
         var reports = new List<EvaluationReport>();
         var compilations = new ConcurrentExpressionCompilationCache();
+        var encodings = new PineVMExpressionEncodingCache();
 
         var child =
             Expression.ConditionalInst(
@@ -275,15 +276,9 @@ public class ExpressionCompiledCallbackTests
                 Expression.LitralInst(PineValue.EmptyList));
 
         var canonicalValue = ExpressionEncoding.EncodeExpressionAsValue(child);
-
-        var aliasValue =
-            PineValue.List(
-                [
-                    StringEncoding.ValueFromString("Condition"),
-                    ExpressionEncoding.EncodeExpressionAsValue(child.Condition),
-                    ExpressionEncoding.EncodeExpressionAsValue(child.FalseBranch),
-                    ExpressionEncoding.EncodeExpressionAsValue(child.TrueBranch)
-                ]);
+        var equalValue = new PineValue.ListValue(canonicalValue.Items.ToArray());
+        var identity = encodings.GetIdentity(Conversion.FromCanonicalCached(child));
+        equalValue.Should().Be(canonicalValue).And.NotBeSameAs(canonicalValue);
 
         var root =
             new Expression.Eval(
@@ -309,14 +304,18 @@ public class ExpressionCompiledCallbackTests
                 disableDirectContinueForSimpleEval: true,
                 disableDirectEvalForSimpleTemplate: true,
                 tryGetExpressionCompilation: compilations.TryGet,
-                getOrAddExpressionCompilation: compilations.GetOrAdd);
+                getOrAddExpressionCompilation: compilations.GetOrAdd,
+                expressionEncodingCache: encodings);
 
-        foreach (var encoded in new[] { canonicalValue, aliasValue })
+        foreach (var encoded in new[] { canonicalValue, equalValue })
             vm.EvaluateExpression(root, encoded).IsOkOrNull().Should().Be(PineValue.EmptyList);
 
         compilations.Count.Should().Be(2);
         reports.Should().HaveCount(2);
-        reports[0].Identity.InternalExpression.Should().Be(reports[1].Identity.InternalExpression);
+        reports[0].Identity.Should().BeSameAs(identity);
+        reports[1].Identity.Should().BeSameAs(identity);
+        compilations.TryGet(child, out var compilation).Should().BeTrue();
+        compilation.Identity.Should().BeSameAs(identity);
 
         foreach (var report in reports)
         {
@@ -326,8 +325,10 @@ public class ExpressionCompiledCallbackTests
         }
 
         reports[0].ExpressionValue.Should().BeSameAs(canonicalValue);
-        reports[1].ExpressionValue.Should().BeSameAs(aliasValue);
-        reports[0].Identity.HashBase16.Should().NotBe(reports[1].Identity.HashBase16);
+        reports[1].ExpressionValue.Should().BeSameAs(canonicalValue);
+
+        reports[0].Identity.HashBase16.Should().Be(
+            Convert.ToHexStringLower(PineValueHashFlat.ComputeHashForValue(canonicalValue).hashBytes.Span));
     }
 
     [Fact]

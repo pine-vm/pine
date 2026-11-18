@@ -16,7 +16,7 @@ public record StackFrame
 
     private ExpressionIdentity? _identity;
 
-    /// <summary>Original encoded callee identity, when available.</summary>
+    /// <summary>Already available compact callee encoding, when supplied by execution.</summary>
     public PineValue? ExpressionValue { get; init; }
 
     /// <summary>Public canonical view, materialized only for consumers that request it.</summary>
@@ -86,7 +86,11 @@ public record StackFrame
         ApplyStepwise? Specialization)
     {
         this.ExpressionValue = ExpressionValue;
-        _identity = ExpressionValue is null ? Identity : Identity.WithEncodedValue(ExpressionValue);
+        _identity = Identity;
+
+        if (ExpressionValue is not null)
+            Identity.RegisterEncodedValue(ExpressionValue);
+
         this.Instructions = Instructions;
         this.InputValues = InputValues;
         this.StackValues = StackValues;

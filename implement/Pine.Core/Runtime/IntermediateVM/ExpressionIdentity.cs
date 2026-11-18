@@ -1,6 +1,7 @@
 using Pine.Core.Addressing;
 using Pine.Core.PineLanguage;
 using System;
+using System.Threading;
 
 using Retained = Pine.Core.Runtime.InternalExpression.Expression;
 
@@ -18,7 +19,7 @@ public sealed class ExpressionIdentity
 
     private readonly Lazy<string> _hashBase16;
 
-    private readonly PineValue? _originalEncodedValue;
+    private PineValue? _knownEncodedValue;
 
     /// <summary>The immutable runtime expression; accessing it performs no conversion.</summary>
     public Retained InternalExpression { get; }
@@ -26,7 +27,7 @@ public sealed class ExpressionIdentity
     /// <summary>Materializes the canonical expression model on demand.</summary>
     public Expression CanonicalExpression => _canonicalExpression.Value;
 
-    /// <summary>Returns the original parsed value, when supplied, or encodes the runtime expression on demand.</summary>
+    /// <summary>Returns an already available compact encoding, or encodes the runtime expression on demand.</summary>
     public PineValue EncodedValue => _encodedValue.Value;
 
     /// <summary>Computes the canonical encoded-value SHA-256, not an internal-representation hash, on demand.</summary>
@@ -42,12 +43,13 @@ public sealed class ExpressionIdentity
     {
         ArgumentNullException.ThrowIfNull(expression);
         InternalExpression = expression;
-        _originalEncodedValue = encodedValue;
+        _knownEncodedValue = encodedValue;
         _canonicalExpression = new(() => Runtime.InternalExpression.ExpressionConversion.ToCanonicalCached(expression));
 
         _encodedValue =
             new(
-                () => encodedValue ?? Runtime.InternalExpression.ExpressionValueEncoding.EncodeExpressionAsValue(expression));
+                () => Volatile.Read(ref _knownEncodedValue) ??
+                    Runtime.InternalExpression.ExpressionValueEncoding.EncodeExpressionAsValue(expression));
 
         _hashBase16 =
             new(
@@ -58,8 +60,11 @@ public sealed class ExpressionIdentity
     public static ExpressionIdentity FromCanonical(Expression expression) =>
         new(Runtime.InternalExpression.ExpressionConversion.FromCanonicalCached(expression));
 
-    internal ExpressionIdentity WithEncodedValue(PineValue encodedValue) =>
-        ReferenceEquals(_originalEncodedValue, encodedValue) ? this : new(InternalExpression, encodedValue);
+    internal void RegisterEncodedValue(PineValue encodedValue)
+    {
+        if (!_encodedValue.IsValueCreated)
+            Interlocked.CompareExchange(ref _knownEncodedValue, encodedValue, null);
+    }
 
     internal bool IsCanonicalExpressionCreated => _canonicalExpression.IsValueCreated;
 

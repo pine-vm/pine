@@ -126,7 +126,6 @@ decodingTests =
             [ ( "Litral", [ ListValue [] ] )
             , ( "Builtin", [ Pine.valueFromString "head", environment ] )
             , ( "Conditional", [ literal, environment, environment ] )
-            , ( "Condition", [ literal, environment, environment ] )
             , ( "Environment", [] )
             , ( "Eval", [ literal, environment ] )
             , ( "Label", [ malformed, environment ] )
@@ -155,6 +154,7 @@ decodingTests =
                 , ListValue [ BlobValue [ 0 ] ]
                 , tagged "Unknown" []
                 , tagged "Literal" [ ListValue [] ]
+                , tagged "Condition" [ literal, environment, environment ]
                 , tagged "KernelApplication" [ Pine.valueFromString "head", environment ]
                 , tagged "ParseAndEval" [ literal, environment ]
                 , tagged "StringTag" [ Pine.valueFromString "label", environment ]
@@ -206,11 +206,19 @@ decodingTests =
                 )
                 valueExamples
             )
-        , test "Condition alias decodes and re-encodes canonically as Conditional" <|
+        , test "decoded values re-encode without changing their representation" <|
             \_ ->
-                Expect.equal (Ok (tagged "Conditional" [ literal, environment, environment ]))
-                    (Pine.parseExpressionFromValue (tagged "Condition" [ literal, environment, environment ])
-                        |> Result.map Pine.encodeExpressionAsValue
+                let
+                    values =
+                        List.map (\( name, arguments ) -> tagged name arguments) fixedShapes
+                in
+                Expect.equal (List.map Ok values)
+                    (List.map
+                        (\value ->
+                            Pine.parseExpressionFromValue value
+                                |> Result.map Pine.encodeExpressionAsValue
+                        )
+                        values
                     )
         , test "unknown builtin names decode but fail when evaluated" <|
             \_ ->

@@ -19,8 +19,6 @@ public static partial class ExpressionValueEncoding
 
     private static readonly PineValue s_conditionalTag = StringEncoding.ValueFromString("Conditional");
 
-    private static readonly PineValue s_conditionTag = StringEncoding.ValueFromString("Condition");
-
     private static readonly PineValue s_environmentTag = StringEncoding.ValueFromString("Environment");
 
     private static readonly PineValue s_labelTag = StringEncoding.ValueFromString("Label");
@@ -39,6 +37,13 @@ public static partial class ExpressionValueEncoding
 
     private static PineValue.ListValue Builtin(BuiltinFunction function, PineValue input) =>
         PineValue.List([s_builtinTag, s_builtinNames[(int)function], input]);
+
+    internal static bool TryParseBuiltinName(PineValue value, out BuiltinFunction function)
+    {
+        var index = Array.IndexOf(s_builtinNames, value);
+        function = (BuiltinFunction)index;
+        return index >= 0;
+    }
 
     /// <summary>Emits the standard compact encoding, expanding fused wrappers only as Pine values.</summary>
     public static PineValue.ListValue EncodeExpressionAsValue(Expression expression)

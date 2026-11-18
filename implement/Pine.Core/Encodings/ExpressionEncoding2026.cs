@@ -19,8 +19,6 @@ public static class ExpressionEncoding2026
 
     private static readonly PineValue s_conditionalTag = StringEncoding.ValueFromString("Conditional");
 
-    private static readonly PineValue s_conditionTag = StringEncoding.ValueFromString("Condition");
-
     private static readonly PineValue s_environmentTag = StringEncoding.ValueFromString("Environment");
 
     private static readonly PineValue s_evalTag = StringEncoding.ValueFromString("Eval");
@@ -330,7 +328,7 @@ public static class ExpressionEncoding2026
         if (value.Equals(s_builtinTag))
             return EncodedExpressionTag.Builtin;
 
-        if (value.Equals(s_conditionalTag) || value.Equals(s_conditionTag))
+        if (value.Equals(s_conditionalTag))
             return EncodedExpressionTag.Conditional;
 
         if (value.Equals(s_environmentTag))
@@ -455,8 +453,10 @@ public static class ExpressionEncoding2026
                     UnexpectedItemCount("builtin", 3, items.Length));
         }
 
-        var functionResult =
-            StringEncoding.StringFromValueWithoutResultAllocation(items.Span[1]);
+        if (items.Span[1] is not PineValue.BlobValue functionBlob)
+            return ParseExpressionResult.Err("Builtin function name must be a UTF-32 big-endian blob.");
+
+        var functionResult = StringEncoding.StringFromValueWithoutResultAllocation(functionBlob);
 
         if (!functionResult.IsOk)
         {

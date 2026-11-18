@@ -695,7 +695,11 @@ public class InternalExpressionTests
                 new Expression.BuiltinBinary(function, Expression.Environment.Instance, Expression.Environment.Instance)),
             new Expression.Literal(PineValue.Blob([0, 1, 2, 255])),
             new Expression.Literal(PineValue.List([PineValue.Blob([7]), PineValue.EmptyList])),
-            new Expression.Label(PineValue.Blob(new byte[4097]), Expression.Environment.Instance)
+            new Expression.Label(PineValue.Blob(new byte[4097]), Expression.Environment.Instance),
+            new Expression.Label(
+                StringEncoding.ValueFromString_2024("length"),
+                new Expression.Literal(
+                    PineValue.List([StringEncoding.ValueFromString("Condition"), PineValue.Blob([2, 0])])))
         ];
 
     [Fact]
@@ -860,6 +864,8 @@ public class InternalExpressionTests
     [Fact]
     public void Direct_canonical_value_encoding_and_decoding_commute_with_canonical_conversion()
     {
+        var cache = new PineVMParseCache();
+
         foreach (var original in RetainedCorpus())
         {
             var canonical = ExpressionConversion.ToCanonical(original);
@@ -886,11 +892,19 @@ public class InternalExpressionTests
                 ExpressionConversion.ToCanonical(direct).Should().Be(canonical);
                 ExpressionValueEncoding.EncodeExpressionAsValue(direct).Should().Be(expectedValue);
             }
+
+            ExpressionValueEncoding.EncodeExpressionAsValue(
+                cache.ParseInternalExpression(directValue).Extract(error => throw new InvalidOperationException(error)))
+                .Should().Be(directValue);
+
+            ExpressionEncoding2026.EncodeExpressionAsValue(
+                cache.ParseExpression(directValue).Extract(error => throw new InvalidOperationException(error)))
+                .Should().Be(directValue);
         }
     }
 
     [Fact]
-    public void Production_parsers_reject_2024_encodings_and_preserve_the_2026_conditional_alias()
+    public void Production_parsers_reject_2024_encodings_and_noncanonical_compact_variants()
     {
         var corpus =
             CanonicalCorpus().Concat(
@@ -907,18 +921,115 @@ public class InternalExpressionTests
             new PineVMParseCache().ParseExpression(value).IsErr().Should().BeTrue();
         }
 
-        var conditional =
+        var cache = new PineVMParseCache();
+
+        foreach (var value in NoncanonicalExpressionValues())
+        {
+            foreach (var fuse in new[] { false, true })
+                ExpressionValueEncoding.ParseExpressionFromValue(value, fuse).IsErr().Should().BeTrue();
+
+            cache.ParseInternalExpression(value).IsErr().Should().BeTrue();
+            cache.ParseExpression(value).IsErr().Should().BeTrue();
+
+            var construction =
+                ExpressionConversion.FromCanonical(
+                    Canonical.ListInst(value.Items.ToArray().Select(Canonical.LitralInst).ToArray()));
+
+            ExpressionReduction.TryDecodeApplicationOfConstructedEncoding(
+                construction,
+                Expression.Environment.Instance,
+                cache).Should().BeNull();
+        }
+    }
+
+    private static PineValue.ListValue[] NoncanonicalExpressionValues()
+    {
+        var environment = ExpressionEncoding2026.EncodeExpressionAsValue(Canonical.EnvironmentInstance);
+        var builtin = StringEncoding.ValueFromString("Builtin");
+
+        var legacyLength =
+            PineValue.List([builtin, StringEncoding.ValueFromString_2024("length"), environment]);
+
+        var alias =
+            PineValue.List([StringEncoding.ValueFromString("Condition"), environment, environment, environment]);
+
+        return
+            [
+            alias,
+            legacyLength,
+            PineValue.List([StringEncoding.ValueFromString_2024("Environment")]),
+            PineValue.List([StringEncoding.ValueFromString_2024("Litral"), PineValue.EmptyList]),
             PineValue.List(
                 [
-                    StringEncoding.ValueFromString("Condition"),
-                    ExpressionEncoding.EncodeExpressionAsValue(Canonical.EnvironmentInstance),
-                    ExpressionEncoding.EncodeExpressionAsValue(Integer(0)), ExpressionEncoding.EncodeExpressionAsValue(Integer(1))
-                ]);
+                builtin, StringEncoding.ValueFromString("equal"),
+                PineValue.List([StringEncoding.ValueFromString("List"), legacyLength, environment])
+                ]),
+            PineValue.List(
+                [
+                builtin, StringEncoding.ValueFromString("head"),
+                PineValue.List(
+                    [
+                    builtin, StringEncoding.ValueFromString_2024("skip"),
+                    ExpressionEncoding2026.EncodeExpressionAsValue(
+                        Canonical.ListInst([Integer(0), Canonical.EnvironmentInstance]))
+                    ])
+                ]),
+            PineValue.List(
+                [
+                StringEncoding.ValueFromString("Conditional"),
+                ExpressionEncoding2026.EncodeExpressionAsValue(Canonical.LitralInst(PineKernelValues.TrueValue)),
+                alias, environment
+                ])
+            ];
+    }
 
-        ExpressionConversion.ToCanonical(
-            ExpressionValueEncoding.ParseExpressionFromValue(conditional)
-            .Extract(error => throw new InvalidOperationException(error))).Should().Be(
-            Canonical.ConditionalInst(Canonical.EnvironmentInstance, Integer(0), Integer(1)));
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void Eval_rejects_noncanonical_values_including_constructed_code_with_and_without_optimizations(
+        bool optimize)
+    {
+        var vm =
+            Core.Runtime.IntermediateVM.PineVM.CreateCustom(
+                evalCache: null,
+                evaluationConfigDefault: null,
+                reportFunctionApplication: null,
+                compilationEnvClasses: null,
+                disableReductionInCompilation: !optimize,
+                selectPrecompiled: null,
+                skipInlineForExpression: null,
+                enableTailRecursionOptimization: optimize,
+                parseCache: null,
+                precompiledLeaves: null,
+                reportEnterPrecompiledLeaf: null,
+                reportExitPrecompiledLeaf: null,
+                optimizationParametersSerial: null,
+                cacheFileStore: null,
+                disableGenericApplicationChainConsolidation: !optimize,
+                disableDirectContinueForSimpleEval: !optimize,
+                disableDirectEvalForSimpleTemplate: !optimize,
+                disableDirectInvocation: !optimize);
+
+        foreach (var value in NoncanonicalExpressionValues())
+        {
+            foreach (var code in new Canonical[]
+            {
+                Canonical.EnvironmentInstance,
+                Canonical.LitralInst(value),
+                Canonical.ListInst(value.Items.ToArray().Select(Canonical.LitralInst).ToArray())
+            })
+            {
+                var result =
+                    vm.EvaluateExpressionOnCustomStack(
+                        new Canonical.Eval(code, Canonical.LitralInst(PineValue.EmptyList)),
+                        value,
+                        Core.Runtime.IntermediateVM.PineVM.EvaluationConfig.Unbounded);
+
+                var error = result.IsErrOrNull();
+                error.Should().NotBeNull();
+                error!.Reason.Should().BeOfType<EvaluationErrorReason.ParseExpressionFailed>();
+            }
+        }
     }
 
     [Fact]

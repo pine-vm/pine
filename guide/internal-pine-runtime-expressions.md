@@ -75,12 +75,19 @@ execution stack; this is a current codec bound, not a limit of the Pine language
 compact 2026 expression value representation, expanding fused nodes directly
 as immutable Pine values. `ParseExpressionFromValue` reads compact 2026
 values directly into the retained model, with the same optional
-`fusePopularShapes` setting as canonical-model conversion. It also accepts the
-compact `Condition` alias. Invalid shapes and unknown builtin names return
-explicit `Result` errors.
+`fusePopularShapes` setting as canonical-model conversion. Only the documented
+tags, including `Conditional`, are accepted. Builtin names must be known names
+encoded as canonical UTF-32 big-endian blobs, not legacy list strings. Invalid
+shapes and unknown builtin names return explicit `Result` errors.
+
+For every successfully decoded value `v`, re-encoding the decoded expression
+produces a Pine value structurally equal to `v`, with fusion enabled or disabled.
+Fusion validates every consumed wrapper before discarding it. Symbolic decoding
+of constructed code during reduction obeys the same rules as runtime `Eval`;
+optimization cannot admit an alternative encoding.
 
 Neither path allocates an intermediate canonical `Expression` tree.
-Traversal is iterative; shared children and arbitrary compact literal/label
+Traversal is iterative; shared children and arbitrary literal/label
 payloads retain their identity. Deprecated 2024 wrappers are not recognized,
 including inside a candidate fusion. Fused decoding visits only retained children, not
 the discarded builtin/list/count wrappers. Scratch traversal and identity-map
@@ -96,10 +103,12 @@ builtins and both fusion settings.
 
 `PineVMParseCache.ParseInternalExpression` decodes canonical Pine values directly
 on misses, fusing directly without allocating discarded syntax wrappers.
-Both its internal and public canonical parser accept only the 2026 format.
+Both its internal and public canonical parser accept only the documented compact
+2026 format, without alternative tag spellings or string representations.
 Literal and label payloads remain arbitrary Pine values, not nested expressions
-to validate. Historical `ExpressionEncoding2024` utilities remain available
-outside this production parser; there is no legacy cache or fallback.
+to validate or normalize. Historical `ExpressionEncoding2024` and legacy string
+utilities, and the public `ExpressionEncoding` compatibility fallback, remain
+available outside this production parser; production has no legacy cache or fallback.
 
 The runtime uses `InternalExpressionCompilation` and `InternalPineIRCompiler`.
 Reduction, inlining, substitution and compiler-local structural analyses
@@ -142,11 +151,17 @@ Execution and compilation-cache lookup need only structural retained keys.
 `ExpressionIdentity.CanonicalExpression`, `.EncodedValue` and `.HashBase16`
 are independent, thread-safe, memoized demands: reading syntax does not encode
 or hash it; requesting the flat SHA-256 encodes only if no original parsed value
-was registered, without allocating a canonical expression tree. Registered
-encodings keep their original bytes rather than silently hashing a normalized
-re-encoding or an internal binary representation. Invocation reports retain
-the actual encoded callee even when different accepted encodings share the
-same retained compilation key.
+was registered, without allocating a canonical expression tree. The unique
+accepted encoding permits frames, compilations and invocation reports to share
+one identity per retained key, without per-invocation encoding wrappers.
+Already-available encoded values are registered on that shared identity without
+materializing any view, including when the identity existed before parsing.
+Distinct but structurally equal caller values may share the same stored value;
+object identity of the caller's encoding is not part of the reporting contract.
+Explicit hashes still address the canonical Pine value, not an internal binary
+representation. Public `RegisterParsedEncoding` validates both the compact format
+and its correspondence to the supplied syntax before trusting it; internal
+registration reuses the successful production parse without revalidation.
 
 Compilation, function-return, instruction, frame-entry, loop, live-event and
 structured-error reports carry the lazy identity. Receiving events, reading

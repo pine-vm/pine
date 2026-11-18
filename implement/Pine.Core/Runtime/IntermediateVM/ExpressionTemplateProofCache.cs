@@ -261,6 +261,6 @@ internal sealed class ExpressionTemplateProofCache
         [
         s_list, s_literal, s_environment, s_eval,
         StringEncoding.ValueFromString("Builtin"), StringEncoding.ValueFromString("Conditional"),
-        StringEncoding.ValueFromString("Condition"), StringEncoding.ValueFromString("Label")
+        StringEncoding.ValueFromString("Label")
         ];
 }

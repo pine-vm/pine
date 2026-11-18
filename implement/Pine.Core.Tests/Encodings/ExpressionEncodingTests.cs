@@ -24,6 +24,10 @@ public class ExpressionEncodingTests
             .Extract(error => throw new System.Exception(error))
             .Should().Be(expression);
 
+        StringEncoding.StringFromValue(StringEncoding.ValueFromString_2024("length"))
+            .Extract(error => throw new System.Exception(error))
+            .Should().Be("length");
+
         new Core.CodeAnalysis.PineVMParseCache()
             .ParseExpression(ExpressionEncoding.EncodeExpressionAsValue(expression))
             .Extract(error => throw new System.Exception(error))

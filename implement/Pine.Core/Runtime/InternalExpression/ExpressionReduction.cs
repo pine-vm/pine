@@ -2520,7 +2520,8 @@ internal static class ExpressionReduction
             return null;
         }
 
-        if (StringEncoding.StringFromValue(tagLiteral.Value).IsOkOrNull() is not { } tag)
+        if (tagLiteral.Value is not PineValue.BlobValue tagBlob ||
+            StringEncoding.StringFromBlobValue(tagBlob.Bytes).IsOkOrNull() is not { } tag)
         {
             return null;
         }
@@ -2576,7 +2577,7 @@ internal static class ExpressionReduction
                 {
                     if (construction.Items.Length is not 3 ||
                         construction.Items[1] is not Expression.Literal functionLiteral ||
-                        StringEncoding.StringFromValue(functionLiteral.Value).IsOkOrNull() is not { } functionName ||
+                        !ExpressionValueEncoding.TryParseBuiltinName(functionLiteral.Value, out var function) ||
                         TryDecodeApplicationOfConstructedEncoding(
                             construction.Items[2],
                             envArg,
@@ -2585,15 +2586,10 @@ internal static class ExpressionReduction
                         return null;
                     }
 
-                    return
-                        BuiltinFunctions.TryFromName(functionName, out var function)
-                        ?
-                        Expression.BuiltinInst(function, decodedInput)
-                        :
-                        null;
+                    return Expression.BuiltinInst(function, decodedInput);
                 }
 
-            case "Conditional" or "Condition":
+            case "Conditional":
                 {
                     if (construction.Items.Length is not 4 ||
                         TryDecodeApplicationOfConstructedEncoding(
