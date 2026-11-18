@@ -35,7 +35,26 @@ public static partial class ValueEncodingBinaryDeterministic
         Encode(stream.Write, composition);
 
     /// <summary>Encodes a Pine tree iteratively, preserving the original byte layout.</summary>
-    public static void Encode(Action<ReadOnlySpan<byte>> write, PineValue composition)
+    public static void Encode(Action<ReadOnlySpan<byte>> write, PineValue composition) =>
+        EncodeWithStatistics(write, composition);
+
+    /// <summary>Counts emitted definitions and references, not expanded descendants skipped by a reference.</summary>
+    public readonly record struct EncodingStatistics(
+        long EncodedBytesLength,
+        int UniqueListCount,
+        int UniqueBlobCount,
+        long BackreferenceCount)
+    {
+        /// <summary>Number of structurally distinct list/blob definitions in this standalone encoding.</summary>
+        public long UniqueItemCount => (long)UniqueListCount + UniqueBlobCount;
+    }
+
+    /// <summary>Encodes a standalone Pine tree and reports statistics from the actual writer.</summary>
+    public static EncodingStatistics EncodeWithStatistics(System.IO.Stream stream, PineValue composition) =>
+        EncodeWithStatistics(stream.Write, composition);
+
+    /// <summary>Encodes a standalone Pine tree and reports statistics from the actual writer.</summary>
+    public static EncodingStatistics EncodeWithStatistics(Action<ReadOnlySpan<byte>> write, PineValue composition)
     {
         using var encoder = new TreeEncoder<PineValue>(write);
         var pending = new Stack<PineValue>();
@@ -67,6 +86,13 @@ public static partial class ValueEncodingBinaryDeterministic
                         nameof(Encode) + " does not handle Pine value variant: " + current.GetType().Name);
             }
         }
+
+        return
+            new(
+                encoder.BytesWritten,
+                encoder.RegisteredNodeCount,
+                encoder.RegisteredBlobCount,
+                encoder.BackreferenceCount);
     }
 
     /// <summary>

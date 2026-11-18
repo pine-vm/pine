@@ -727,6 +727,12 @@ public static partial class ValueEncodingBinaryDeterministic
         /// <summary>Extent of bytes synchronously delivered to the destination.</summary>
         public long BytesWritten { readonly get; private set; }
 
+        internal readonly int RegisteredNodeCount => _nodes?.Count ?? 0;
+
+        internal readonly int RegisteredBlobCount => _blobs?.Count ?? 0;
+
+        internal long BackreferenceCount { readonly get; private set; }
+
         internal readonly void EnsureActive()
         {
             if (_disposed)
@@ -780,6 +786,7 @@ public static partial class ValueEncodingBinaryDeterministic
 
             Int32(TagReferenceInteral);
             Int32((int)relative);
+            ++BackreferenceCount;
         }
 
         /// <summary>Writes an earlier-node reference, or records the start of the next new node.</summary>
