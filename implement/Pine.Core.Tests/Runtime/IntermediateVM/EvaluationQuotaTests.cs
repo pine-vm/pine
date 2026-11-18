@@ -6,6 +6,7 @@ using Pine.Core.PineLanguage;
 using Pine.Core.Runtime.IntermediateVM;
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using Xunit;
 
 using IntermediatePineVM = Pine.Core.Runtime.IntermediateVM.PineVM;
@@ -144,7 +145,7 @@ public class EvaluationQuotaTests
                 disableReductionInCompilation: true,
                 selectPrecompiled:
                 (expression, environment, _) =>
-                expression == targetExpression
+                expression.CanonicalExpression == targetExpression
                 ?
                 () =>
                 new PrecompiledResult.ContinueEval(
@@ -261,7 +262,10 @@ public class EvaluationQuotaTests
                 optimizationParametersSerial: null,
                 cacheFileStore: null,
                 reportExecutedStackInstruction: null,
-                expressionCompilationOverrides: expressionCompilationOverrides);
+                expressionCompilationOverrides:
+                expressionCompilationOverrides.ToDictionary(
+                    pair => Core.Runtime.InternalExpression.ExpressionConversion.FromCanonicalCached(pair.Key),
+                    pair => pair.Value));
 
         return
             vm.EvaluateExpressionOnCustomStack(

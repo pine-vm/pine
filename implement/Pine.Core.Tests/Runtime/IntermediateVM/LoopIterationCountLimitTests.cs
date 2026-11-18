@@ -5,6 +5,7 @@ using Pine.Core.Functional;
 using Pine.Core.PineLanguage;
 using Pine.Core.Runtime.IntermediateVM;
 using System.Collections.Generic;
+using System.Linq;
 using Xunit;
 
 namespace Pine.Core.Tests.Runtime.IntermediateVM;
@@ -163,7 +164,10 @@ public class LoopIterationCountLimitTests
                 optimizationParametersSerial: null,
                 cacheFileStore: null,
                 reportExecutedStackInstruction: null,
-                expressionCompilationOverrides: expressionCompilationOverrides);
+                expressionCompilationOverrides:
+                expressionCompilationOverrides.ToDictionary(
+                    pair => Core.Runtime.InternalExpression.ExpressionConversion.FromCanonicalCached(pair.Key),
+                    pair => pair.Value));
 
         return
             vm.EvaluateExpressionOnCustomStack(

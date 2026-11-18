@@ -1,5 +1,6 @@
 using Pine.Core.PineLanguage;
 using System.Collections.Generic;
+using System.Linq;
 using System.Text.Json.Serialization;
 
 namespace Pine.Core.Runtime.IntermediateVM;
@@ -106,20 +107,28 @@ public readonly record struct EvalWorkCounters(
 /// <summary>
 /// Profiling information and result value produced from evaluating an expression in the intermediate VM.
 /// </summary>
-/// <param name="ExpressionValue">Encoded representation of the evaluated expression.</param>
-/// <param name="Expression">The evaluated expression.</param>
+/// <param name="Identity">Runtime expression with demand-driven canonical syntax, value encoding and hash.</param>
 /// <param name="Input">The input values supplied to the expression.</param>
 /// <param name="Counters">The aggregated evaluation work counters for this evaluation.</param>
 /// <param name="ReturnValue">The returned value in the in-process representation.</param>
-/// <param name="StackTrace">The captured stack trace at the time of reporting.</param>
+/// <param name="ExpressionStackTrace">Runtime identities captured at reporting, without canonical conversion.</param>
 public record EvaluationReport(
-    PineValue ExpressionValue,
-    Expression Expression,
+    ExpressionIdentity Identity,
     StackFrameInput Input,
     EvalWorkCounters Counters,
     Internal.PineValueInProcess ReturnValue,
-    IReadOnlyList<Expression> StackTrace)
+    IReadOnlyList<ExpressionIdentity> ExpressionStackTrace)
 {
+    /// <summary>Obtains the canonical expression value only when requested.</summary>
+    public PineValue ExpressionValue => Identity.EncodedValue;
+
+    /// <summary>Materializes canonical syntax only when requested.</summary>
+    public Expression Expression => Identity.CanonicalExpression;
+
+    /// <summary>Materializes the captured canonical stack only when requested.</summary>
+    public IReadOnlyList<Expression> StackTrace =>
+        ExpressionStackTrace.Select(identity => identity.CanonicalExpression).ToArray();
+
     /// <summary>Disjoint work totals for this evaluation, including work performed by direct interpreters.</summary>
     public EvalWorkCountersByOrigin CountersByOrigin { get; init; }
 

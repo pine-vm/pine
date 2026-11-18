@@ -29,6 +29,9 @@ public static class ExpressionConversion
     internal static Canonical ToCanonicalCached(Expression expression) =>
         s_canonical.GetValue(expression, static retained => ToCanonicalCore(retained, cacheIdentities: true));
 
+    internal static bool HasCachedCanonical(Expression expression) =>
+        s_canonical.TryGetValue(expression, out _);
+
     private static Expression RememberInternal(Canonical canonical, Expression retained) =>
         s_internal.GetValue(canonical, _ => retained);
 

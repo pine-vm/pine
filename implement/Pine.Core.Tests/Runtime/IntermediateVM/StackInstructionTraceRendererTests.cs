@@ -317,7 +317,7 @@ public class StackInstructionTraceRendererTests
                     StackInstruction.Build_List_With_Prefix(
                         PineValue.List([StringEncoding.ValueFromString("Literal")]),
                         1),
-                    FrameExpression: Expression.EnvironmentInstance,
+                    Identity: ExpressionIdentity.FromCanonical(Expression.EnvironmentInstance),
                     LoadFrameInput: () => StackFrameInput.GenericFromEnvironmentValue(PineValue.EmptyBlob)),
                 new(
                     InstructionIndex: 12,
@@ -325,7 +325,7 @@ public class StackInstructionTraceRendererTests
                     InstructionPointer: 0,
                     EvaluationStackDepth: 0,
                     Instruction: StackInstruction.Push_Literal(IntegerEncoding.EncodeSignedInteger(3)),
-                    FrameExpression: Expression.EnvironmentInstance,
+                    Identity: ExpressionIdentity.FromCanonical(Expression.EnvironmentInstance),
                     LoadFrameInput: () => StackFrameInput.GenericFromEnvironmentValue(PineValue.EmptyBlob))
             };
 
@@ -476,7 +476,7 @@ public class StackInstructionTraceRendererTests
                 InstructionPointer: 0,
                 EvaluationStackDepth: 0,
                 Instruction: instructions.Instructions[0],
-                FrameExpression: expression,
+                Identity: ExpressionIdentity.FromCanonical(expression),
                 LoadFrameInput: () => StackFrameInput.GenericFromEnvironmentValue(PineValue.EmptyBlob),
                 FrameInstructions: instructions,
                 FrameIndex: frameIndex);
@@ -591,7 +591,7 @@ public class StackInstructionTraceRendererTests
                     InstructionPointer: 0,
                     EvaluationStackDepth: 0,
                     Instruction: StackInstruction.Push_Literal(PineValue.Blob([0, 1, 2, 3])),
-                    FrameExpression: Expression.EnvironmentInstance,
+                    Identity: ExpressionIdentity.FromCanonical(Expression.EnvironmentInstance),
                     LoadFrameInput: () => StackFrameInput.GenericFromEnvironmentValue(PineValue.EmptyBlob))
             };
 
@@ -624,7 +624,7 @@ public class StackInstructionTraceRendererTests
                     InstructionPointer: 0,
                     EvaluationStackDepth: 0,
                     Instruction: StackInstruction.Push_Literal(IntegerEncoding.EncodeSignedInteger(3)),
-                    FrameExpression: Expression.EnvironmentInstance,
+                    Identity: ExpressionIdentity.FromCanonical(Expression.EnvironmentInstance),
                     LoadFrameInput: () => StackFrameInput.GenericFromEnvironmentValue(PineValue.EmptyBlob))
                 ],
                 blobRepresentations: [blobRepresentation]);
@@ -649,7 +649,7 @@ public class StackInstructionTraceRendererTests
                     InstructionPointer: 0,
                     EvaluationStackDepth: 0,
                     Instruction: StackInstruction.Push_Literal(StringEncoding.ValueFromString("Literal")),
-                    FrameExpression: Expression.EnvironmentInstance,
+                    Identity: ExpressionIdentity.FromCanonical(Expression.EnvironmentInstance),
                     LoadFrameInput: () => StackFrameInput.GenericFromEnvironmentValue(PineValue.EmptyBlob))
                 ],
                 blobRepresentations: [blobRepresentation]);
@@ -670,7 +670,7 @@ public class StackInstructionTraceRendererTests
                     InstructionPointer: 1,
                     EvaluationStackDepth: 0,
                     Instruction: StackInstruction.Push_Literal(StringEncoding.ValueFromString("Literal")),
-                    FrameExpression: Expression.EnvironmentInstance,
+                    Identity: ExpressionIdentity.FromCanonical(Expression.EnvironmentInstance),
                     LoadFrameInput: () => StackFrameInput.GenericFromEnvironmentValue(PineValue.EmptyBlob))
                 ],
                 maxBase16ByteCount: 32,
@@ -715,7 +715,7 @@ public class StackInstructionTraceRendererTests
                     InstructionPointer: 1,
                     EvaluationStackDepth: 1,
                     Instruction: invokeInstruction,
-                    FrameExpression: Expression.EnvironmentInstance,
+                    Identity: ExpressionIdentity.FromCanonical(Expression.EnvironmentInstance),
                     LoadFrameInput: () => StackFrameInput.GenericFromEnvironmentValue(PineValue.EmptyBlob))
                 ]);
 

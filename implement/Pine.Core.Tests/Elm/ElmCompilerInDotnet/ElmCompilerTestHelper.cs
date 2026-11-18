@@ -366,7 +366,12 @@ public class ElmCompilerTestHelper
                 compilationEnvClasses: null,
                 disableReductionInCompilation: false,
                 selectPrecompiled: null,
-                skipInlineForExpression: skipInlineForExpression ?? (_ => false),
+                skipInlineForExpression:
+                skipInlineForExpression is null
+                ?
+                null
+                :
+                identity => skipInlineForExpression(identity.CanonicalExpression),
                 enableTailRecursionOptimization: enableTailRecursionOptimization,
                 parseCache: null,
                 precompiledLeaves: ImmutableDictionary<PineValue, PrecompiledLeaf>.Empty,

@@ -46,11 +46,7 @@ public class PineVMParseCache
         var allocated = GC.GetAllocatedBytesForCurrentThread() - bytes;
 
         profile.DirectTemplates.Parsed(
-            parsed.Expression is { } expression
-            ?
-            Runtime.InternalExpression.ExpressionConversion.ToCanonicalCached(expression)
-            :
-            null,
+            parsed.Expression,
             hit,
             hit ? 0 : InternalCount - count,
             allocated,
@@ -131,7 +127,11 @@ public class PineVMParseCache
         var allocated = GC.GetAllocatedBytesForCurrentThread() - bytes;
 
         profile.DirectTemplates.Parsed(
-            parsed.Expression,
+            parsed.Expression is { } expression
+            ?
+            Runtime.InternalExpression.ExpressionConversion.FromCanonicalCached(expression)
+            :
+            null,
             hit,
             hit ? 0 : _parseExprCache.Count - count,
             allocated,

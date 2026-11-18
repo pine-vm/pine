@@ -1,5 +1,6 @@
 using Pine.Core.CodeAnalysis;
-using Pine.Core.PineLanguage;
+using Pine.Core.Runtime.InternalExpression;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
 
 namespace Pine.Core.Runtime.IntermediateVM;
@@ -21,7 +22,7 @@ public sealed class PineVMSharedCaches
     public PineVMParseCache ParsedExpressions { get; } = new();
 
     /// <summary>
-    /// Encoded expression values.
+    /// Retained expression identities with demand-driven canonical values and hashes.
     /// </summary>
     public PineVMExpressionEncodingCache EncodedExpressions { get; } = new();
 
@@ -32,5 +33,5 @@ public sealed class PineVMSharedCaches
     /// Reduced expressions keyed by expression and reduction configuration.
     /// </summary>
     public IDictionary<(Expression, ReductionConfig), Expression> ReducedExpressions { get; } =
-        new InternalExpression.RetainedReductionCache();
+        new ConcurrentDictionary<(Expression, ReductionConfig), Expression>();
 }

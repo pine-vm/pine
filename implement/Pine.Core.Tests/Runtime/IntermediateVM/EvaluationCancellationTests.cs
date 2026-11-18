@@ -8,6 +8,7 @@ using Pine.Core.Runtime.IntermediateVM;
 using Pine.Core.Tests.Testing;
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Threading;
 using Xunit;
 
@@ -245,5 +246,8 @@ public class EvaluationCancellationTests
             optimizationParametersSerial: null,
             cacheFileStore: null,
             reportExecutedStackInstruction: null,
-            expressionCompilationOverrides: expressionCompilationOverrides);
+            expressionCompilationOverrides:
+            expressionCompilationOverrides?.ToDictionary(
+                pair => Core.Runtime.InternalExpression.ExpressionConversion.FromCanonicalCached(pair.Key),
+                pair => pair.Value));
 }

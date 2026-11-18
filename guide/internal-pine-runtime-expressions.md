@@ -119,13 +119,14 @@ inlining, recursion and code-size heuristics do not change because of fusion.
 The public `ExpressionCompilation`, `PineIRCompiler`, `ReducePineExpression`
 and `ExpressionSubstituteEnvironment` methods are adapters to these native
 implementations, not separately maintained copies of their algorithms.
-Compilation, encoding and standard shared reduction caches have retained keys.
-Immutable/frozen policy dictionaries with the default structural comparer
-are indexed once by native keys. Mutable dictionaries and custom comparers
-retain live canonical lookup semantics, including replacement and removal.
-Custom compilation/policy delegates still work through adapters. With no
-configured policies the compiler uses a static no-op check, and the default
-Elm test host no longer supplies a canonical no-op predicate.
+Compilation, encoding and shared reduction caches have retained keys.
+The VM's compilation-cache delegates, specialization/override dictionaries,
+and reduction-cache interface use retained expressions directly, including
+caller-owned caches. Dictionaries retain live replacement/removal and comparer
+semantics without converting lookup keys to canonical syntax.
+Precompiled selectors and skip-inlining predicates receive `ExpressionIdentity`;
+they can inspect `InternalExpression` without conversion.
+With no configured policies the compiler uses a static no-op check.
 Compatible compilation configuration is still
 required when sharing caches.
 
@@ -135,6 +136,28 @@ Frames, direct calls and template plans retain internal roots and expose
 canonical views only when requested. Original encoded callee values remain
 the identity for invocation caches, native leaves, template proofs and tail guards.
 Canonical metadata hashes and persisted `pine-ir 1` references are not renamed.
+`ExpressionCompilationCacheEntry` retains compilation and `ExpressionIdentity`,
+not an eagerly computed cryptographic hash or unused optimization metadata.
+Execution and compilation-cache lookup need only structural retained keys.
+`ExpressionIdentity.CanonicalExpression`, `.EncodedValue` and `.HashBase16`
+are independent, thread-safe, memoized demands: reading syntax does not encode
+or hash it; requesting the flat SHA-256 encodes only if no original parsed value
+was registered, without allocating a canonical expression tree. Registered
+encodings keep their original bytes rather than silently hashing a normalized
+re-encoding or an internal binary representation. Invocation reports retain
+the actual encoded callee even when different accepted encodings share the
+same retained compilation key.
+
+Compilation, function-return, instruction, frame-entry, loop, live-event and
+structured-error reports carry the lazy identity. Receiving events, reading
+counters, or capturing stack identities does not demand canonical forms.
+Their existing canonical expression/value/hash getters remain explicit demand
+points for observers that need those views. `EvaluationReport.ExpressionStackTrace`
+retains identities; `.StackTrace` explicitly requests canonical syntax.
+This intentionally changes report constructors and VM configuration/cache
+interfaces. Canonical compiler helper APIs remain adapters for external callers;
+convert configuration keys to retained syntax before passing them to a VM.
+
 Canonical flat hashing streams the existing deterministic bytes into buffered
 SHA-256 updates, without retaining or copying the complete binary encoding.
 CFG successors use a non-boxing struct enumerator. Operation rewrites reuse
@@ -159,16 +182,17 @@ Remaining conversion costs are intentional:
 
 - Elm compilation, static-program/code-generation backends and public APIs
   still produce or consume canonical syntax.
-- Enabled canonical observers, arbitrary cache delegates, skip-inlining
-  predicates and precompiled selectors request canonical views. Use a null
-  skip-inlining predicate when no policy is needed, rather than a no-op delegate.
+- Observers, skip-inlining predicates and precompiled selectors can explicitly
+  request canonical views through their expression identity. Merely configuring
+  a callback does not request conversion.
 - Instruction serialization and diagnostic rendering materialize canonical
-  references. Canonical config/metadata hashing still occurs at distinct
-  compilation entries; it has not been replaced by the internal binary hash.
-- Instrumented direct evaluation uses the canonical reference evaluator when
-  `PineVMWorkProfile` is enabled. Normal compiler-time/direct evaluation uses
-  retained variants and enum dispatch. EventPipe profiling does not enable
-  that canonical observer path.
+  references. Configured persistent invocation storage computes canonical hashes
+  when it needs content-addressed keys; ordinary compilation and in-memory
+  invocation caching do not. Internal binary hashes never replace persisted
+  canonical hash domains.
+- `PineVMWorkProfile` counts retained direct evaluation and parsing without
+  reverse conversion. Physical node-entry kinds reflect retained fusions;
+  cached logical expression metrics still describe expanded syntax.
 - Reverse views are weakly cached, but are not indiscriminately registered as
   forward conversions. Canonical builtin helper APIs dispatch through the
   general native entry points instead of casting a fused root to `Builtin`.

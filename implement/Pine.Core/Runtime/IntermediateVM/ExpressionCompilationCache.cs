@@ -1,5 +1,4 @@
 using Pine.Core.PineLanguage;
-using Pine.Core.PineVM;
 using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
@@ -12,28 +11,21 @@ namespace Pine.Core.Runtime.IntermediateVM;
 /// </summary>
 public readonly record struct ExpressionCompilationCacheEntry(
     ExpressionCompilation Compilation,
-    string ExpressionHashBase16,
-    OptimizationParametersSerial.ExpressionConfig? OptimizationConfig);
+    ExpressionIdentity Identity);
 
 /// <summary>
 /// Looks up an expression compilation in a caller-owned cache.
 /// </summary>
 public delegate bool TryGetExpressionCompilation(
-    Expression expression,
+    InternalExpression.Expression expression,
     out ExpressionCompilationCacheEntry compilation);
 
 /// <summary>
 /// Gets an existing expression compilation or builds and inserts one.
 /// </summary>
 public delegate ExpressionCompilationCacheEntry GetOrAddExpressionCompilation(
-    Expression expression,
+    InternalExpression.Expression expression,
     Func<ExpressionCompilationCacheEntry> buildCompilation);
-
-internal delegate bool TryGetInternalExpressionCompilation(
-    InternalExpression.Expression expression, out ExpressionCompilationCacheEntry compilation);
-
-internal delegate ExpressionCompilationCacheEntry GetOrAddInternalExpressionCompilation(
-    InternalExpression.Expression expression, Func<ExpressionCompilationCacheEntry> buildCompilation);
 
 /// <summary>
 /// Thread-safe expression-compilation cache for sharing entries between VM instances.
@@ -54,9 +46,10 @@ public sealed class ConcurrentExpressionCompilationCache
     public bool TryGet(
         Expression expression,
         out ExpressionCompilationCacheEntry compilation)
-        => TryGetInternal(InternalExpression.ExpressionConversion.FromCanonicalCached(expression), out compilation);
+        => TryGet(InternalExpression.ExpressionConversion.FromCanonicalCached(expression), out compilation);
 
-    internal bool TryGetInternal(
+    /// <summary>Looks up retained syntax without constructing a canonical view or content hash.</summary>
+    public bool TryGet(
         InternalExpression.Expression expression,
         out ExpressionCompilationCacheEntry compilation)
     {
@@ -76,9 +69,10 @@ public sealed class ConcurrentExpressionCompilationCache
     public ExpressionCompilationCacheEntry GetOrAdd(
         Expression expression,
         Func<ExpressionCompilationCacheEntry> buildCompilation)
-        => GetOrAddInternal(InternalExpression.ExpressionConversion.FromCanonicalCached(expression), buildCompilation);
+        => GetOrAdd(InternalExpression.ExpressionConversion.FromCanonicalCached(expression), buildCompilation);
 
-    internal ExpressionCompilationCacheEntry GetOrAddInternal(
+    /// <summary>Compiles retained syntax without requiring canonical metadata.</summary>
+    public ExpressionCompilationCacheEntry GetOrAdd(
         InternalExpression.Expression expression,
         Func<ExpressionCompilationCacheEntry> buildCompilation)
     {

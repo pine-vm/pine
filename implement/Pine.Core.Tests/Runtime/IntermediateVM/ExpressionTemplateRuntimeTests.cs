@@ -10,6 +10,7 @@ using Pine.Core.Runtime.IntermediateVM;
 using Pine.Core.Tests.Testing;
 using System.Collections.Generic;
 using System.Collections.Immutable;
+using System.Linq;
 using Xunit;
 
 using IntermediatePineVM = Pine.Core.Runtime.IntermediateVM.PineVM;
@@ -903,11 +904,11 @@ public class ExpressionTemplateRuntimeTests
         var nativeCount = 0;
 
         System.Func<PrecompiledResult>? Select(
-            Expression expression,
+            ExpressionIdentity expression,
             PineValueInProcess environment,
             PineVMParseCache _)
         {
-            if (!expression.Equals(terminal))
+            if (!expression.CanonicalExpression.Equals(terminal))
                 return null;
 
             ++nativeCount;
@@ -941,6 +942,37 @@ public class ExpressionTemplateRuntimeTests
         report.Counters.InvocationCount.Should().Be(overapply ? 2 : 1);
     }
 
+    [Fact]
+    public void Overapplication_continuations_do_not_expand_terminal_syntax()
+    {
+        var terminal =
+            Expression.LitralInst(ExpressionEncoding.EncodeExpressionAsValue(Expression.EnvironmentInstance));
+
+        var terminalValue = ExpressionEncoding.EncodeExpressionAsValue(terminal);
+        var templateCache = new PineVMExpressionTemplatePlanCache();
+        var final = IntegerEncoding.EncodeSignedInteger(43);
+
+        var expression =
+            BuildEvalChain(
+                BuildRepeatedEnvironmentTemplate(terminal),
+                [PineValue.EmptyList, PineValue.EmptyBlob, final]);
+
+        CreateVm(templateCache: templateCache).EvaluateExpression(expression, PineValue.EmptyList)
+            .IsOkOrNull().Should().Be(final);
+
+        var plans =
+            templateCache.Entries.Values.Select(resolution => resolution.Plan)
+            .Where(plan => plan?.EncodedTerminalExpression == terminalValue).ToArray();
+
+        plans.Should().NotBeEmpty();
+
+        foreach (var plan in plans)
+        {
+            Core.Runtime.InternalExpression.ExpressionConversion.HasCachedCanonical(plan!.RetainedTerminalExpression)
+                .Should().BeFalse();
+        }
+    }
+
     [Theory]
     [InlineData(false, false)]
     [InlineData(false, true)]
@@ -963,9 +995,9 @@ public class ExpressionTemplateRuntimeTests
         var leaves = 0;
 
         System.Func<PrecompiledResult>? Select(
-            Expression expression, PineValueInProcess environment, PineVMParseCache cache)
+            ExpressionIdentity expression, PineValueInProcess environment, PineVMParseCache cache)
         {
-            if (expression.Equals(terminal))
+            if (expression.CanonicalExpression.Equals(terminal))
                 ++selections;
 
             return null;
@@ -1477,7 +1509,7 @@ public class ExpressionTemplateRuntimeTests
         PineVMExpressionTemplatePlanCache? templateCache = null,
         IReadOnlyDictionary<Expression, ExpressionCompilation>? compilationOverrides = null,
         ReportExecutedStackInstruction? reportInstruction = null,
-        System.Func<Expression, PineValueInProcess, PineVMParseCache, System.Func<PrecompiledResult>?>? nativeSelector = null,
+        System.Func<ExpressionIdentity, PineValueInProcess, PineVMParseCache, System.Func<PrecompiledResult>?>? nativeSelector = null,
         IReadOnlyDictionary<PineValue, PrecompiledLeaf>? leaves = null,
         bool disableDirectInvocation = false,
         ReportEvaluationEvent? reportEvaluationEvent = null) =>
@@ -1502,7 +1534,10 @@ public class ExpressionTemplateRuntimeTests
             disableDirectEvalForSimpleTemplate: true,
             reportExecutedStackInstruction:
             reportInstruction,
-            expressionCompilationOverrides: compilationOverrides,
+            expressionCompilationOverrides:
+            compilationOverrides?.ToDictionary(
+                pair => Core.Runtime.InternalExpression.ExpressionConversion.FromCanonicalCached(pair.Key),
+                pair => pair.Value),
             disableDirectInvocation: disableDirectInvocation,
             reportEvaluationEvent: reportEvaluationEvent);
 }

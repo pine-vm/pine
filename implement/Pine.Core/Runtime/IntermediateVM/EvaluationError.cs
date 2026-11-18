@@ -69,14 +69,18 @@ public abstract record EvaluationErrorReason
 /// can contain null for slots that have not been initialized.
 /// </remarks>
 public sealed record EvaluationStackTraceFrame(
-    Expression Expression,
+    ExpressionIdentity Identity,
     StackFrameInput? Input,
     StackFrameInstructions? Instructions,
     int InstructionPointer,
     Func<IReadOnlyList<PineValueInProcess?>>? LoadLocals = null,
     long FrameInstructionCount = 0,
     long FrameLoopIterationCount = 0,
-    long? FrameIndex = null);
+    long? FrameIndex = null)
+{
+    /// <summary>Materializes canonical syntax only when a diagnostic consumer requests it.</summary>
+    public Expression Expression => Identity.CanonicalExpression;
+}
 
 /// <summary>
 /// Structured information returned when intermediate-VM evaluation stops without a value.

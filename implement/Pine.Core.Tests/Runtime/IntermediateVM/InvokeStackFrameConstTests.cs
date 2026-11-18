@@ -872,7 +872,10 @@ public class InvokeStackFrameConstTests
                 reportExecutedStackInstruction:
                 (in executedStackInstruction) =>
                 trace.Add(executedStackInstruction),
-                expressionCompilationOverrides: expressionCompilationOverrides,
+                expressionCompilationOverrides:
+                expressionCompilationOverrides.ToDictionary(
+                    pair => Core.Runtime.InternalExpression.ExpressionConversion.FromCanonicalCached(pair.Key),
+                    pair => pair.Value),
                 invocationCache: invocationCache,
                 invocationCacheConfiguration: invocationCacheConfiguration);
 

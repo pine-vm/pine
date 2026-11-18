@@ -52,8 +52,8 @@ public enum TailLoopIterationKind
 /// </param>
 /// <param name="StackFrameDepth">Number of active stack frames at the moment of the iteration.</param>
 /// <param name="Kind">Whether the iteration was a backward jump or a tail-call replacement.</param>
-/// <param name="FrameExpression">
-/// The expression of the stack frame that is iterating. For
+/// <param name="Identity">
+/// The demand-driven identity of the stack frame that is iterating. For
 /// <see cref="TailLoopIterationKind.BackwardJump"/> this is the running frame;
 /// for <see cref="TailLoopIterationKind.TailCallReplace"/> this is the new
 /// (replacing) frame, which represents the next iteration of the tail loop.
@@ -67,5 +67,9 @@ public readonly record struct TailLoopIteration(
     long IterationIndex,
     int StackFrameDepth,
     TailLoopIterationKind Kind,
-    Expression FrameExpression,
-    StackFrameInput FrameInput);
+    ExpressionIdentity Identity,
+    StackFrameInput FrameInput)
+{
+    /// <summary>Materializes the frame's canonical expression only when read.</summary>
+    public Expression FrameExpression => Identity.CanonicalExpression;
+}

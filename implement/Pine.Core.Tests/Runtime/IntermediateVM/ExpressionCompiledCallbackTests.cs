@@ -1,11 +1,18 @@
 using AwesomeAssertions;
+using Pine.Core.Addressing;
+using Pine.Core.CodeAnalysis;
 using Pine.Core.Encodings;
 using Pine.Core.Functional;
 using Pine.Core.PineLanguage;
 using Pine.Core.Runtime.IntermediateVM;
+using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Threading;
 using Xunit;
+
+using Retained = Pine.Core.Runtime.InternalExpression.Expression;
+using Conversion = Pine.Core.Runtime.InternalExpression.ExpressionConversion;
 
 namespace Pine.Core.Tests.Runtime.IntermediateVM;
 
@@ -63,7 +70,12 @@ public class ExpressionCompiledCallbackTests
 
         var only = compiled[0];
 
+        only.Identity.IsCanonicalExpressionCreated.Should().BeFalse();
+        only.Identity.IsEncodedValueCreated.Should().BeFalse();
+        only.Identity.IsHashCreated.Should().BeFalse();
         only.Expression.Should().Be(expression);
+        only.Identity.IsEncodedValueCreated.Should().BeFalse();
+        only.Identity.IsHashCreated.Should().BeFalse();
         only.Compilation.Should().NotBeNull();
         only.Compilation.Generic.Should().NotBeNull();
         only.Compilation.Generic.Instructions.Should().NotBeEmpty();
@@ -71,6 +83,251 @@ public class ExpressionCompiledCallbackTests
         // The hash is a 64-character lower-case hex string (32-byte hash).
         only.ExpressionHashBase16.Should().HaveLength(64);
         only.ExpressionHashBase16.Should().MatchRegex("^[0-9a-f]+$");
+
+        only.ExpressionHashBase16.Should().Be(
+            Convert.ToHexStringLower(
+                PineValueHashFlat.ComputeHashForValue(ExpressionEncoding.EncodeExpressionAsValue(expression))
+                .hashBytes.Span));
+    }
+
+    [Theory]
+    [InlineData(false, false)]
+    [InlineData(true, false)]
+    [InlineData(false, true)]
+    [InlineData(true, true)]
+    public void Execution_and_counter_only_observers_defer_canonical_views_in_custom_caches(
+        bool observe, bool overrideCompilation)
+    {
+        var compilations = new Dictionary<Retained, ExpressionCompilationCacheEntry>();
+        var encodings = new PineVMExpressionEncodingCache();
+        var identities = new List<ExpressionIdentity>();
+        var applicationReports = new List<EvaluationReport>();
+        var child = Expression.BuiltinInst("length", Expression.EnvironmentInstance);
+        var childValue = ExpressionEncoding.EncodeExpressionAsValue(child);
+        var root = new Expression.Eval(Expression.LitralInst(childValue), Expression.EnvironmentInstance);
+        var retainedRoot = Conversion.FromCanonicalCached(root);
+
+        var overrides =
+            new Dictionary<Retained, ExpressionCompilation>
+            {
+                [retainedRoot] =
+                new(
+                    new StackFrameInstructions(
+                        StaticFunctionInterface.Generic,
+                        [
+                        StackInstruction.Local_Get(0),
+                        StackInstruction.Eval_Const(childValue),
+                        StackInstruction.Return
+                        ]),
+                    [])
+            };
+
+        Core.Runtime.IntermediateVM.PineVM CreateVm() =>
+            Core.Runtime.IntermediateVM.PineVM.CreateCustom(
+                evalCache: null,
+                evaluationConfigDefault: null,
+                reportFunctionApplication: observe ? report => applicationReports.Add(report) : null,
+                compilationEnvClasses: null,
+                disableReductionInCompilation: true,
+                selectPrecompiled:
+                (identity, _, _) =>
+                {
+                    identities.Add(identity);
+                    return null;
+                },
+                skipInlineForExpression:
+                identity =>
+                {
+                    identities.Add(identity);
+                    return true;
+                },
+                enableTailRecursionOptimization: false,
+                parseCache: null,
+                precompiledLeaves: null,
+                reportEnterPrecompiledLeaf: null,
+                reportExitPrecompiledLeaf: null,
+                optimizationParametersSerial: null,
+                cacheFileStore: null,
+                expressionCompilationOverrides: overrideCompilation ? overrides : null,
+                disableDirectContinueForSimpleEval: true,
+                disableDirectEvalForSimpleTemplate: true,
+                reportExpressionCompiled: observe ? (in item) => identities.Add(item.Identity) : null,
+                reportExecutedStackInstruction: observe ? (in item) => identities.Add(item.Identity) : null,
+                reportEvaluationEvent:
+                observe
+                ?
+                (in item) =>
+                {
+                    identities.Add(item.Identity);
+                    _ = item.LoadCounters();
+                    identities.AddRange(item.LoadStackTrace().Select(frame => frame.Identity));
+                }
+        :
+                null,
+                tryGetExpressionCompilation:
+                (Retained expression, out ExpressionCompilationCacheEntry entry) =>
+                compilations.TryGetValue(expression, out entry),
+                getOrAddExpressionCompilation:
+                (expression, build) =>
+                {
+                    if (!compilations.TryGetValue(expression, out var entry))
+                        compilations.Add(expression, entry = build());
+
+                    return entry;
+                },
+                expressionEncodingCache: encodings);
+
+        for (var index = 0; index < 2; ++index)
+        {
+            var report =
+                CreateVm().EvaluateExpressionOnCustomStack(
+                    root,
+                    PineValue.List([PineValue.EmptyBlob, PineValue.EmptyList]),
+                    Core.Runtime.IntermediateVM.PineVM.EvaluationConfig.Unbounded,
+                    observe ? (in item) => identities.Add(item.Identity) : null)
+                .Extract(error => throw new Exception(error.ToString()));
+
+            report.ReturnValue.Evaluate().Should().Be(IntegerEncoding.EncodeSignedInteger(2));
+            identities.Add(report.Identity);
+            identities.AddRange(report.ExpressionStackTrace);
+        }
+
+        compilations.Should().HaveCount(2);
+        applicationReports.Should().HaveCount(observe ? 2 : 0);
+        identities.AddRange(compilations.Values.Select(entry => entry.Identity));
+        identities.AddRange(applicationReports.Select(report => report.Identity));
+        identities.AddRange(applicationReports.SelectMany(report => report.ExpressionStackTrace));
+
+        foreach (var identity in identities)
+        {
+            identity.IsCanonicalExpressionCreated.Should().BeFalse();
+            identity.IsEncodedValueCreated.Should().BeFalse();
+            identity.IsHashCreated.Should().BeFalse();
+        }
+
+        encodings.GetIdentity(retainedRoot).CanonicalExpression.Should().Be(root);
+        encodings.GetIdentity(retainedRoot).IsEncodedValueCreated.Should().BeFalse();
+        encodings.GetIdentity(retainedRoot).IsHashCreated.Should().BeFalse();
+    }
+
+    [Fact]
+    public void Structured_error_snapshots_do_not_materialize_canonical_views()
+    {
+        using var cancellation = new CancellationTokenSource();
+        var snapshots = new List<EvaluationStackTraceFrame>();
+
+        var vm =
+            Core.Runtime.IntermediateVM.PineVM.CreateCustom(
+                evalCache: null,
+                evaluationConfigDefault: null,
+                reportFunctionApplication: null,
+                compilationEnvClasses: null,
+                disableReductionInCompilation: true,
+                selectPrecompiled: null,
+                skipInlineForExpression: null,
+                enableTailRecursionOptimization: false,
+                parseCache: null,
+                precompiledLeaves: null,
+                reportEnterPrecompiledLeaf: null,
+                reportExitPrecompiledLeaf: null,
+                optimizationParametersSerial: null,
+                cacheFileStore: null,
+                reportEvaluationEvent:
+                (in item) =>
+                {
+                    snapshots.AddRange(item.LoadStackTrace());
+                    cancellation.Cancel();
+                });
+
+        var expression = new Expression.Eval(Expression.EnvironmentInstance, Expression.EnvironmentInstance);
+
+        var error =
+            vm.EvaluateExpressionOnCustomStack(
+                expression, PineValue.EmptyList,
+                Core.Runtime.IntermediateVM.PineVM.EvaluationConfig.Unbounded,
+                cancellation.Token)
+            .IsErrOrNull()!;
+
+        error.Reason.Should().BeOfType<EvaluationErrorReason.CancellationRequested>();
+        snapshots.AddRange(error.StackTrace);
+        snapshots.Should().NotBeEmpty();
+
+        foreach (var frame in snapshots)
+        {
+            frame.Identity.IsCanonicalExpressionCreated.Should().BeFalse();
+            frame.Identity.IsEncodedValueCreated.Should().BeFalse();
+            frame.Identity.IsHashCreated.Should().BeFalse();
+        }
+
+        error.StackTrace[0].Expression.Should().Be(expression);
+    }
+
+    [Fact]
+    public void Invocation_reports_preserve_distinct_encodings_sharing_one_compilation()
+    {
+        var reports = new List<EvaluationReport>();
+        var compilations = new ConcurrentExpressionCompilationCache();
+
+        var child =
+            Expression.ConditionalInst(
+                Expression.EnvironmentInstance,
+                Expression.LitralInst(PineValue.EmptyBlob),
+                Expression.LitralInst(PineValue.EmptyList));
+
+        var canonicalValue = ExpressionEncoding.EncodeExpressionAsValue(child);
+
+        var aliasValue =
+            PineValue.List(
+                [
+                    StringEncoding.ValueFromString("Condition"),
+                    ExpressionEncoding.EncodeExpressionAsValue(child.Condition),
+                    ExpressionEncoding.EncodeExpressionAsValue(child.FalseBranch),
+                    ExpressionEncoding.EncodeExpressionAsValue(child.TrueBranch)
+                ]);
+
+        var root =
+            new Expression.Eval(
+                Expression.EnvironmentInstance,
+                Expression.LitralInst(PineKernelValues.TrueValue));
+
+        var vm =
+            Core.Runtime.IntermediateVM.PineVM.CreateCustom(
+                evalCache: null,
+                evaluationConfigDefault: null,
+                reportFunctionApplication: reports.Add,
+                compilationEnvClasses: null,
+                disableReductionInCompilation: true,
+                selectPrecompiled: null,
+                skipInlineForExpression: null,
+                enableTailRecursionOptimization: false,
+                parseCache: null,
+                precompiledLeaves: null,
+                reportEnterPrecompiledLeaf: null,
+                reportExitPrecompiledLeaf: null,
+                optimizationParametersSerial: null,
+                cacheFileStore: null,
+                disableDirectContinueForSimpleEval: true,
+                disableDirectEvalForSimpleTemplate: true,
+                tryGetExpressionCompilation: compilations.TryGet,
+                getOrAddExpressionCompilation: compilations.GetOrAdd);
+
+        foreach (var encoded in new[] { canonicalValue, aliasValue })
+            vm.EvaluateExpression(root, encoded).IsOkOrNull().Should().Be(PineValue.EmptyList);
+
+        compilations.Count.Should().Be(2);
+        reports.Should().HaveCount(2);
+        reports[0].Identity.InternalExpression.Should().Be(reports[1].Identity.InternalExpression);
+
+        foreach (var report in reports)
+        {
+            report.Identity.IsCanonicalExpressionCreated.Should().BeFalse();
+            report.Identity.IsEncodedValueCreated.Should().BeFalse();
+            report.Identity.IsHashCreated.Should().BeFalse();
+        }
+
+        reports[0].ExpressionValue.Should().BeSameAs(canonicalValue);
+        reports[1].ExpressionValue.Should().BeSameAs(aliasValue);
+        reports[0].Identity.HashBase16.Should().NotBe(reports[1].Identity.HashBase16);
     }
 
     [Fact]

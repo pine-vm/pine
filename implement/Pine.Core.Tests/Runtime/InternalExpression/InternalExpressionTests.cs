@@ -251,7 +251,7 @@ public class InternalExpressionTests
         IDictionary<(Canonical, ReductionConfig), Canonical> canonicalCache =
             shared
             ?
-            new PineVMSharedCaches().ReducedExpressions
+            new RetainedReductionCache()
             :
             new Dictionary<(Canonical, ReductionConfig), Canonical>();
 
@@ -297,7 +297,7 @@ public class InternalExpressionTests
         var frame =
             new StackFrame(
                 null,
-                retained,
+                new ExpressionIdentity(retained),
                 instructions,
                 input,
                 Memory<PineValueInProcess?>.Empty,
@@ -572,7 +572,7 @@ public class InternalExpressionTests
                     optimizationParametersSerial: null,
                     cacheFileStore: null,
                     expressionCompilationOverrides:
-                    new Dictionary<Canonical, ExpressionCompilation> { [canonical] = compilation });
+                    new Dictionary<Expression, ExpressionCompilation> { [retained] = compilation });
 
             var expected =
                 canonical is Canonical.Builtin builtin

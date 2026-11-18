@@ -104,9 +104,9 @@ public class EvaluationInstrumentationTests
             cacheFileStore: null,
             reportEvaluationEvent: report,
             expressionCompilationOverrides:
-            new Dictionary<Expression, ExpressionCompilation>
+            new Dictionary<Core.Runtime.InternalExpression.Expression, ExpressionCompilation>
             {
-                [root] =
+                [Core.Runtime.InternalExpression.ExpressionConversion.FromCanonicalCached(root)] =
                 new(
                     new StackFrameInstructions(
                         StaticFunctionInterface.Generic,
@@ -118,7 +118,7 @@ public class EvaluationInstrumentationTests
                         ],
                         null),
                     []),
-                [child] =
+                [Core.Runtime.InternalExpression.ExpressionConversion.FromCanonicalCached(child)] =
                 new(
                     new StackFrameInstructions(
                         StaticFunctionInterface.Generic,

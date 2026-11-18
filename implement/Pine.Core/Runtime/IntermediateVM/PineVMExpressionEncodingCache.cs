@@ -1,20 +1,17 @@
 using Pine.Core.PineLanguage;
-using System;
 using System.Collections.Concurrent;
-using System.Collections.Generic;
-using System.Threading;
 
 namespace Pine.Core.Runtime.IntermediateVM;
 
 /// <summary>
-/// Thread-safe cache of the encoded values used by PineVM for expressions.
+/// Thread-safe cache of expression identities and their demand-driven canonical views.
 /// </summary>
 public sealed class PineVMExpressionEncodingCache
 {
-    private readonly ConcurrentDictionary<InternalExpression.Expression, Lazy<PineValue>> _entries = [];
+    private readonly ConcurrentDictionary<InternalExpression.Expression, ExpressionIdentity> _entries = [];
 
     /// <summary>
-    /// Gets the number of cached expressions.
+    /// Gets the number of retained identities, including views not yet materialized.
     /// </summary>
     public int Count => _entries.Count;
 
@@ -25,17 +22,11 @@ public sealed class PineVMExpressionEncodingCache
         => GetOrEncode(InternalExpression.ExpressionConversion.FromCanonicalCached(expression));
 
     internal PineValue GetOrEncode(InternalExpression.Expression expression)
-    {
-        var lazyEncoding =
-            _entries.GetOrAdd(
-                expression,
-                _ =>
-                new Lazy<PineValue>(
-                    () => InternalExpression.ExpressionValueEncoding.EncodeExpressionAsValue(expression),
-                    LazyThreadSafetyMode.ExecutionAndPublication));
+        => GetIdentity(expression).EncodedValue;
 
-        return GetValue(expression, lazyEncoding);
-    }
+    /// <summary>Retains an identity without requesting canonical syntax, an encoded value, or a hash.</summary>
+    public ExpressionIdentity GetIdentity(InternalExpression.Expression expression) =>
+        _entries.GetOrAdd(expression, static expression => new(expression));
 
     /// <summary>
     /// Registers an encoded value that was successfully parsed as the supplied expression.
@@ -55,27 +46,6 @@ public sealed class PineVMExpressionEncodingCache
         if (_entries.TryGetValue(expression, out _))
             return;
 
-        _entries.TryAdd(
-            expression,
-            new Lazy<PineValue>(
-                () => encodedExpression,
-                LazyThreadSafetyMode.ExecutionAndPublication));
-    }
-
-    private PineValue GetValue(
-        InternalExpression.Expression expression,
-        Lazy<PineValue> lazyEncoding)
-    {
-        try
-        {
-            return lazyEncoding.Value;
-        }
-        catch
-        {
-            ((ICollection<KeyValuePair<InternalExpression.Expression, Lazy<PineValue>>>)_entries)
-                .Remove(new(expression, lazyEncoding));
-
-            throw;
-        }
+        _entries.TryAdd(expression, new(expression, encodedExpression));
     }
 }

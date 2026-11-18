@@ -6,6 +6,8 @@ using System.IO;
 using System.Text.Json;
 using System.Threading;
 
+using Retained = Pine.Core.Runtime.InternalExpression.Expression;
+
 namespace Pine.Core.Runtime.IntermediateVM;
 
 /// <summary>
@@ -698,21 +700,24 @@ public sealed class PineVMWorkProfile : IDisposable
 
     internal void Count(Metric metric, long amount = 1) => _counts[(int)metric] += amount;
 
-    internal void DirectConstructorMemoHit(Expression expression)
+    internal void DirectConstructorMemoHit<TExpression>(TExpression expression) where TExpression : class
     {
         Count(Metric.DirectConstructorMemoHits);
 
         switch (expression)
         {
             case Expression.Litral:
+            case Retained.Literal:
                 Count(Metric.DirectConstructorMemoLiteralHits);
                 break;
 
             case Expression.List:
+            case Retained.List:
                 Count(Metric.DirectConstructorMemoListHits);
                 break;
 
             case Expression.Environment:
+            case Retained.Environment:
                 Count(Metric.DirectConstructorMemoEnvironmentHits);
                 break;
 
@@ -720,6 +725,13 @@ public sealed class PineVMWorkProfile : IDisposable
             case Expression.Conditional:
             case Expression.Builtin:
             case Expression.Eval:
+            case Retained.Label:
+            case Retained.Conditional:
+            case Retained.Builtin:
+            case Retained.BuiltinBinary:
+            case Retained.HeadSkip:
+            case Retained.Length_Equal_Binary:
+            case Retained.Eval:
                 throw new InvalidOperationException("Only pure constructor nodes can have memo hits.");
 
             default:
@@ -1227,8 +1239,9 @@ public sealed class PineVMWorkProfile : IDisposable
             });
     }
 
-    internal bool DirectEntry(
-        Expression expression, HashSet<Expression>? references, bool isRoot, bool underRepeatFrontier)
+    internal bool DirectEntry<TExpression>(
+        TExpression expression, HashSet<TExpression>? references, bool isRoot, bool underRepeatFrontier)
+        where TExpression : class
     {
         if (DirectVisitBudget is { } budget && this[Metric.EvalDirectEntries] >= budget)
         {
@@ -1249,13 +1262,16 @@ public sealed class PineVMWorkProfile : IDisposable
         Count(
             expression switch
             {
-                Expression.Litral => Metric.EvalDirectLiteral,
-                Expression.List => Metric.EvalDirectList,
-                Expression.Environment => Metric.EvalDirectEnvironment,
-                Expression.Conditional => Metric.EvalDirectConditional,
-                Expression.Builtin => Metric.EvalDirectBuiltin,
-                Expression.Label => Metric.EvalDirectStringTag,
-                Expression.Eval => Metric.EvalDirectUnsupported,
+                Expression.Litral or Retained.Literal => Metric.EvalDirectLiteral,
+                Expression.List or Retained.List => Metric.EvalDirectList,
+                Expression.Environment or Retained.Environment => Metric.EvalDirectEnvironment,
+                Expression.Conditional or Retained.Conditional => Metric.EvalDirectConditional,
+
+                Expression.Builtin or Retained.Builtin or Retained.BuiltinBinary or Retained.HeadSkip or Retained.Length_Equal_Binary =>
+                Metric.EvalDirectBuiltin,
+
+                Expression.Label or Retained.Label => Metric.EvalDirectStringTag,
+                Expression.Eval or Retained.Eval => Metric.EvalDirectUnsupported,
 
                 _ =>
                 throw new NotImplementedException(
@@ -1265,7 +1281,7 @@ public sealed class PineVMWorkProfile : IDisposable
         var repeatFrontier = false;
 
         if (references is not null &&
-            expression is Expression.Litral or Expression.List or Expression.Environment)
+            expression is Expression.Litral or Expression.List or Expression.Environment or Retained.Literal or Retained.List or Retained.Environment)
         {
             Count(Metric.ConstructorEntries);
 
@@ -1279,10 +1295,17 @@ public sealed class PineVMWorkProfile : IDisposable
                     CountConstructorOpportunity(Metric.ConstructorRepeatFrontiers);
                 }
 
-                if (expression is Expression.List list)
+                int? listItems =
+                    expression is Expression.List list
+                    ?
+                    list.Items.Count
+                    :
+                    expression is Retained.List retainedList ? retainedList.Items.Length : null;
+
+                if (listItems is { } count)
                 {
                     Count(Metric.ConstructorRepeatedLists);
-                    Count(Metric.ConstructorRepeatedListItems, list.Items.Count);
+                    Count(Metric.ConstructorRepeatedListItems, count);
                 }
             }
             else if (references.Count < ReferenceCapacity)

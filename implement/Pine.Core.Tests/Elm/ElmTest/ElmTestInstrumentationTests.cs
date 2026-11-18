@@ -40,7 +40,11 @@ public class ElmTestInstrumentationTests
                 null);
 
         var caches = new PineVMSharedCaches();
-        caches.ExpressionCompilations.GetOrAdd(expression, () => new(new(instructions, []), new string('0', 64), null));
+
+        caches.ExpressionCompilations.GetOrAdd(
+            expression,
+            () => new(new(instructions, []), ExpressionIdentity.FromCanonical(expression)));
+
         var vm = profile.CreateVm(new ConcurrentInvocationCache(), caches);
 
         using (profile.EnterScope("discovery", "suite"))
@@ -109,7 +113,7 @@ public class ElmTestInstrumentationTests
 
         caches.ExpressionCompilations.GetOrAdd(
             intermediateExpression,
-            () => new(new(instructions, []), new string('0', 64), null));
+            () => new(new(instructions, []), ExpressionIdentity.FromCanonical(intermediateExpression)));
 
         using (profile.EnterScope("discovery", "deferred template"))
         {
@@ -294,7 +298,7 @@ public class ElmTestInstrumentationTests
 
         caches.ExpressionCompilations.GetOrAdd(
             expression,
-            () => new(new(instructions, []), new string('0', 64), null));
+            () => new(new(instructions, []), ExpressionIdentity.FromCanonical(expression)));
 
         using var profile = new ElmTestInstrumentation(new() { DisablePrecompiledLeaves = true });
 
@@ -313,7 +317,7 @@ public class ElmTestInstrumentationTests
 
         caches.ExpressionCompilations.GetOrAdd(
             expression,
-            () => new(new(instructions, []), new string('0', 64), null));
+            () => new(new(instructions, []), ExpressionIdentity.FromCanonical(expression)));
 
         return caches;
     }
@@ -354,7 +358,7 @@ public class ElmTestInstrumentationTests
 
         caches.ExpressionCompilations.GetOrAdd(
             expression,
-            () => new(new(instructions, []), new string('0', 64), null));
+            () => new(new(instructions, []), ExpressionIdentity.FromCanonical(expression)));
 
         using var profile =
             new ElmTestInstrumentation(

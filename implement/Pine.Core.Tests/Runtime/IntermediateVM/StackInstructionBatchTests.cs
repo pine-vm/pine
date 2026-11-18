@@ -96,9 +96,9 @@ public class StackInstructionBatchTests
                 optimizationParametersSerial: null,
                 cacheFileStore: null,
                 expressionCompilationOverrides:
-                new Dictionary<Expression, ExpressionCompilation>
+                new Dictionary<Core.Runtime.InternalExpression.Expression, ExpressionCompilation>
                 {
-                    [rootExpression] =
+                    [Core.Runtime.InternalExpression.ExpressionConversion.FromCanonicalCached(rootExpression)] =
                     new ExpressionCompilation(
                         Generic:
                         new StackFrameInstructions(
@@ -112,7 +112,7 @@ public class StackInstructionBatchTests
                             ],
                             TrackEnvConstraint: null),
                         Specialized: []),
-                    [targetExpression] =
+                    [Core.Runtime.InternalExpression.ExpressionConversion.FromCanonicalCached(targetExpression)] =
                     new ExpressionCompilation(
                         Generic: instructions,
                         Specialized: [])
@@ -195,9 +195,9 @@ public class StackInstructionBatchTests
                 optimizationParametersSerial: null,
                 cacheFileStore: null,
                 expressionCompilationOverrides:
-                new Dictionary<Expression, ExpressionCompilation>
+                new Dictionary<Core.Runtime.InternalExpression.Expression, ExpressionCompilation>
                 {
-                    [rootExpression] =
+                    [Core.Runtime.InternalExpression.ExpressionConversion.FromCanonicalCached(rootExpression)] =
                     new ExpressionCompilation(
                         Generic:
                         new StackFrameInstructions(
@@ -211,7 +211,7 @@ public class StackInstructionBatchTests
                             ],
                             TrackEnvConstraint: null),
                         Specialized: []),
-                    [targetExpression] =
+                    [Core.Runtime.InternalExpression.ExpressionConversion.FromCanonicalCached(targetExpression)] =
                     new ExpressionCompilation(
                         Generic: instructions,
                         Specialized: [])

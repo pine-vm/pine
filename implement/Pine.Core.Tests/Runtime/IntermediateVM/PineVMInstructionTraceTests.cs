@@ -71,10 +71,12 @@ public class PineVMInstructionTraceTests
                 cacheFileStore: null,
                 reportExecutedStackInstruction: reportInstructions ? ObserveInstruction : null,
                 expressionCompilationOverrides:
-                new Dictionary<Expression, ExpressionCompilation>
+                new Dictionary<Core.Runtime.InternalExpression.Expression, ExpressionCompilation>
                 {
-                    [shortExpression] = new(Instructions(1), []),
-                    [longExpression] = new(Instructions(LongBodyPairs), [])
+                    [Core.Runtime.InternalExpression.ExpressionConversion.FromCanonicalCached(shortExpression)] =
+                    new(Instructions(1), []),
+                    [Core.Runtime.InternalExpression.ExpressionConversion.FromCanonicalCached(longExpression)] =
+                    new(Instructions(LongBodyPairs), [])
                 });
 
         var config = new Core.Runtime.IntermediateVM.PineVM.EvaluationConfig(null, null, null);

@@ -10,6 +10,8 @@ using System.Text.Json;
 using Xunit;
 
 using ProfiledVM = Pine.Core.Runtime.IntermediateVM.PineVM;
+using Retained = Pine.Core.Runtime.InternalExpression.Expression;
+using RetainedBuiltin = Pine.Core.Runtime.InternalExpression.BuiltinFunction;
 
 namespace Pine.Core.Tests.Runtime.IntermediateVM;
 
@@ -27,8 +29,8 @@ public class DirectEvalTemplateMetricsTests
 
         using (profile.Enter())
         {
-            var parsed = cache.ParseExpression(encoded).IsOkOrNull()!;
-            cache.ParseExpression(encoded).IsOkOrNull().Should().BeSameAs(parsed);
+            var parsed = cache.ParseInternalExpression(encoded).IsOkOrNull()!;
+            cache.ParseInternalExpression(encoded).IsOkOrNull().Should().BeSameAs(parsed);
             profile.DirectTemplates.Recognize(parsed);
             var first = profile.DirectTemplates.Apply(parsed, PineValueInProcess.EmptyBlob, profile)!.Value;
             profile.DirectTemplates.Recognize(parsed);
@@ -36,10 +38,10 @@ public class DirectEvalTemplateMetricsTests
             first.value.Evaluate().Should().Be(second.value.Evaluate());
 
             profile.DirectTemplates.Recognize(
-                new Expression.Eval(Expression.EnvironmentInstance, Expression.EnvironmentInstance));
+                new Retained.Eval(Retained.EnvironmentInstance, Retained.EnvironmentInstance));
 
             profile.DirectTemplates.Recognize(
-                new Expression.Builtin(nameof(BuiltinFunction.length), Expression.EnvironmentInstance));
+                new Retained.Builtin(RetainedBuiltin.Length, Retained.EnvironmentInstance));
 
             // Other direct-evaluator users must not increase simple-template applications.
             ProfiledVM.EvalDirect(parsed, PineValueInProcess.EmptyBlob).Should().NotBeNull();
@@ -68,7 +70,7 @@ public class DirectEvalTemplateMetricsTests
     [Fact]
     public void Direct_template_metrics_capture_cancelled_attempt_without_claiming_success()
     {
-        var expression = Expression.ListInst([Expression.EnvironmentInstance]);
+        var expression = Retained.ListInst([Retained.EnvironmentInstance]);
         using var profile = new PineVMWorkProfile(referenceCapacity: 0, directVisitBudget: 1);
 
         using (profile.Enter())

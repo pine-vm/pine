@@ -26,7 +26,7 @@ public enum EvaluationEventKind
 /// </summary>
 /// <param name="Kind">The observed evaluation boundary.</param>
 /// <param name="FrameIndex">Evaluation-local identity of the current frame.</param>
-/// <param name="Expression">Expression executed by the current frame.</param>
+/// <param name="Identity">Runtime expression identity; canonical views are demand-driven.</param>
 /// <param name="InstructionPointer">Current instruction offset.</param>
 /// <param name="StackDepth">Number of currently active frames.</param>
 /// <param name="FrameInstructionCount">Instructions executed by this frame, excluding child frames.</param>
@@ -39,7 +39,7 @@ public enum EvaluationEventKind
 public readonly record struct EvaluationEvent(
     EvaluationEventKind Kind,
     long FrameIndex,
-    Expression Expression,
+    ExpressionIdentity Identity,
     int InstructionPointer,
     int StackDepth,
     long FrameInstructionCount,
@@ -48,4 +48,8 @@ public readonly record struct EvaluationEvent(
     Func<IEnumerable<EvaluationStackTraceFrame>> LoadStackTrace,
     EvaluationErrorReason? StopReason = null,
     StackFrameInstructions? Instructions = null,
-    Func<EvalWorkCountersByOrigin>? LoadCountersByOrigin = null);
+    Func<EvalWorkCountersByOrigin>? LoadCountersByOrigin = null)
+{
+    /// <summary>Materializes the frame's canonical expression only when read.</summary>
+    public Expression Expression => Identity.CanonicalExpression;
+}

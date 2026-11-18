@@ -993,7 +993,11 @@ public partial class StackInstructionTextFormatTests
                 cacheFileStore: null,
                 reportExecutedStackInstruction: (in item) => trace.Add(item),
                 expressionCompilationOverrides:
-                new Dictionary<Expression, ExpressionCompilation> { [expression] = new(frame, []) });
+                new Dictionary<Core.Runtime.InternalExpression.Expression, ExpressionCompilation>
+                {
+                    [Core.Runtime.InternalExpression.ExpressionConversion.FromCanonicalCached(expression)] =
+                    new(frame, [])
+                });
 
         var result =
             vm.EvaluateExpressionOnCustomStack(

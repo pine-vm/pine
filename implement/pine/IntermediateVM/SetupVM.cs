@@ -87,7 +87,7 @@ public static class SetupVM
         IDictionary<EvalCacheEntryKey, PineValue>? evalCache = null,
         Core.Runtime.IntermediateVM.PineVM.EvaluationConfig? evaluationConfigDefault = null,
         Action<EvaluationReport>? reportFunctionApplication = null,
-        IReadOnlyDictionary<Expression, IReadOnlyList<PineValueClass>>? compilationEnvClasses = null,
+        IReadOnlyDictionary<Core.Runtime.InternalExpression.Expression, IReadOnlyList<PineValueClass>>? compilationEnvClasses = null,
         bool disableReductionInCompilation = false,
         bool enableTailRecursionOptimization = true,
         PineVMParseCache? parseCache = null,
@@ -101,7 +101,7 @@ public static class SetupVM
         TryGetExpressionCompilation? tryGetExpressionCompilation = null,
         GetOrAddExpressionCompilation? getOrAddExpressionCompilation = null,
         PineVMExpressionEncodingCache? expressionEncodingCache = null,
-        IDictionary<(Expression, ReductionConfig), Expression>? reducedExpressionCache = null,
+        IDictionary<(Core.Runtime.InternalExpression.Expression, ReductionConfig), Core.Runtime.InternalExpression.Expression>? reducedExpressionCache = null,
         PineVMExpressionTemplatePlanCache? expressionTemplatePlanCache = null) =>
         CreateWithTemplatePlanCache(
             expressionTemplatePlanCache ?? new PineVMExpressionTemplatePlanCache(),
@@ -129,7 +129,7 @@ public static class SetupVM
         Core.Runtime.IntermediateVM.PineVM.EvaluationConfig? evaluationConfigDefault,
         IDictionary<EvalCacheEntryKey, PineValue>? evalCache = null,
         Action<EvaluationReport>? reportFunctionApplication = null,
-        IReadOnlyDictionary<Expression, IReadOnlyList<PineValueClass>>? compilationEnvClasses = null,
+        IReadOnlyDictionary<Core.Runtime.InternalExpression.Expression, IReadOnlyList<PineValueClass>>? compilationEnvClasses = null,
         bool disableReductionInCompilation = false,
         bool enableTailRecursionOptimization = true,
         PineVMParseCache? parseCache = null,
@@ -143,7 +143,7 @@ public static class SetupVM
         TryGetExpressionCompilation? tryGetExpressionCompilation = null,
         GetOrAddExpressionCompilation? getOrAddExpressionCompilation = null,
         PineVMExpressionEncodingCache? expressionEncodingCache = null,
-        IDictionary<(Expression, ReductionConfig), Expression>? reducedExpressionCache = null)
+        IDictionary<(Core.Runtime.InternalExpression.Expression, ReductionConfig), Core.Runtime.InternalExpression.Expression>? reducedExpressionCache = null)
     {
         precompiledLeaves ??= DefaultPrecompiledLeaves;
 

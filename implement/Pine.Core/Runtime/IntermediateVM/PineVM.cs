@@ -1,4 +1,3 @@
-using Pine.Core.Addressing;
 using Pine.Core.CodeAnalysis;
 using Pine.Core.Encodings;
 using Pine.Core.Functional;
@@ -46,11 +45,11 @@ public partial class PineVM : ICancellablePineVM
 
     private readonly ReportEvaluationEvent? _reportEvaluationEvent;
 
-    private readonly ExpressionLookup<IReadOnlyList<PineValueClass>>? _compilationEnvClasses;
+    private readonly IReadOnlyDictionary<Retained, IReadOnlyList<PineValueClass>>? _compilationEnvClasses;
 
     private readonly bool _disableReductionInCompilation;
 
-    private readonly Func<Expression, PineValueInProcess, PineVMParseCache, Func<PrecompiledResult>?>? _selectPrecompiled =
+    private readonly Func<ExpressionIdentity, PineValueInProcess, PineVMParseCache, Func<PrecompiledResult>?>? _selectPrecompiled =
         null;
 
     private readonly Func<Retained, bool>? _skipInlineForExpression;
@@ -78,13 +77,11 @@ public partial class PineVM : ICancellablePineVM
 
     private readonly Action<PineValue, PineValueInProcess, PineValueInProcess?>? _reportExitPrecompiledLeaf;
 
-    private readonly OptimizationParametersSerial? _optimizationParametersSerial = null;
+    private readonly IReadOnlyDictionary<Retained, ExpressionCompilation>? _expressionCompilationOverrides;
 
-    private readonly ExpressionLookup<ExpressionCompilation>? _expressionCompilationOverrides;
+    private readonly TryGetExpressionCompilation _tryGetExpressionCompilation;
 
-    private readonly TryGetInternalExpressionCompilation _tryGetExpressionCompilation;
-
-    private readonly GetOrAddInternalExpressionCompilation _getOrAddExpressionCompilation;
+    private readonly GetOrAddExpressionCompilation _getOrAddExpressionCompilation;
 
     private readonly IDictionary<(Retained, ReductionConfig), Retained> _reducedExpressionCache;
 
@@ -128,10 +125,10 @@ public partial class PineVM : ICancellablePineVM
         IDictionary<EvalCacheEntryKey, PineValue>? evalCache,
         EvaluationConfig? evaluationConfigDefault,
         Action<EvaluationReport>? reportFunctionApplication,
-        IReadOnlyDictionary<Expression, IReadOnlyList<PineValueClass>>? compilationEnvClasses,
+        IReadOnlyDictionary<Retained, IReadOnlyList<PineValueClass>>? compilationEnvClasses,
         bool disableReductionInCompilation,
-        Func<Expression, PineValueInProcess, PineVMParseCache, Func<PrecompiledResult>?>? selectPrecompiled,
-        Func<Expression, bool>? skipInlineForExpression,
+        Func<ExpressionIdentity, PineValueInProcess, PineVMParseCache, Func<PrecompiledResult>?>? selectPrecompiled,
+        Func<ExpressionIdentity, bool>? skipInlineForExpression,
         bool enableTailRecursionOptimization,
         PineVMParseCache? parseCache,
         IReadOnlyDictionary<PineValue, PrecompiledLeaf>? precompiledLeaves,
@@ -140,7 +137,7 @@ public partial class PineVM : ICancellablePineVM
         OptimizationParametersSerial? optimizationParametersSerial,
         IFileStore? cacheFileStore,
         ReportExecutedStackInstruction? reportExecutedStackInstruction = null,
-        IReadOnlyDictionary<Expression, ExpressionCompilation>? expressionCompilationOverrides = null,
+        IReadOnlyDictionary<Retained, ExpressionCompilation>? expressionCompilationOverrides = null,
         int pathMaxLowExclusive = ExpressionCompilation.DefaultPathMaxLowExclusive,
         int pathMaxHighInclusive = ExpressionCompilation.DefaultPathMaxHighInclusive,
         bool disableGenericApplicationChainConsolidation = false,
@@ -153,7 +150,7 @@ public partial class PineVM : ICancellablePineVM
         TryGetExpressionCompilation? tryGetExpressionCompilation = null,
         GetOrAddExpressionCompilation? getOrAddExpressionCompilation = null,
         PineVMExpressionEncodingCache? expressionEncodingCache = null,
-        IDictionary<(Expression, ReductionConfig), Expression>? reducedExpressionCache = null,
+        IDictionary<(Retained, ReductionConfig), Retained>? reducedExpressionCache = null,
         ReportEvaluationEvent? reportEvaluationEvent = null,
         bool disableDirectInvocation = false,
         PineVMWorkProfile? workProfile = null) =>
@@ -198,10 +195,10 @@ public partial class PineVM : ICancellablePineVM
         IDictionary<EvalCacheEntryKey, PineValue>? evalCache,
         EvaluationConfig? evaluationConfigDefault,
         Action<EvaluationReport>? reportFunctionApplication,
-        IReadOnlyDictionary<Expression, IReadOnlyList<PineValueClass>>? compilationEnvClasses,
+        IReadOnlyDictionary<Retained, IReadOnlyList<PineValueClass>>? compilationEnvClasses,
         bool disableReductionInCompilation,
-        Func<Expression, PineValueInProcess, PineVMParseCache, Func<PrecompiledResult>?>? selectPrecompiled,
-        Func<Expression, bool>? skipInlineForExpression,
+        Func<ExpressionIdentity, PineValueInProcess, PineVMParseCache, Func<PrecompiledResult>?>? selectPrecompiled,
+        Func<ExpressionIdentity, bool>? skipInlineForExpression,
         bool enableTailRecursionOptimization,
         PineVMParseCache? parseCache,
         IReadOnlyDictionary<PineValue, PrecompiledLeaf>? precompiledLeaves,
@@ -210,7 +207,7 @@ public partial class PineVM : ICancellablePineVM
         OptimizationParametersSerial? optimizationParametersSerial,
         IFileStore? cacheFileStore,
         ReportExecutedStackInstruction? reportExecutedStackInstruction = null,
-        IReadOnlyDictionary<Expression, ExpressionCompilation>? expressionCompilationOverrides = null,
+        IReadOnlyDictionary<Retained, ExpressionCompilation>? expressionCompilationOverrides = null,
         int pathMaxLowExclusive = ExpressionCompilation.DefaultPathMaxLowExclusive,
         int pathMaxHighInclusive = ExpressionCompilation.DefaultPathMaxHighInclusive,
         bool disableGenericApplicationChainConsolidation = false,
@@ -223,7 +220,7 @@ public partial class PineVM : ICancellablePineVM
         TryGetExpressionCompilation? tryGetExpressionCompilation = null,
         GetOrAddExpressionCompilation? getOrAddExpressionCompilation = null,
         PineVMExpressionEncodingCache? expressionEncodingCache = null,
-        IDictionary<(Expression, ReductionConfig), Expression>? reducedExpressionCache = null,
+        IDictionary<(Retained, ReductionConfig), Retained>? reducedExpressionCache = null,
         ReportEvaluationEvent? reportEvaluationEvent = null,
         bool disableDirectInvocation = false,
         PineVMWorkProfile? workProfile = null)
@@ -290,10 +287,10 @@ public partial class PineVM : ICancellablePineVM
         IDictionary<EvalCacheEntryKey, PineValue>? evalCache,
         EvaluationConfig? evaluationConfigDefault,
         Action<EvaluationReport>? reportFunctionApplication,
-        IReadOnlyDictionary<Expression, IReadOnlyList<PineValueClass>>? compilationEnvClasses,
+        IReadOnlyDictionary<Retained, IReadOnlyList<PineValueClass>>? compilationEnvClasses,
         bool disableReductionInCompilation,
-        Func<Expression, PineValueInProcess, PineVMParseCache, Func<PrecompiledResult>?>? selectPrecompiled,
-        Func<Expression, bool>? skipInlineForExpression,
+        Func<ExpressionIdentity, PineValueInProcess, PineVMParseCache, Func<PrecompiledResult>?>? selectPrecompiled,
+        Func<ExpressionIdentity, bool>? skipInlineForExpression,
         bool enableTailRecursionOptimization,
         PineVMParseCache? parseCache,
         IReadOnlyDictionary<PineValue, PrecompiledLeaf>? precompiledLeaves,
@@ -302,11 +299,11 @@ public partial class PineVM : ICancellablePineVM
         OptimizationParametersSerial? optimizationParametersSerial,
         IFileStore? cacheFileStore,
         ReportExecutedStackInstruction? reportExecutedStackInstruction,
-        IReadOnlyDictionary<Expression, ExpressionCompilation>? expressionCompilationOverrides,
+        IReadOnlyDictionary<Retained, ExpressionCompilation>? expressionCompilationOverrides,
         TryGetExpressionCompilation tryGetExpressionCompilation,
         GetOrAddExpressionCompilation getOrAddExpressionCompilation,
         PineVMExpressionEncodingCache expressionEncodingCache,
-        IDictionary<(Expression, ReductionConfig), Expression>? reducedExpressionCache,
+        IDictionary<(Retained, ReductionConfig), Retained>? reducedExpressionCache,
         int pathMaxLowExclusive = ExpressionCompilation.DefaultPathMaxLowExclusive,
         int pathMaxHighInclusive = ExpressionCompilation.DefaultPathMaxHighInclusive,
         bool disableGenericApplicationChainConsolidation = false,
@@ -364,13 +361,20 @@ public partial class PineVM : ICancellablePineVM
         _reportExpressionCompiled = reportExpressionCompiled;
         _reportEvaluationEvent = reportEvaluationEvent;
 
-        _compilationEnvClasses = ExpressionLookup<IReadOnlyList<PineValueClass>>.Create(compilationEnvClasses);
+        _compilationEnvClasses = compilationEnvClasses;
 
         _disableReductionInCompilation = disableReductionInCompilation;
 
         _selectPrecompiled = selectPrecompiled;
 
-        _skipInlineForExpression = CanonicalExpressionAdapter.ToInternal(skipInlineForExpression);
+        _expressionEncodingCache = expressionEncodingCache;
+
+        _skipInlineForExpression =
+            skipInlineForExpression is null
+            ?
+            null
+            :
+            expression => skipInlineForExpression(_expressionEncodingCache.GetIdentity(expression));
 
         _enableTailRecursionOptimization = enableTailRecursionOptimization;
 
@@ -383,38 +387,13 @@ public partial class PineVM : ICancellablePineVM
         _reportEnterPrecompiledLeaf = reportEnterPrecompiledLeaf;
         _reportExitPrecompiledLeaf = reportExitPrecompiledLeaf;
 
-        _optimizationParametersSerial = optimizationParametersSerial;
+        _expressionCompilationOverrides = expressionCompilationOverrides;
 
-        _expressionCompilationOverrides =
-            ExpressionLookup<ExpressionCompilation>.Create(expressionCompilationOverrides);
-
-        _tryGetExpressionCompilation =
-            tryGetExpressionCompilation.Target is ConcurrentExpressionCompilationCache retainedCache
-            ?
-            retainedCache.TryGetInternal
-            :
-            (Retained expression, out ExpressionCompilationCacheEntry entry) =>
-            tryGetExpressionCompilation(ExpressionConversion.ToCanonicalCached(expression), out entry);
-
-        _getOrAddExpressionCompilation =
-            getOrAddExpressionCompilation.Target is ConcurrentExpressionCompilationCache retainedAddCache
-            ?
-            retainedAddCache.GetOrAddInternal
-            :
-            (expression, build) => getOrAddExpressionCompilation(ExpressionConversion.ToCanonicalCached(expression), build);
-
-        _expressionEncodingCache = expressionEncodingCache;
+        _tryGetExpressionCompilation = tryGetExpressionCompilation;
+        _getOrAddExpressionCompilation = getOrAddExpressionCompilation;
 
         _reducedExpressionCache =
-            reducedExpressionCache is RetainedReductionCache retainedReductionCache
-            ?
-            retainedReductionCache.Entries
-            :
-            reducedExpressionCache is null
-            ?
-            new ConcurrentDictionary<(Retained, ReductionConfig), Retained>()
-            :
-            new CanonicalReductionCacheAdapter(reducedExpressionCache);
+            reducedExpressionCache ?? new ConcurrentDictionary<(Retained, ReductionConfig), Retained>();
 
         _pathMaxLowExclusive = pathMaxLowExclusive;
 
@@ -471,24 +450,9 @@ public partial class PineVM : ICancellablePineVM
         return evalReport.ReturnValue.Evaluate();
     }
 
-    readonly static ConcurrentPineValueHashCache s_mutableCacheValueHash = new();
-
-    static StackFrame BuildStackFrame(
-        PineValue? expressionValue,
-        Expression expression,
-        StackFrameInstructions instructions,
-        StackFrameInput stackFrameInput,
-        StackFrameProfilingBaseline profilingBaseline) =>
-        BuildInternalStackFrame(
-            expressionValue,
-            ExpressionConversion.FromCanonicalCached(expression),
-            instructions,
-            stackFrameInput,
-            profilingBaseline);
-
     static StackFrame BuildInternalStackFrame(
         PineValue? expressionValue,
-        Retained expression,
+        ExpressionIdentity identity,
         StackFrameInstructions instructions,
         StackFrameInput stackFrameInput,
         StackFrameProfilingBaseline profilingBaseline)
@@ -508,7 +472,7 @@ public partial class PineVM : ICancellablePineVM
         return
             new StackFrame(
                 expressionValue,
-                expression,
+                identity,
                 instructions,
                 InputValues: stackFrameInput,
                 StackValues:
@@ -537,8 +501,7 @@ public partial class PineVM : ICancellablePineVM
                     {
                         var compiledNotification =
                             new ExpressionCompiled(
-                                Expression: ExpressionConversion.ToCanonicalCached(rootExpression),
-                                ExpressionHashBase16: compilation.ExpressionHashBase16,
+                                Identity: compilation.Identity,
                                 Compilation: compilation.Compilation);
 
                         reportExpressionCompiled(in compiledNotification);
@@ -552,16 +515,10 @@ public partial class PineVM : ICancellablePineVM
     {
         if (_expressionCompilationOverrides?.TryGetValue(rootExpression, out var overrideCompilation) is true)
         {
-            var overrideExprValue = EncodeExpressionAsValue(rootExpression);
-
-            var (overrideExprHashBytes, _) =
-                PineValueHashFlat.ComputeHashForValue(overrideExprValue);
-
             return
                 new ExpressionCompilationCacheEntry(
                     Compilation: overrideCompilation,
-                    ExpressionHashBase16: Convert.ToHexStringLower(overrideExprHashBytes.Span),
-                    OptimizationConfig: null);
+                    Identity: _expressionEncodingCache.GetIdentity(rootExpression));
         }
 
         IReadOnlyList<PineValueClass>? specializations = null;
@@ -607,29 +564,10 @@ public partial class PineVM : ICancellablePineVM
                 expressionValue =>
                 _precompiledLeaves?.ContainsKey(expressionValue) is true);
 
-        OptimizationParametersSerial.ExpressionConfig? optimizationConfig = null;
-
-        var exprValue = EncodeExpressionAsValue(rootExpression);
-
-        var (exprHashBytes, _) =
-            PineValueHashFlat.ComputeHashForValue(exprValue);
-
-        var exprHashBase16 =
-            Convert.ToHexStringLower(exprHashBytes.Span);
-
-        if (_optimizationParametersSerial is not null)
-        {
-            optimizationConfig =
-                OptimizationParametersSerial.ConfigForExpression(
-                    _optimizationParametersSerial.Expressions,
-                    exprHashBytes);
-        }
-
         return
             new ExpressionCompilationCacheEntry(
                 Compilation: compilation,
-                ExpressionHashBase16: exprHashBase16,
-                OptimizationConfig: optimizationConfig);
+                Identity: _expressionEncodingCache.GetIdentity(rootExpression));
     }
 
     /// <summary>
@@ -861,7 +799,7 @@ public partial class PineVM : ICancellablePineVM
             frame.LoopIterationCount++;
 
             FireEvaluationEvent(EvaluationEventKind.BackwardJump, frame);
-            FireTailLoopIteration(TailLoopIterationKind.BackwardJump, frame.InternalExpression, frame.InputValues);
+            FireTailLoopIteration(TailLoopIterationKind.BackwardJump, frame.Identity, frame.InputValues);
 
             return EnforceLoopIterationCountLimit();
         }
@@ -873,7 +811,7 @@ public partial class PineVM : ICancellablePineVM
             foreach (var frame in stack)
             {
                 yield return new EvaluationStackTraceFrame(
-                    frame.Expression, frame.InputValues, frame.Instructions, frame.InstructionPointer,
+                    frame.Identity, frame.InputValues, frame.Instructions, frame.InstructionPointer,
                     () => frame.LocalsValues.ToArray(),
                     frame.InstructionCount, frame.LoopIterationCount, frame.FrameIndex);
             }
@@ -897,7 +835,7 @@ public partial class PineVM : ICancellablePineVM
                 new EvaluationEvent(
                     kind,
                     frame.FrameIndex,
-                    frame.Expression,
+                    frame.Identity,
                     frame.InstructionPointer,
                     stack.Count,
                     frame.InstructionCount,
@@ -936,7 +874,7 @@ public partial class PineVM : ICancellablePineVM
 
         void FireTailLoopIteration(
             TailLoopIterationKind kind,
-            Retained frameExpression,
+            ExpressionIdentity identity,
             StackFrameInput frameInput)
         {
             if (_reportTailLoopIteration is not { } reportTailLoopIteration)
@@ -949,7 +887,7 @@ public partial class PineVM : ICancellablePineVM
                     IterationIndex: tailLoopIterationCount,
                     StackFrameDepth: stack.Count,
                     Kind: kind,
-                    FrameExpression: ExpressionConversion.ToCanonicalCached(frameExpression),
+                    Identity: identity,
                     FrameInput: frameInput);
 
             tailLoopIterationCount++;
@@ -980,7 +918,7 @@ public partial class PineVM : ICancellablePineVM
                     ?
                     null
                     :
-                    _selectPrecompiled?.Invoke(ExpressionConversion.ToCanonicalCached(expression), environmentValue, ParseCache));
+                    _selectPrecompiled?.Invoke(_expressionEncodingCache.GetIdentity(expression), environmentValue, ParseCache));
 
                 selectedPrecompiled = null;
                 precompiledSelectionAttempted = false;
@@ -1035,7 +973,7 @@ public partial class PineVM : ICancellablePineVM
                                 var newFrame =
                                     new StackFrame(
                                         ExpressionValue: expressionValue,
-                                        Expression: expression,
+                                        Identity: _expressionEncodingCache.GetIdentity(expression),
                                         Instructions: null,
                                         InputValues: null,
                                         StackValues: null,
@@ -1318,7 +1256,12 @@ public partial class PineVM : ICancellablePineVM
             var environment =
                 PineValueInProcess.CreateFromTemplateRecipe(plan.TerminalEnvironmentRecipe, environments);
 
-            var selected = _selectPrecompiled(plan.TerminalExpression, environment, ParseCache);
+            var selected =
+                _selectPrecompiled(
+                    _expressionEncodingCache.GetIdentity(plan.RetainedTerminalExpression),
+                    environment,
+                    ParseCache);
+
             return selected is null ? default : (environment, selected);
         }
 
@@ -1409,7 +1352,7 @@ public partial class PineVM : ICancellablePineVM
             var continuationFrame =
                 new StackFrame(
                     ExpressionValue: null,
-                    Expression: currentFrame.InternalExpression,
+                    Identity: currentFrame.Identity,
                     Instructions: null,
                     InputValues: null,
                     StackValues: Memory<PineValueInProcess?>.Empty,
@@ -1486,7 +1429,7 @@ public partial class PineVM : ICancellablePineVM
             var newFrame =
                 BuildInternalStackFrame(
                     expressionValue: expressionValue,
-                    expression: expression,
+                    identity: _expressionEncodingCache.GetIdentity(expression),
                     instructions: instructions,
                     stackFrameInput: stackFrameInput,
                     profilingBaseline: newFrameProfilingBaseline);
@@ -1518,7 +1461,7 @@ public partial class PineVM : ICancellablePineVM
             {
                 FireTailLoopIteration(
                     TailLoopIterationKind.TailCallReplace,
-                    newFrame.InternalExpression,
+                    newFrame.Identity,
                     newFrame.InputValues);
             }
 
@@ -1539,7 +1482,7 @@ public partial class PineVM : ICancellablePineVM
                         FrameIndex: newFrame.FrameIndex,
                         StackFrameDepth: stack.Count,
                         Instructions: frameInstructions,
-                        FrameExpression: newFrame.Expression,
+                        Identity: newFrame.Identity,
                         LoadFrameInput: newFrame.InputValues.DiagnosticLoader);
 
                 reportEnteredStackFrameLocal(in enteredStackFrame);
@@ -1594,45 +1537,44 @@ public partial class PineVM : ICancellablePineVM
                     }
                 }
 
-                var frameOrigins =
-                    EvalWorkCountersByOrigin.Subtract(
-                        CurrentCountersByOrigin(),
-                        currentFrame.ProfilingBaseline.BeginCountersByOrigin);
+                if (_reportFunctionApplication is { } reportFunctionApplication)
+                {
+                    var frameOrigins =
+                        EvalWorkCountersByOrigin.Subtract(
+                            CurrentCountersByOrigin(),
+                            currentFrame.ProfilingBaseline.BeginCountersByOrigin);
 
-                frameOrigins =
-                    frameOrigins with
-                    {
-                        VirtualMachine =
-                        frameOrigins.VirtualMachine with { LoopIterationCount = currentFrame.LoopIterationCount }
-                    };
+                    frameOrigins =
+                        frameOrigins with
+                        {
+                            VirtualMachine =
+                            frameOrigins.VirtualMachine with { LoopIterationCount = currentFrame.LoopIterationCount }
+                        };
 
-                _reportFunctionApplication?.Invoke(
-                    new EvaluationReport(
-                        ExpressionValue: currentFrameExprValue,
-                        currentFrame.Expression,
-                        currentFrame.InputValues,
-                        Counters: frameOrigins.Total,
-                        ReturnValue: frameReturnValue,
-                        StackTrace: CompileStackTrace(10))
-                    {
-                        CountersByOrigin = frameOrigins
-                    });
+                    reportFunctionApplication(
+                        new EvaluationReport(
+                            Identity: currentFrame.Identity,
+                            currentFrame.InputValues,
+                            Counters: frameOrigins.Total,
+                            ReturnValue: frameReturnValue,
+                            ExpressionStackTrace: CompileStackTrace(10))
+                        {
+                            CountersByOrigin = frameOrigins
+                        });
+                }
             }
 
             stack.Pop();
 
             if (stack.Count is 0)
             {
-                var rootExprValue = EncodeExpressionAsValue(rootExpression);
-
                 return
                     new EvaluationReport(
-                        ExpressionValue: rootExprValue,
-                        Expression: ExpressionConversion.ToCanonicalCached(rootExpression),
+                        Identity: _expressionEncodingCache.GetIdentity(rootExpression),
                         Input: rootStackFrameInput,
                         Counters: CurrentCounters(),
                         ReturnValue: frameReturnValue,
-                        StackTrace: [])
+                        ExpressionStackTrace: [])
                     {
                         CountersByOrigin = CurrentCountersByOrigin()
                     };
@@ -1645,15 +1587,15 @@ public partial class PineVM : ICancellablePineVM
             return null;
         }
 
-        IReadOnlyList<Expression> CompileStackTrace(int frameCountMax)
+        IReadOnlyList<ExpressionIdentity> CompileStackTrace(int frameCountMax)
         {
             var frameCount = Math.Min(frameCountMax, stack.Count - 1);
 
-            var stackTrace = new Expression[frameCount];
+            var stackTrace = new ExpressionIdentity[frameCount];
 
             for (var i = 0; i < frameCount; i++)
             {
-                stackTrace[i] = stack.ElementAt(i + 1).Expression;
+                stackTrace[i] = stack.ElementAt(i + 1).Identity;
             }
 
             return stackTrace;
@@ -1670,7 +1612,7 @@ public partial class PineVM : ICancellablePineVM
 
                 stackTrace[i] =
                     new EvaluationStackTraceFrame(
-                        Expression: frame.Expression,
+                        Identity: frame.Identity,
                         Input: frame.InputValues,
                         Instructions: frame.Instructions,
                         InstructionPointer: frame.InstructionPointer);
@@ -1693,7 +1635,7 @@ public partial class PineVM : ICancellablePineVM
         {
             return
                 new(
-                    FrameExpression: stackFrame.Expression,
+                    Identity: stackFrame.Identity,
                     InputValues: stackFrame.InputValues,
                     Instructions: stackFrame.Instructions,
                     FrameInstructionPointer: stackFrame.InstructionPointer);
@@ -1738,7 +1680,7 @@ public partial class PineVM : ICancellablePineVM
                         {
                             if (InvokeStackFrame(
                                 cont.ExpressionValue,
-                                ExpressionConversion.FromCanonicalCached(cont.Expression),
+                                cont.Identity.InternalExpression,
                                 cont.ProjectedInstructions!,
                                 projectedInput,
                                 replaceCurrentFrame: false) is { } projectedError)
@@ -1751,7 +1693,7 @@ public partial class PineVM : ICancellablePineVM
 
                         if (InvokePrecompiledOrBuildStackFrame(
                             expressionValue: cont.ExpressionValue,
-                            expression: ExpressionConversion.FromCanonicalCached(cont.Expression),
+                            expression: cont.Identity.InternalExpression,
                             environmentValue: cont.EnvironmentValue,
                             replaceCurrentFrame: false,
                             selectedPrecompiled: cont.SelectedPrecompiled,
@@ -1846,7 +1788,7 @@ public partial class PineVM : ICancellablePineVM
                             InstructionPointer: currentFrame.InstructionPointer,
                             EvaluationStackDepth: currentFrame.StackPointer,
                             Instruction: currentInstruction,
-                            FrameExpression: currentFrame.Expression,
+                            Identity: currentFrame.Identity,
                             LoadFrameInput: currentFrame.InputValues.DiagnosticLoader,
                             FrameInstructions: currentFrame.Instructions,
                             FrameIndex: currentFrame.FrameIndex);
@@ -2926,7 +2868,7 @@ public partial class PineVM : ICancellablePineVM
 
                                 var initialStep =
                                     new ApplyStepwise.StepResult.Continue(
-                                        Expression: plan.TerminalExpression,
+                                        Identity: _expressionEncodingCache.GetIdentity(plan.RetainedTerminalExpression),
                                         EnvironmentValue:
                                         native.environment ??
                                         (nativeLeaf
@@ -3686,10 +3628,6 @@ public partial class PineVM : ICancellablePineVM
         }
     }
 
-    private PineValue EncodeExpressionAsValue(Retained expression)
-        =>
-        _expressionEncodingCache.GetOrEncode(expression);
-
     private ExpressionTemplatePlan? ResolveExpressionTemplatePlan(
         PineValue templateValue,
         Action reportPlanParse,
@@ -3796,7 +3734,7 @@ public partial class PineVM : ICancellablePineVM
         PineValueInProcess envValue)
     {
         var profile = PineVMWorkProfile.Current;
-        profile?.DirectTemplates.Recognize(expression);
+        profile?.DirectTemplates.Recognize(ExpressionConversion.FromCanonicalCached(expression));
 
         if (expression.EvalCount > 0)
             return null;
@@ -3809,7 +3747,7 @@ public partial class PineVM : ICancellablePineVM
             ?
             EvalDirect(expression, envValue)
             :
-            profile.DirectTemplates.Apply(expression, envValue, profile);
+            profile.DirectTemplates.Apply(ExpressionConversion.FromCanonicalCached(expression), envValue, profile);
     }
 
     internal static (PineValueInProcess value, EvalWorkCounters evalWorkCounters)? EvalDirect(
@@ -3825,7 +3763,17 @@ public partial class PineVM : ICancellablePineVM
         var profile = PineVMWorkProfile.Current;
 
         if (profile is not null)
-            return EvalDirectProfiled(expression, envValue, profile, preserveConstructorSharing);
+        {
+            return
+                EvalDirectProfiled(
+                    expression,
+                    envValue,
+                    profile,
+                    preserveConstructorSharing,
+                    expression.EvalCount is 0 && expression.BuiltinCount is 0,
+                    CreateDirectConstructorMemo,
+                    EvalDirect);
+        }
 
         var evalWorkCounters = new MutableEvalWorkCounters();
         var memo = preserveConstructorSharing ? CreateDirectConstructorMemo(expression) : null;
@@ -3865,18 +3813,31 @@ public partial class PineVM : ICancellablePineVM
         return new(ReferenceEqualityComparer.Instance);
     }
 
+    private delegate PineValueInProcess? DirectEvaluator<TExpression>(
+        TExpression expression,
+        PineValueInProcess environment,
+        ref MutableEvalWorkCounters counters,
+        HashSet<TExpression>? references,
+        bool isRoot,
+        bool underRepeatFrontier,
+        Dictionary<TExpression, DirectConstructorMemoEntry>? constructorMemo)
+        where TExpression : class;
+
     [MethodImpl(MethodImplOptions.NoInlining)]
-    private static (PineValueInProcess value, EvalWorkCounters evalWorkCounters)? EvalDirectProfiled(
-        Expression expression,
+    private static (PineValueInProcess value, EvalWorkCounters evalWorkCounters)? EvalDirectProfiled<TExpression>(
+        TExpression expression,
         PineValueInProcess envValue,
         PineVMWorkProfile profile,
-        bool preserveConstructorSharing)
+        bool preserveConstructorSharing,
+        bool constructorEligible,
+        Func<TExpression, Dictionary<TExpression, DirectConstructorMemoEntry>?> createMemo,
+        DirectEvaluator<TExpression> evaluate)
+        where TExpression : class
     {
         profile.Count(PineVMWorkProfile.Metric.EvalDirectCalls);
         profile.Checkpoint(force: true);
-        HashSet<Expression>? references = null;
+        HashSet<TExpression>? references = null;
         PineVMWorkProfile.ConstructorOpportunities previousOpportunities = default;
-        var constructorEligible = expression.EvalCount is 0 && expression.BuiltinCount is 0;
 
         profile.Count(
             constructorEligible
@@ -3898,7 +3859,7 @@ public partial class PineVM : ICancellablePineVM
             if (profile is { ReferenceCapacity: > 0 } && constructorEligible)
             {
                 var allocatedBefore = GC.GetAllocatedBytesForCurrentThread();
-                references = new HashSet<Expression>(ReferenceEqualityComparer.Instance);
+                references = new HashSet<TExpression>(ReferenceEqualityComparer.Instance);
 
                 profile.Count(
                     PineVMWorkProfile.Metric.TrackingAllocatedBytes,
@@ -3918,17 +3879,18 @@ public partial class PineVM : ICancellablePineVM
                     var memo =
                         preserveConstructorSharing && profile.PreserveConstructorSharing
                         ?
-                        CreateDirectConstructorMemo(expression)
+                        createMemo(expression)
                         :
                         null;
 
                     value =
-                        EvalDirect(
+                        evaluate(
                             expression,
                             envValue,
                             ref evalWorkCounters,
                             references,
                             isRoot: true,
+                            underRepeatFrontier: false,
                             constructorMemo: memo);
                 }
                 finally
@@ -3937,7 +3899,17 @@ public partial class PineVM : ICancellablePineVM
                 }
             }
             else
-                value = EvalDirect(expression, envValue, ref evalWorkCounters, references, isRoot: true);
+            {
+                value =
+                    evaluate(
+                        expression,
+                        envValue,
+                        ref evalWorkCounters,
+                        references,
+                        isRoot: true,
+                        underRepeatFrontier: false,
+                        constructorMemo: null);
+            }
 
             if (value is null)
                 return null;

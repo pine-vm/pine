@@ -400,7 +400,10 @@ public class PGOTests
             SetupVM.Create(
                 evalCache: null,
                 reportFunctionApplication: null,
-                compilationEnvClasses: compilationEnvClasses);
+                compilationEnvClasses:
+                compilationEnvClasses.ToDictionary(
+                    pair => Core.Runtime.InternalExpression.ExpressionConversion.FromCanonical(pair.Key),
+                    pair => pair.Value));
 
 
         var optimizedScenariosStats =
@@ -1014,7 +1017,10 @@ public class PGOTests
             SetupVM.Create(
                 evalCache: null,
                 reportFunctionApplication: null,
-                compilationEnvClasses: compilationEnvClasses);
+                compilationEnvClasses:
+                compilationEnvClasses.ToDictionary(
+                    pair => Core.Runtime.InternalExpression.ExpressionConversion.FromCanonical(pair.Key),
+                    pair => pair.Value));
 
 
         var optimizedScenariosStats =
@@ -1438,7 +1444,10 @@ public class PGOTests
             SetupVM.Create(
                 evalCache: null,
                 reportFunctionApplication: null,
-                compilationEnvClasses: compilationEnvClasses);
+                compilationEnvClasses:
+                compilationEnvClasses.ToDictionary(
+                    pair => Core.Runtime.InternalExpression.ExpressionConversion.FromCanonical(pair.Key),
+                    pair => pair.Value));
 
         var optimizedScenariosStats =
             RunScenariosWithGivenVM(optimizedPineVM);
@@ -1843,7 +1852,10 @@ public class PGOTests
             SetupVM.Create(
                 evalCache: null,
                 reportFunctionApplication: null,
-                compilationEnvClasses: compilationEnvClasses);
+                compilationEnvClasses:
+                compilationEnvClasses.ToDictionary(
+                    pair => Core.Runtime.InternalExpression.ExpressionConversion.FromCanonical(pair.Key),
+                    pair => pair.Value));
 
         var optimizedScenariosStats =
             RunScenariosWithGivenVM(optimizedPineVM);

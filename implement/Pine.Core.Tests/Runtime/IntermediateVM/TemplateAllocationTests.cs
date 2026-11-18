@@ -214,11 +214,11 @@ public class TemplateAllocationTests
         var instructions =
             new StackFrameInstructions(parameters, [StackInstruction.Local_Get(0), StackInstruction.Return]);
 
-        var method = typeof(VM).GetMethod("BuildStackFrame", BindingFlags.Static | BindingFlags.NonPublic)!;
+        var method = typeof(VM).GetMethod("BuildInternalStackFrame", BindingFlags.Static | BindingFlags.NonPublic)!;
 
         var frame =
             (StackFrame)method.Invoke(null, [
-            null, Expression.EnvironmentInstance, instructions, input, new StackFrameProfilingBaseline()
+            null, ExpressionIdentity.FromCanonical(Expression.EnvironmentInstance), instructions, input, new StackFrameProfilingBaseline()
         ])!;
 
         MemoryMarshal.TryGetArray((ReadOnlyMemory<PineValueInProcess>)frame.LocalsValues, out var locals)

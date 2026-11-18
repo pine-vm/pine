@@ -364,5 +364,8 @@ public class PineControlFlowGraphInliningTests
             reportExitPrecompiledLeaf: null,
             optimizationParametersSerial: null,
             cacheFileStore: null,
-            expressionCompilationOverrides: overrides);
+            expressionCompilationOverrides:
+            overrides?.ToDictionary(
+                pair => Core.Runtime.InternalExpression.ExpressionConversion.FromCanonicalCached(pair.Key),
+                pair => pair.Value));
 }

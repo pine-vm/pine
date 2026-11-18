@@ -15,18 +15,36 @@ public partial class PineVM
         Retained expression,
         PineValueInProcess environment)
     {
-        if (PineVMWorkProfile.Current is not null)
-            return DirectEvalIfSimpleTemplate(ExpressionConversion.ToCanonicalCached(expression), environment);
+        var profile = PineVMWorkProfile.Current;
+        profile?.DirectTemplates.Recognize(expression);
 
-        return expression.EvalCount == 0 && expression.BuiltinCount == 0 ? EvalDirect(expression, environment) : null;
+        if (expression.EvalCount > 0 || expression.BuiltinCount > 0)
+            return null;
+
+        return
+            profile is null
+            ?
+            EvalDirect(expression, environment)
+            :
+            profile.DirectTemplates.Apply(expression, environment, profile);
     }
 
     internal static (PineValueInProcess value, EvalWorkCounters evalWorkCounters)? EvalDirect(
         Retained expression,
         PineValueInProcess environment)
     {
-        if (PineVMWorkProfile.Current is not null)
-            return EvalDirect(ExpressionConversion.ToCanonicalCached(expression), environment);
+        if (PineVMWorkProfile.Current is { } profile)
+        {
+            return
+                EvalDirectProfiled(
+                    expression,
+                    environment,
+                    profile,
+                    preserveConstructorSharing: true,
+                    expression.EvalCount is 0 && expression.BuiltinCount is 0,
+                    CreateDirectConstructorMemo,
+                    EvalDirect);
+        }
 
         var counters = new MutableEvalWorkCounters();
         var memo = CreateDirectConstructorMemo(expression);
@@ -102,10 +120,10 @@ public partial class PineVM
         bool underRepeatFrontier = false,
         Dictionary<Retained, DirectConstructorMemoEntry>? constructorMemo = null)
     {
-        PineVMWorkProfile? profile = null;
+        var profile = PineVMWorkProfile.Current;
         // Prune only the counterfactual estimate's overlapping frontiers, never actual evaluation.
         var pruned =
-            profile?.DirectEntry(ExpressionConversion.ToCanonicalCached(expression), null, isRoot, underRepeatFrontier) ??
+            profile?.DirectEntry(expression, references, isRoot, underRepeatFrontier) ??
             false;
 
         if (constructorMemo is not null && constructorMemo.TryGetValue(expression, out var cached))
@@ -113,7 +131,7 @@ public partial class PineVM
             evalWorkCounters.InstructionCount += cached.Instructions;
             evalWorkCounters.BuildListCount += cached.Lists;
             evalWorkCounters.BuildListItemCount += cached.ListItems;
-            profile?.DirectConstructorMemoHit(ExpressionConversion.ToCanonicalCached(expression));
+            profile?.DirectConstructorMemoHit(expression);
             return cached.Value;
         }
 

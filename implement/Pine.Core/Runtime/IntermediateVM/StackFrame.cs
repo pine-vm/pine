@@ -14,7 +14,7 @@ public record StackFrame
 {
     private Expression? _canonicalExpression;
 
-    private InternalExpression.Expression? _internalExpression;
+    private ExpressionIdentity? _identity;
 
     /// <summary>Original encoded callee identity, when available.</summary>
     public PineValue? ExpressionValue { get; init; }
@@ -22,12 +22,19 @@ public record StackFrame
     /// <summary>Public canonical view, materialized only for consumers that request it.</summary>
     public Expression Expression
     {
-        get => _canonicalExpression ??= Runtime.InternalExpression.ExpressionConversion.ToCanonicalCached(InternalExpression);
-        init { _canonicalExpression = value; _internalExpression = null; }
+        get => _canonicalExpression ??= Identity.CanonicalExpression;
+        init { _canonicalExpression = value; _identity = null; }
     }
 
+    /// <summary>Runtime identity with demand-driven canonical views.</summary>
+    public ExpressionIdentity Identity =>
+        _identity ??=
+            new(
+                Runtime.InternalExpression.ExpressionConversion.FromCanonicalCached(_canonicalExpression!),
+                ExpressionValue);
+
     internal InternalExpression.Expression InternalExpression =>
-        _internalExpression ??= Runtime.InternalExpression.ExpressionConversion.FromCanonicalCached(Expression);
+        Identity.InternalExpression;
 
     /// <summary>Compiled frame instructions.</summary>
     public StackFrameInstructions Instructions { get; init; }
@@ -70,7 +77,7 @@ public record StackFrame
 
     internal StackFrame(
         PineValue? ExpressionValue,
-        InternalExpression.Expression Expression,
+        ExpressionIdentity Identity,
         StackFrameInstructions Instructions,
         StackFrameInput InputValues,
         Memory<PineValueInProcess?> StackValues,
@@ -79,7 +86,7 @@ public record StackFrame
         ApplyStepwise? Specialization)
     {
         this.ExpressionValue = ExpressionValue;
-        _internalExpression = Expression;
+        _identity = ExpressionValue is null ? Identity : Identity.WithEncodedValue(ExpressionValue);
         this.Instructions = Instructions;
         this.InputValues = InputValues;
         this.StackValues = StackValues;
@@ -379,7 +386,7 @@ public record ApplyStepwise
         /// and then pass the result to the callback to produce the next step.
         /// </summary>
         public sealed record Continue(
-            Expression Expression,
+            ExpressionIdentity Identity,
             PineValueInProcess EnvironmentValue,
             Func<PineValueInProcess, StepResult> Callback,
             bool CountInvocation = true,
@@ -388,7 +395,11 @@ public record ApplyStepwise
             StackFrameInstructions? ProjectedInstructions = null,
             Func<PrecompiledResult>? SelectedPrecompiled = null,
             bool PrecompiledSelectionAttempted = false)
-            : StepResult;
+            : StepResult
+        {
+            /// <summary>Materializes continuation syntax only when a consumer explicitly requests it.</summary>
+            public Expression Expression => Identity.CanonicalExpression;
+        }
 
         /// <summary>
         /// Indicates that the computation needs to parse and evaluate an encoded expression value.

@@ -10,10 +10,14 @@ namespace Pine.Core.Runtime.IntermediateVM;
 /// Captures the expression, inputs, and instruction pointer of the stack frame where intermediate-VM execution failed.
 /// </summary>
 public record ExecutionErrorReport(
-    Expression FrameExpression,
+    ExpressionIdentity Identity,
     StackFrameInput InputValues,
     StackFrameInstructions Instructions,
-    int FrameInstructionPointer);
+    int FrameInstructionPointer)
+{
+    /// <summary>Materializes canonical syntax only when the error is inspected or rendered.</summary>
+    public Expression FrameExpression => Identity.CanonicalExpression;
+}
 
 /// <summary>
 /// Provides diagnostic formatting helpers for execution error reports.

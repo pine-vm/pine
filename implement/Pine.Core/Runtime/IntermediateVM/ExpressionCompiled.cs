@@ -22,19 +22,18 @@ public delegate void ReportExpressionCompiled(
 /// Information about an <see cref="Expression"/> that has just been compiled to
 /// IR instructions by <see cref="PineVM"/>.
 /// </summary>
-/// <param name="Expression">
-/// The (post-reduction, post-env-class-specialization) expression that was
-/// compiled to IR instructions.
-/// </param>
-/// <param name="ExpressionHashBase16">
-/// Lower-case hex content hash of the expression value (as produced by the same
-/// hashing pipeline the VM uses internally for cache-file naming).
-/// </param>
+/// <param name="Identity">Runtime syntax with demand-driven canonical views and content hash.</param>
 /// <param name="Compilation">
 /// The compiled IR for the expression, including the generic body and any
 /// env-class-specialized bodies.
 /// </param>
 public readonly record struct ExpressionCompiled(
-    Expression Expression,
-    string ExpressionHashBase16,
-    ExpressionCompilation Compilation);
+    ExpressionIdentity Identity,
+    ExpressionCompilation Compilation)
+{
+    /// <summary>Materializes the compiled root's canonical syntax only when read.</summary>
+    public Expression Expression => Identity.CanonicalExpression;
+
+    /// <summary>Computes the canonical value content hash only when read.</summary>
+    public string ExpressionHashBase16 => Identity.HashBase16;
+}

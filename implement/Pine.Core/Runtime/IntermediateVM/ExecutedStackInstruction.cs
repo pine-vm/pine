@@ -19,7 +19,7 @@ public delegate void ReportExecutedStackInstruction(
 /// <param name="InstructionPointer">Instruction pointer within the current stack frame.</param>
 /// <param name="EvaluationStackDepth">Depth of the current frame's evaluation stack before executing the instruction.</param>
 /// <param name="Instruction">The instruction being executed.</param>
-/// <param name="FrameExpression">The expression associated with the current stack frame.</param>
+/// <param name="Identity">Runtime expression identity; canonical views are demand-driven.</param>
 /// <param name="LoadFrameInput">A function to load the input arguments for the entered frame.</param>
 /// <param name="FrameInstructions">The compiled body executing this instruction, when available.</param>
 /// <param name="FrameIndex">Unique index of this frame entry within the evaluation, when available.</param>
@@ -29,10 +29,14 @@ public readonly record struct ExecutedStackInstruction(
     int InstructionPointer,
     int EvaluationStackDepth,
     StackInstruction Instruction,
-    Expression FrameExpression,
+    ExpressionIdentity Identity,
     System.Func<StackFrameInput> LoadFrameInput,
     StackFrameInstructions? FrameInstructions = null,
-    long? FrameIndex = null);
+    long? FrameIndex = null)
+{
+    /// <summary>Materializes the frame's canonical expression only when read.</summary>
+    public Expression FrameExpression => Identity.CanonicalExpression;
+}
 
 /// <summary>
 /// Delegate for observing each time a new stack frame is pushed by <see cref="PineVM"/>.
@@ -49,11 +53,15 @@ public delegate void ReportEnteredStackFrame(
 /// <param name="FrameIndex">Zero-based index of this frame push in the overall evaluation (i.e., how many frames have been pushed so far, minus one).</param>
 /// <param name="StackFrameDepth">Number of active stack frames after pushing this frame.</param>
 /// <param name="Instructions">The compiled instructions for the entered frame.</param>
-/// <param name="FrameExpression">The expression associated with the entered frame.</param>
+/// <param name="Identity">Runtime expression identity; canonical views are demand-driven.</param>
 /// <param name="LoadFrameInput">A function to load the input arguments for the entered frame.</param>
 public readonly record struct EnteredStackFrame(
     long FrameIndex,
     int StackFrameDepth,
     StackFrameInstructions Instructions,
-    Expression FrameExpression,
-    System.Func<StackFrameInput> LoadFrameInput);
+    ExpressionIdentity Identity,
+    System.Func<StackFrameInput> LoadFrameInput)
+{
+    /// <summary>Materializes the frame's canonical expression only when read.</summary>
+    public Expression FrameExpression => Identity.CanonicalExpression;
+}
