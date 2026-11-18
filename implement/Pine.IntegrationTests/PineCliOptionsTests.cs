@@ -325,7 +325,9 @@ public class PineCliOptionsTests
         var missingArgumentResult = RunPine(command);
 
         missingArgumentResult.ExitCode.Should().Be(1);
-        missingArgumentResult.StandardError.Should().Contain("Required argument missing for command: 'make'");
+
+        missingArgumentResult.StandardError.Should().Contain(
+            "Required argument 'path-to-elm-file' missing for command: 'make'");
     }
 
     [Theory]
