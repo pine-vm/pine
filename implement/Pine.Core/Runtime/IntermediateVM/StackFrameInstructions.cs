@@ -141,8 +141,8 @@ public record StackFrameInstructions
             }
         }
 
-        var instructionsDetails =
-            instructions.Select(StackInstruction.GetDetails).ToArray();
+        var stackEffects =
+            instructions.Select(StackInstruction.GetStackEffect).ToArray();
 
         var stackDepthIn = new int?[instructions.Count]; // stack height *before* executing i
 
@@ -157,18 +157,18 @@ public record StackFrameInstructions
         {
             var instructionIndex = worklist.Pop();
 
-            var instructionDetails =
-                instructionsDetails[instructionIndex];
+            var stackEffect =
+                stackEffects[instructionIndex];
 
             var inDepth =
                 stackDepthIn[instructionIndex]!.Value;
 
             var delta =
-                -instructionDetails.PopCount + instructionDetails.PushCount;
+                -stackEffect.PopCount + stackEffect.PushCount;
 
             var outDepth = inDepth + delta;
 
-            if (inDepth < instructionDetails.PopCount)
+            if (inDepth < stackEffect.PopCount)
                 throw new InvalidOperationException($"Stack under-flow at instruction {instructionIndex}.");
 
             maxDepth = Math.Max(maxDepth, outDepth);
@@ -179,7 +179,7 @@ public record StackFrameInstructions
                     continue;
 
                 var successorDepth =
-                    pushCount is { } pushes ? inDepth - instructionDetails.PopCount + pushes : outDepth;
+                    pushCount is { } pushes ? inDepth - stackEffect.PopCount + pushes : outDepth;
 
                 if (stackDepthIn[successorIndex] is null)
                 {

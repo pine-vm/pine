@@ -17,6 +17,42 @@ namespace Pine.Core.Tests.Runtime.IntermediateVM;
 public class StackInstructionTraceRendererTests
 {
     [Fact]
+    public void Rendering_preserves_semantic_operand_validation()
+    {
+        var instruction = new StackInstruction(StackInstructionKind.Local_Get);
+        Action render = () => StackInstruction.RenderInstructionDisplay(instruction, _ => "literal");
+
+        render.Should().Throw<Exception>().WithMessage("Missing LocalIndices for Local_Get instruction");
+    }
+
+    [Fact]
+    public void Compatibility_details_only_format_when_the_display_is_requested()
+    {
+        var formatted = 0;
+        var observed = 0;
+        var instruction = StackInstruction.Build_List_With_Prefix(PineValue.List([PineValue.EmptyBlob]), 2);
+
+        var details =
+            StackInstruction.GetDetails(
+                instruction,
+                _ =>
+                {
+                    formatted++;
+                    return "item";
+                },
+                observeValue: _ => observed++);
+
+        details.PopCount.Should().Be(2);
+        details.PushCount.Should().Be(1);
+        formatted.Should().Be(0);
+        observed.Should().Be(0);
+
+        details.Display().DetailLines.Should().Equal("item");
+        formatted.Should().Be(1);
+        observed.Should().Be(1);
+    }
+
+    [Fact]
     public void Jump_details_preserve_inspection_number_formatting()
     {
         var previous = CultureInfo.CurrentCulture;

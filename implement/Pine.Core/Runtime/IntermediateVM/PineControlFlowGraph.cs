@@ -367,11 +367,11 @@ public sealed partial record PineControlFlowGraph(
             StackInstruction instruction,
             BlockUnderConstruction current)
         {
-            var details = StackInstruction.GetDetails(instruction);
-            var inputs = Pop(current, details.PopCount);
-            var results = ImmutableArray.CreateBuilder<PineVirtualValueId>(details.PushCount);
+            var effect = StackInstruction.GetStackEffect(instruction);
+            var inputs = Pop(current, effect.PopCount);
+            var results = ImmutableArray.CreateBuilder<PineVirtualValueId>(effect.PushCount);
 
-            for (var resultIndex = 0; resultIndex < details.PushCount; resultIndex++)
+            for (var resultIndex = 0; resultIndex < effect.PushCount; resultIndex++)
             {
                 var result = NewValue();
                 current.Stack.Add(result);

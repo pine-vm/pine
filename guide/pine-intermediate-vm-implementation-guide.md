@@ -55,6 +55,16 @@ Consumers that need human-readable output can call
 `EvaluationError.RenderDisplayString`. Rendering performs potentially expensive
 derivations such as expression encoding and hashing only on demand.
 
+## Instruction semantics and inspection
+
+Compiler analyses and frame sizing use `StackInstruction.GetStackEffect`, which
+returns only value-type pop/push counts without allocating display delegates,
+closures, or formatted metadata. These counts have a single definition, also
+used by the compatibility inspection API `GetDetails`. Formatting is isolated
+in the rendering path and is not prepared during ordinary compilation or execution.
+For `Select_Value_Const`, the stack effect describes fall-through; a missing-key
+jump consumes the key without pushing a value.
+
 ## Evaluation work counters
 
 `EvalWorkCounters` contains execution work, excluding cached metadata derivations.

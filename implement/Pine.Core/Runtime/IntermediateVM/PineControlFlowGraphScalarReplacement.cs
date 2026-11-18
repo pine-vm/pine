@@ -303,7 +303,7 @@ public sealed partial record PineControlFlowGraph
                         break;
                     }
 
-                    var operandCount = StackInstruction.GetDetails(tailInvoke.InvokeInstruction).PopCount;
+                    var operandCount = StackInstruction.GetStackEffect(tailInvoke.InvokeInstruction).PopCount;
 
                     for (var depth = 1; depth <= operandCount; depth++)
                     {
@@ -510,7 +510,7 @@ public sealed partial record PineControlFlowGraph
                 for (var index = 0; index < candidate.OperationIndex; index++)
                 {
                     var operation = block.Operations[index];
-                    var popCount = StackInstruction.GetDetails(operation.Instruction).PopCount;
+                    var popCount = StackInstruction.GetStackEffect(operation.Instruction).PopCount;
                     stack.RemoveRange(stack.Count - popCount, popCount);
                     stack.AddRange(operation.Results);
                 }
@@ -789,7 +789,7 @@ public sealed partial record PineControlFlowGraph
 
         foreach (var operation in block.Operations)
         {
-            var count = StackInstruction.GetDetails(operation.Instruction).PopCount;
+            var count = StackInstruction.GetStackEffect(operation.Instruction).PopCount;
             stack.RemoveRange(stack.Count - count, count);
             stack.AddRange(operation.Results);
         }
@@ -863,7 +863,7 @@ public sealed partial record PineControlFlowGraph
                 values.Add(result, origin);
             }
 
-            var popCount = StackInstruction.GetDetails(instruction).PopCount;
+            var popCount = StackInstruction.GetStackEffect(instruction).PopCount;
             stack.RemoveRange(stack.Count - popCount, popCount);
             stack.AddRange(operation.Results);
         }

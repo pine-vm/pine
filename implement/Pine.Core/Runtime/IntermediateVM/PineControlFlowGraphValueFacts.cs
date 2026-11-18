@@ -706,7 +706,7 @@ public sealed partial record PineControlFlowGraph
                 values.Add(result, facts);
             }
 
-            var popCount = StackInstruction.GetDetails(instruction).PopCount;
+            var popCount = StackInstruction.GetStackEffect(instruction).PopCount;
             stack.RemoveRange(stack.Count - popCount, popCount);
             stack.AddRange(operation.Results);
         }

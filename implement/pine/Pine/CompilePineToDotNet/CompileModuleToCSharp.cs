@@ -390,10 +390,10 @@ public static class CompileModuleToCSharp
             var instruction =
                 ssaInstructions[i];
 
-            var instructionDetails =
-                StackInstruction.GetDetails(instruction.StackInstruction);
+            var stackEffect =
+                StackInstruction.GetStackEffect(instruction.StackInstruction);
 
-            if (instructionDetails.PushCount is 1)
+            if (stackEffect.PushCount is 1)
             {
                 var initExprSyntax =
                     ExpressionSyntaxFromStackInstruction(instruction);
@@ -826,15 +826,15 @@ public static class CompileModuleToCSharp
 
             var assignmentIndex = pushCount;
 
-            var instructionDetails =
-                StackInstruction.GetDetails(inst);
+            var stackEffect =
+                StackInstruction.GetStackEffect(inst);
 
             var ssaInstructionDetails =
                 DependenciesAndReturnTypeFromStackInstruction(
                     inst,
                     pushCount - 1);
 
-            if (ssaInstructionDetails.Dependencies.Count != instructionDetails.PopCount)
+            if (ssaInstructionDetails.Dependencies.Count != stackEffect.PopCount)
             {
                 throw new Exception(
                     "Dependency count mismatch for instruction: " + inst);
@@ -847,8 +847,8 @@ public static class CompileModuleToCSharp
                     ReturnType: ssaInstructionDetails.ReturnType,
                     Dependencies: ssaInstructionDetails.Dependencies);
 
-            popCount += instructionDetails.PopCount;
-            pushCount += instructionDetails.PushCount;
+            popCount += stackEffect.PopCount;
+            pushCount += stackEffect.PushCount;
 
             yield return current;
         }

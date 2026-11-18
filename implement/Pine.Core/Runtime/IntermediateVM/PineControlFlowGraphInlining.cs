@@ -36,7 +36,7 @@ public sealed partial record PineControlFlowGraph
             throw new ArgumentException("Callee cannot be spliced into this invocation.", nameof(callee));
         }
 
-        var baseStack = call.Arguments[..^StackInstruction.GetDetails(call.Instruction).PushCount];
+        var baseStack = call.Arguments[..^StackInstruction.GetStackEffect(call.Instruction).PushCount];
         var baseDepth = baseStack.Length;
 
         static int MaxValueId(PineControlFlowGraph graph)
@@ -148,7 +148,7 @@ public sealed partial record PineControlFlowGraph
 
                     foreach (var operation in block.Operations)
                     {
-                        var popCount = StackInstruction.GetDetails(operation.Instruction).PopCount;
+                        var popCount = StackInstruction.GetStackEffect(operation.Instruction).PopCount;
                         stack.RemoveRange(stack.Count - popCount, popCount);
                         stack.AddRange(operation.Results);
                     }

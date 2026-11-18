@@ -317,7 +317,7 @@ public sealed partial record PineControlFlowGraph
                 for (var current = first; current <= last; current++)
                 {
                     var original = block.Operations[current];
-                    var pop = StackInstruction.GetDetails(original.Instruction).PopCount;
+                    var pop = StackInstruction.GetStackEffect(original.Instruction).PopCount;
                     stack.RemoveRange(stack.Count - pop, pop);
                     stack.AddRange(original.Results);
                 }
@@ -526,7 +526,7 @@ public sealed partial record PineControlFlowGraph
                 values[operation.Results[index]] = resultDomain;
             }
 
-            var pop = StackInstruction.GetDetails(instruction).PopCount;
+            var pop = StackInstruction.GetStackEffect(instruction).PopCount;
             stack.RemoveRange(stack.Count - pop, pop);
             stack.AddRange(operation.Results);
         }
