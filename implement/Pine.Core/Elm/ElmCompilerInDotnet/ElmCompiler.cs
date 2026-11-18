@@ -702,17 +702,11 @@ public partial class ElmCompiler
 
     internal static ImmutableDictionary<string, TypeInference.InferredType> ExtractParameterTypes(
         AbstractSyntax.FunctionStruct function,
-        IReadOnlyDictionary<DeclQualifiedName, FunctionTypeInfo>? choiceTagTypes,
+        IReadOnlyDictionary<DeclQualifiedName, IReadOnlyList<TypeInference.InferredType>>? constructorArgumentTypes,
         IReadOnlyDictionary<DeclQualifiedName, FunctionTypeInfo>? functionTypes,
         string currentModuleName)
     {
         var parameterTypes = ImmutableDictionary<string, TypeInference.InferredType>.Empty;
-
-        var constructorArgumentTypes =
-            choiceTagTypes?
-            .ToDictionary(
-                entry => entry.Key,
-                entry => entry.Value.ParameterTypes);
 
         if (function.Signature is { } signature)
         {

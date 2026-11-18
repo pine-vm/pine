@@ -1,5 +1,6 @@
 using AwesomeAssertions;
 using Pine.Core.CodeAnalysis;
+using Pine.Core.Elm.Syntax;
 using Pine.Core.Encodings;
 using System;
 using System.Collections.Generic;
@@ -10,6 +11,7 @@ using Xunit;
 using AbstractSyntax = Pine.Core.Elm.Syntax.Abstract;
 using IR = Pine.Core.Elm.ElmCompilerInDotnet.IntermediateRepresentation;
 using InfixDirection = Pine.Core.Elm.Syntax.Concrete.InfixDirection;
+using Model = Pine.Core.Elm.ElmCompilerInDotnet.CompilerModel;
 
 namespace Pine.Core.Tests.Elm.ElmCompilerInDotnet.IntermediateRepresentation;
 
@@ -266,6 +268,62 @@ public class FromCanonicalSyntaxTests
 
         model.Functions.Should().ContainSingle();
         typeof(IR.FunctionStruct).GetProperty("Signature").Should().BeNull();
+    }
+
+    [Fact]
+    public void Source_lowering_constructor_metadata_allocations_do_not_scale_with_function_count()
+    {
+        var functions =
+            string.Join(
+                "\n",
+                Enumerable.Range(0, 64).Select(index => $"function{index} value = value"));
+
+        var constructors =
+            "type Value = " +
+            string.Join(" | ", Enumerable.Range(0, 512).Select(index => $"Tag{index} Int"));
+
+        var narrow = Declarations(functions);
+        var wide = Declarations(constructors + "\n" + functions);
+        var singleFunction = new HashSet<DeclQualifiedName> { DeclQualifiedName.Create(["Test"], "function0") };
+
+        _ = Measure(narrow, singleFunction);
+        _ = Measure(narrow, null);
+        _ = Measure(wide, singleFunction);
+        _ = Measure(wide, null);
+
+        var narrowGrowth = Measure(narrow, null) - Measure(narrow, singleFunction);
+        var wideGrowth = Measure(wide, null) - Measure(wide, singleFunction);
+
+        wideGrowth.Should().BeLessThan(
+            narrowGrowth + 256_000,
+            "constructor argument types must be projected once per lowering context, not once per function");
+
+        static Dictionary<DeclQualifiedName, AbstractSyntax.Declaration> Declarations(string source)
+        {
+            var file =
+                ElmSyntaxParser.ParseModuleText("module Test exposing (..)\n" + source)
+                .Extract(error => throw new InvalidOperationException(error.ToString()));
+
+            return
+                file.Declarations.Select(node => AbstractSyntax.ConvertFromConcrete.FromDeclaration(node.Value))
+                .ToDictionary(
+                    declaration => DeclQualifiedName.Create(
+                        ["Test"],
+                        Core.Elm.ElmCompilerInDotnet.ElmCompiler.GetDeclarationName(declaration) ??
+                        throw new InvalidOperationException("Expected a named test declaration.")),
+                    declaration => declaration);
+        }
+
+        static long Measure(
+            IReadOnlyDictionary<DeclQualifiedName, AbstractSyntax.Declaration> declarations,
+            IReadOnlySet<DeclQualifiedName>? selectedFunctions)
+        {
+            var before = GC.GetAllocatedBytesForCurrentThread();
+            var program = Model.FromCanonicalSyntax.Convert(declarations, selectedFunctions);
+            var allocated = GC.GetAllocatedBytesForCurrentThread() - before;
+            program.Functions.Should().HaveCount(selectedFunctions?.Count ?? 64);
+            return allocated;
+        }
     }
 
     [Fact]

@@ -461,8 +461,11 @@ public class RecordAccessLoweringTests
         Generic(lowered).Should().BeEmpty();
     }
 
-    [Fact]
-    public void Constructor_applications_preserve_the_emitters_parameter_context()
+    [Theory]
+    [InlineData("select person = ( Wrapper person, person.name )")]
+    [InlineData("select = \\person -> ( Wrapper person, person.name )")]
+    [InlineData("select = let build person = ( Wrapper person, person.name ) in build")]
+    public void Constructor_applications_preserve_the_emitters_parameter_context(string declaration)
     {
         var lowered =
             Lower(
@@ -470,10 +473,11 @@ public class RecordAccessLoweringTests
                 module Test exposing (..)
                 type alias Person = { age : Int, name : String }
                 type Wrapper = Wrapper Person
-                select person = ( Wrapper person, person.name )
-                """);
+                """ + "\n" + declaration);
 
-        Expressions(lowered, "select")
+        var functions = Model.ToIntermediateRepresentation.Convert(Model.LambdaLifting.Lift(lowered.Program));
+
+        functions.Values.SelectMany(function => IR.ExpressionTraversal.Enumerate(function.Expression))
             .OfType<IR.Expression.ProjectItem>().Should().ContainSingle().Which.Index.Should().Be(4);
 
         Generic(lowered).Should().BeEmpty();

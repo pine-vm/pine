@@ -118,6 +118,8 @@ public static class FromCanonicalSyntax
 
         private readonly ImmutableDictionary<DeclQualifiedName, FunctionTypeInfo> _immutableConstructorTypes;
 
+        private readonly IReadOnlyDictionary<DeclQualifiedName, IReadOnlyList<Type>> _constructorArgumentTypes;
+
         private readonly HashSet<DeclQualifiedName> _functionNames;
 
         private readonly HashSet<DeclQualifiedName> _constructorNames;
@@ -246,6 +248,10 @@ public static class FromCanonicalSyntax
 
             _immutableFunctionTypes = functionTypes.ToImmutable();
             _immutableConstructorTypes = constructorTypes.ToImmutable();
+
+            _constructorArgumentTypes =
+                _immutableConstructorTypes.ToDictionary(entry => entry.Key, entry => entry.Value.ParameterTypes);
+
             _functionNames = [.. sourceFunctions.Select(entry => entry.Key)];
         }
 
@@ -276,6 +282,7 @@ public static class FromCanonicalSyntax
                         _aliasTypes,
                         _immutableFunctionTypes,
                         _immutableConstructorTypes,
+                        _constructorArgumentTypes,
                         _environment,
                         _functionNames,
                         _constructorNames);
@@ -307,6 +314,7 @@ public static class FromCanonicalSyntax
         IReadOnlyDictionary<DeclQualifiedName, TypeInference.TypeAliasDefinition> aliases,
         IReadOnlyDictionary<DeclQualifiedName, FunctionTypeInfo> functions,
         IReadOnlyDictionary<DeclQualifiedName, FunctionTypeInfo> constructors,
+        IReadOnlyDictionary<DeclQualifiedName, IReadOnlyList<Type>> constructorArgumentTypes,
         TypeInference.FunctionInferenceEnvironment environment,
         IReadOnlySet<DeclQualifiedName> functionNames, IReadOnlySet<DeclQualifiedName> constructorNames)
     {
@@ -385,7 +393,7 @@ public static class FromCanonicalSyntax
                     environment);
 
             var parameterTypes =
-                ElmCompiler.ExtractParameterTypes(function, constructors, functions, outer.ModuleName);
+                ElmCompiler.ExtractParameterTypes(function, constructorArgumentTypes, functions, outer.ModuleName);
 
             var argumentTypes =
                 function.Signature is null

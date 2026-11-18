@@ -403,6 +403,9 @@ public static partial class OptimizationOpportunityFinder
         var constructorArgumentTypes =
             BuildConstructorArgumentTypes(functionTypes);
 
+        var emitterConstructorArgumentTypes =
+            functionTypes.ToDictionary(entry => entry.Key, entry => entry.Value.ParameterTypes);
+
         // Build the single-tag custom-type registry once. Indexed by both
         // the type's qualified name and the (sole) constructor's qualified
         // name so detection sites can look up via either direction. Only
@@ -474,7 +477,7 @@ public static partial class OptimizationOpportunityFinder
             var emitterParameterTypes =
                 ElmCompiler.ExtractParameterTypes(
                     funcDecl.Function,
-                    functionTypes,
+                    emitterConstructorArgumentTypes,
                     functionTypes,
                     string.Join(".", qualifiedName.Namespaces));
 
