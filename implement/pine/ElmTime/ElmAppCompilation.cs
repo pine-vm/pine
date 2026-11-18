@@ -266,7 +266,8 @@ namespace ElmTime
                                     Pine.Elm019.ElmMakeFlavor.Optimize
                                     :
                                     Pine.Elm019.ElmMakeFlavor.Development,
-                                    compilationCache: elmMakeCompilationCache)
+                                    compilationCache: elmMakeCompilationCache,
+                                    workingDirectoryRelative: workingDirectoryRelative)
                                 .GetAwaiter().GetResult()
                                 .MapError(
                                     error => "Failed running Elm-based ElmMake: " +

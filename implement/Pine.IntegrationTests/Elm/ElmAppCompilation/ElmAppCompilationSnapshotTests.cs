@@ -10,12 +10,89 @@ using System;
 using System.Collections.Generic;
 using System.Collections.Immutable;
 using System.Linq;
+using System.Text;
 using Xunit;
 
 namespace Pine.IntegrationTests.Elm.ElmAppCompilation;
 
 public class ElmAppCompilationSnapshotTests
 {
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void ElmAppCompilation_ElmMake_preserves_working_directory_with_sibling_sources(bool frontendOutsideProject)
+    {
+        var files =
+            new (IReadOnlyList<string> path, string content)[]
+            {
+                (["apps", "teacher", "elm.json"],
+                """
+                {
+                    "type": "application",
+                    "source-directories": ["src", "../../shared"],
+                    "elm-version": "0.19.1",
+                    "dependencies": {
+                        "direct": { "elm/bytes": "1.0.8", "elm/core": "1.0.5", "elm/html": "1.0.0" },
+                        "indirect": { "elm/json": "1.1.3", "elm/virtual-dom": "1.0.3" }
+                    },
+                    "test-dependencies": { "direct": {}, "indirect": {} }
+                }
+                """),
+                (["apps", "teacher", "src", "Build.elm"],
+                """
+                module Build exposing (blobMain)
+                import Bytes.Encode
+                import CompilationInterface.ElmMake
+                blobMain () =
+                    Bytes.Encode.encode
+                        (Bytes.Encode.string CompilationInterface.ElmMake.elm_make____Frontend_elm.javascript.utf8)
+                """),
+                (["apps", "teacher", "src", "CompilationInterface", "ElmMake.elm"],
+                """
+                module CompilationInterface.ElmMake exposing (elm_make____Frontend_elm)
+                elm_make____Frontend_elm : { javascript : { utf8 : String } }
+                elm_make____Frontend_elm =
+                    { javascript = { utf8 = "The compiler replaces this declaration." } }
+                """),
+                (frontendOutsideProject ? ["shared", "Frontend.elm"] : ["apps", "teacher", "src", "Frontend.elm"],
+                """
+                module Frontend exposing (main)
+                import Html
+                import Shared
+                main = Html.text Shared.text
+                """),
+                (["shared", "Shared.elm"],
+                """
+                module Shared exposing (text)
+                text = "nested project with sibling sources"
+                """),
+            };
+
+        var sourceFiles =
+            FileTreeExtensions.ToFlatDictionaryWithPathComparer(
+                files.Select(file => (file.path, (ReadOnlyMemory<byte>)Encoding.UTF8.GetBytes(file.content))));
+
+        var result =
+            ElmTime.ElmAppCompilation.AsCompletelyLoweredElmApp(
+                sourceFiles,
+                workingDirectoryRelative: ["apps", "teacher"],
+                new ElmAppInterfaceConfig(["apps", "teacher", "src", "Build.elm"]));
+
+        var compiled =
+            result.Extract(
+                errors => throw new Exception(ElmTime.ElmAppCompilation.CompileCompilationErrorsDisplayText(errors)));
+
+        var compiledFiles =
+            FileTreeExtensions.ToFlatDictionaryWithPathComparer(
+                compiled.Result.CompiledFiles.Select(file => (file.Key, file.Value)));
+
+        var generated =
+            compiledFiles[
+                ["apps", "teacher", "src", "CompilationInterface", "ElmMake", "Generated_ElmMake.elm"]];
+
+        Encoding.UTF8.GetString(generated.Span).Should().Contain("nested project with sibling sources");
+    }
+
     /*
      * Test cases and snapshots are modelled after the reference implementation found at
      * https://github.com/pine-vm/pine/blob/6941eea326703c4c3a66ffa143440849b2141561/implement/Pine.Core/Elm/elm-in-elm/src/CompileElmApp.elm

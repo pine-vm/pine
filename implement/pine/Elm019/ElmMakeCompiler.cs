@@ -1,6 +1,7 @@
 using Pine.Core.Caching;
 using Pine.Core.CodeAnalysis;
 using Pine.Core.Elm;
+using Pine.Core.Elm.Elm019;
 using Pine.Core.Elm.ElmCompilerInDotnet;
 using Pine.Core.Elm.ElmInElm;
 using Pine.Core.Elm.Syntax;
@@ -52,19 +53,44 @@ public static class ElmMakeCompiler
                 input => input.ComputeHash(),
                 ElmSyntaxInterpreter.ApplicationResultCodec));
 
+    /// <summary>
+    /// With a working directory, resolves the entry point against it and searches its ancestors for elm.json.
+    /// Otherwise, the entry point is tree-relative and determines the manifest search directory.
+    /// </summary>
     public static async Task<Result<ElmMakeError, string>> CompileWithPackagesAsync(
         FileTree appFiles,
         IReadOnlyList<string> entryPoint,
         ElmMakeOutputType outputType,
         ElmMakeFlavor flavor,
         CancellationToken cancellationToken = default,
-        ElmMakeCompilationCache? compilationCache = null)
+        ElmMakeCompilationCache? compilationCache = null,
+        IReadOnlyList<string>? workingDirectoryRelative = null)
     {
+        IReadOnlyList<string> manifestSearchDirectory =
+            workingDirectoryRelative ?? [.. entryPoint.SkipLast(1)];
+
+        if (workingDirectoryRelative is not null)
+        {
+            var resolvedEntryPoint =
+                ElmJsonStructure.ParseSourceDirectory(string.Join("/", workingDirectoryRelative.Concat(entryPoint)));
+
+            if (resolvedEntryPoint.ParentLevel > 0)
+            {
+                return
+                    new ElmMakeError.Internal(
+                        new(
+                            ElmMakeInternalProblemKind.InvalidRequest,
+                            "Entry point is outside the supplied source tree."));
+            }
+
+            entryPoint = resolvedEntryPoint.Subdirectories;
+        }
+
         IReadOnlyList<string>? manifestPath = null;
 
-        for (var count = entryPoint.Count - 1; count >= 0; --count)
+        for (var count = manifestSearchDirectory.Count; count >= 0; --count)
         {
-            string[] candidate = [.. entryPoint.Take(count), "elm.json"];
+            string[] candidate = [.. manifestSearchDirectory.Take(count), "elm.json"];
 
             if (appFiles.GetNodeAtPath(candidate) is not null)
             {

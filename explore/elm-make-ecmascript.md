@@ -77,6 +77,10 @@ default for the whole lowering operation, retaining it across dependency demands
 entry points, output targets, flavors, and recursive lowering iterations.
 Its cache-taking overload can retain that scope across multiple lowering operations.
 Syntax-interpreter execution is unchanged.
+The lowering adapter preserves the project working directory: manifest lookup
+starts there, while entry-point paths (including `..`) are resolved against it
+within the combined source tree. Shared source directories outside the project
+remain available to the frontend compilation.
 
 The compiler parses Elm with `ElmSyntax.Concrete.Parser.FromString`,
 resolves names against original package sources, classifies static Html and
