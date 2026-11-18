@@ -48,7 +48,7 @@ public partial class BinaryEncodingTests
     private static byte[] EncodeNestedNegations(int depth)
     {
         using var stream = new MemoryStream();
-        using var writer = new ValueEncodingBinaryDeterministic.TreeEncoder<object>(stream.Write);
+        using var writer = new PineTreeBinaryEncoding.TreeEncoder<object>(stream.Write);
         var negationHash = Encode(new Expression.Negation(Expression.UnitExpr.Instance)).AsSpan(8, 32);
 
         for (var index = 0; index < depth; ++index)
@@ -243,7 +243,7 @@ public partial class BinaryEncodingTests
 
             using var legacy = new MemoryStream();
 
-            using (var writer = new ValueEncodingBinaryDeterministic.TreeEncoder<object>(legacy.Write))
+            using (var writer = new PineTreeBinaryEncoding.TreeEncoder<object>(legacy.Write))
             {
                 writer.StartExternalEval(bytes.AsSpan(8, 32), 1);
                 writer.StartExternalEval(utf32Hash.Span, 1);
@@ -306,7 +306,7 @@ public partial class BinaryEncodingTests
 
         ElmValue Reference(byte[] bytes) =>
             ElmValueEncoding.PineValueAsElmValue(
-                ValueEncodingBinaryDeterministic.DecodeRoot(
+                PineTreeBinaryEncoding.DecodeRoot(
                     bytes,
                     resolveExternalReference: ElmSyntaxAbstractBinary.ResolveConstructorExpression,
                     evaluate: Evaluate).Extract(error => throw new Exception(error.ToString())),
@@ -369,7 +369,7 @@ public partial class BinaryEncodingTests
 
             BinaryPrimitives.WriteInt32BigEndian(
                 bytes.AsSpan(unit.Length),
-                ValueEncodingBinaryDeterministic.TagReferenceInteral);
+                PineTreeBinaryEncoding.TagReferenceInteral);
 
             BinaryPrimitives.WriteInt32BigEndian(bytes.AsSpan(unit.Length + 4), target - (unit.Length + 4));
 
@@ -496,17 +496,17 @@ public partial class BinaryEncodingTests
     public void Binary_layout_uses_hash_addressed_Eval_and_shallow_environments_without_a_version_header()
     {
         var bytes = Encode(new Expression.TupledExpression([Expression.UnitExpr.Instance, new Expression.UnitExpr()]));
-        BinaryPrimitives.ReadInt32BigEndian(bytes).Should().Be(ValueEncodingBinaryDeterministic.TagEval);
+        BinaryPrimitives.ReadInt32BigEndian(bytes).Should().Be(PineTreeBinaryEncoding.TagEval);
 
         BinaryPrimitives.ReadInt32BigEndian(bytes.AsSpan(4)).Should().Be(
-            ValueEncodingBinaryDeterministic.TagReferenceExternal256);
+            PineTreeBinaryEncoding.TagReferenceExternal256);
 
         ElmSyntaxAbstractBinary.ResolveConstructorExpression(bytes.AsMemory(8, 32)).Should().NotBeNull();
-        BinaryPrimitives.ReadInt32BigEndian(bytes.AsSpan(40)).Should().Be(ValueEncodingBinaryDeterministic.TagList);
+        BinaryPrimitives.ReadInt32BigEndian(bytes.AsSpan(40)).Should().Be(PineTreeBinaryEncoding.TagList);
         BinaryPrimitives.ReadInt32BigEndian(bytes.AsSpan(44)).Should().Be(2);
 
         BinaryPrimitives.ReadInt32BigEndian(bytes.AsSpan(96)).Should().Be(
-            ValueEncodingBinaryDeterministic.TagReferenceInteral);
+            PineTreeBinaryEncoding.TagReferenceInteral);
 
         BinaryPrimitives.ReadInt32BigEndian(bytes.AsSpan(100)).Should().Be(-52);
         bytes.Length.Should().Be(104);

@@ -72,14 +72,14 @@ public partial class ElmSyntaxInterpreter
         public ReadOnlyMemory<byte> Encode(PineValue value)
         {
             using var stream = new MemoryStream();
-            ValueEncodingBinaryDeterministic.Encode(stream, value);
+            PineTreeBinaryEncoding.Encode(stream, value);
             return stream.ToArray();
         }
 
         public PineValue Decode(ReadOnlyMemory<byte> bytes)
         {
             var value =
-                ValueEncodingBinaryDeterministic.DecodeRoot(bytes)
+                PineTreeBinaryEncoding.DecodeRoot(bytes)
                 .Extract(error => throw new InvalidDataException("Invalid interpreter application result: " + error));
 
             if (!Encode(value).Span.SequenceEqual(bytes.Span))

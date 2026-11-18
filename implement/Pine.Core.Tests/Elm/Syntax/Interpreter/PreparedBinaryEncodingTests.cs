@@ -171,7 +171,7 @@ public partial class PreparedBinaryEncodingTests
         var interpreter = DirectInterpreter.WithoutEvalCaching(cache);
 
         PineValue Reference(byte[] bytes) =>
-            ValueEncodingBinaryDeterministic.DecodeRoot(
+            PineTreeBinaryEncoding.DecodeRoot(
                 bytes,
                 resolveExternalReference: Codec.ResolveConstructorExpression,
                 evaluate:
@@ -484,7 +484,7 @@ public partial class PreparedBinaryEncodingTests
         var operation = Encode(new Expr.OperatorApplication("+", InfixDirection.Left, Literal(1), Literal(2)));
         using var stream = new MemoryStream();
 
-        using (var writer = new ValueEncodingBinaryDeterministic.TreeEncoder<object>(stream.Write))
+        using (var writer = new PineTreeBinaryEncoding.TreeEncoder<object>(stream.Write))
         {
             writer.StartExternalEval(operation.AsSpan(8, 32), 4);
             stream.Write(Encode(new Expr.GLSLExpression("+")).AsSpan(48));
@@ -508,7 +508,7 @@ public partial class PreparedBinaryEncodingTests
 
         using var stream = new MemoryStream();
 
-        using (var writer = new ValueEncodingBinaryDeterministic.TreeEncoder<object>(stream.Write))
+        using (var writer = new PineTreeBinaryEncoding.TreeEncoder<object>(stream.Write))
         {
             writer.StartExternalEval(app.AsSpan(8, 32), 4);
             var syntax = new Declaration.PortDeclaration(new("same", new TypeAnnotation.Unit()));
@@ -532,7 +532,7 @@ public partial class PreparedBinaryEncodingTests
         var hash = Encode(new Expr.Negation(Literal(1))).AsSpan(8, 32).ToArray();
         using var stream = new MemoryStream();
 
-        using (var writer = new ValueEncodingBinaryDeterministic.TreeEncoder<object>(stream.Write))
+        using (var writer = new PineTreeBinaryEncoding.TreeEncoder<object>(stream.Write))
         {
             for (var index = 0; index < 520; ++index)
                 writer.StartExternalEval(hash, 1);

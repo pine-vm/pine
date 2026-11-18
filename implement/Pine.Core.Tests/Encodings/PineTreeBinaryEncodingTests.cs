@@ -10,12 +10,12 @@ using System.IO;
 using System.Linq;
 using Xunit;
 
-using DecodeError = Pine.Core.Encodings.ValueEncodingBinaryDeterministic.DecodeError;
+using DecodeError = Pine.Core.Encodings.PineTreeBinaryEncoding.DecodeError;
 
 namespace Pine.Core.Tests.Encodings;
 
 /// <summary>
-/// Regression tests for <see cref="ValueEncodingBinaryDeterministic"/> intended to lock down
+/// Regression tests for <see cref="PineTreeBinaryEncoding"/> intended to lock down
 /// the on-the-wire format and observable behaviour, so that future refactors (or migration
 /// to a more generalized implementation) can be validated against the existing format.
 ///
@@ -28,7 +28,7 @@ namespace Pine.Core.Tests.Encodings;
 ///      decode-time interning behaviour.
 ///   4. Decode-only external references and caller-controlled Eval entries.
 /// </summary>
-public class ValueEncodingBinaryDeterministicTests
+public class PineTreeBinaryEncodingTests
 {
     [Fact]
     public void Reuses_components()
@@ -57,7 +57,7 @@ public class ValueEncodingBinaryDeterministicTests
 
         using var compositionAlfaEncodedBytes = new MemoryStream();
 
-        ValueEncodingBinaryDeterministic.Encode(compositionAlfaEncodedBytes, compositionAlfa);
+        PineTreeBinaryEncoding.Encode(compositionAlfaEncodedBytes, compositionAlfa);
 
         compositionAlfaEncodedBytes.Seek(
             offset: 0,
@@ -68,7 +68,7 @@ public class ValueEncodingBinaryDeterministicTests
 
         using var compositionBetaEncodedBytes = new MemoryStream();
 
-        ValueEncodingBinaryDeterministic.Encode(compositionBetaEncodedBytes, compositionBeta);
+        PineTreeBinaryEncoding.Encode(compositionBetaEncodedBytes, compositionBeta);
 
         compositionBetaEncodedBytes.Seek(
             offset: 0,
@@ -160,7 +160,7 @@ public class ValueEncodingBinaryDeterministicTests
             {
                 using var encodedStream = new MemoryStream();
 
-                ValueEncodingBinaryDeterministic.Encode(encodedStream, testCase);
+                PineTreeBinaryEncoding.Encode(encodedStream, testCase);
 
                 var encodedFlat = encodedStream.ToArray();
 
@@ -187,13 +187,13 @@ public class ValueEncodingBinaryDeterministicTests
     {
         // These constants are part of the on-the-wire format. Changing any of them
         // would break compatibility with previously encoded data.
-        ValueEncodingBinaryDeterministic.TagSize.Should().Be(4);
-        ValueEncodingBinaryDeterministic.TagBlob.Should().Be(1);
-        ValueEncodingBinaryDeterministic.TagList.Should().Be(3);
-        ValueEncodingBinaryDeterministic.TagReferenceInteral.Should().Be(4);
-        ValueEncodingBinaryDeterministic.TagReferenceExternal256.Should().Be(5);
-        ValueEncodingBinaryDeterministic.TagEval.Should().Be(6);
-        ValueEncodingBinaryDeterministic.ReferenceExternal256Length.Should().Be(32);
+        PineTreeBinaryEncoding.TagSize.Should().Be(4);
+        PineTreeBinaryEncoding.TagBlob.Should().Be(1);
+        PineTreeBinaryEncoding.TagList.Should().Be(3);
+        PineTreeBinaryEncoding.TagReferenceInteral.Should().Be(4);
+        PineTreeBinaryEncoding.TagReferenceExternal256.Should().Be(5);
+        PineTreeBinaryEncoding.TagEval.Should().Be(6);
+        PineTreeBinaryEncoding.ReferenceExternal256Length.Should().Be(32);
     }
 
     /* ------------------------------------------------------------------ */
@@ -367,11 +367,11 @@ public class ValueEncodingBinaryDeterministicTests
                 PineValue.EmptyList);
 
         using var streamEncoded = new MemoryStream();
-        ValueEncodingBinaryDeterministic.Encode(streamEncoded, composition);
+        PineTreeBinaryEncoding.Encode(streamEncoded, composition);
 
         var delegateBuffer = new MemoryStream();
 
-        ValueEncodingBinaryDeterministic.Encode(
+        PineTreeBinaryEncoding.Encode(
             bytes => delegateBuffer.Write(bytes),
             composition);
 
@@ -451,7 +451,7 @@ public class ValueEncodingBinaryDeterministicTests
 
         // The four additional references should each contribute only 8 bytes
         // (tag + relative offset), regardless of the blob's size.
-        var expectedExtraBytes = 4 * (ValueEncodingBinaryDeterministic.TagSize + 4);
+        var expectedExtraBytes = 4 * (PineTreeBinaryEncoding.TagSize + 4);
         manyEncoded.Length.Should().Be(singleEncoded.Length + expectedExtraBytes);
     }
 
@@ -492,7 +492,7 @@ public class ValueEncodingBinaryDeterministicTests
         {
             var tag = BinaryPrimitives.ReadInt32BigEndian(span.Slice(offset, 4));
 
-            if (tag == ValueEncodingBinaryDeterministic.TagReferenceInteral)
+            if (tag == PineTreeBinaryEncoding.TagReferenceInteral)
             {
                 foundAnyReference = true;
 
@@ -640,7 +640,7 @@ public class ValueEncodingBinaryDeterministicTests
         (encoded.Length % 4).Should().Be(0);
 
         // Header layout: 4 bytes tag + 4 bytes length + payload + padding to multiple of 4.
-        var expectedLength = ValueEncodingBinaryDeterministic.TagSize + 4 + ((blobSize + 3) & ~3);
+        var expectedLength = PineTreeBinaryEncoding.TagSize + 4 + ((blobSize + 3) & ~3);
         encoded.Length.Should().Be(expectedLength);
 
         // Any padding bytes (between payload end and encoded end) must be zero.
@@ -772,13 +772,13 @@ public class ValueEncodingBinaryDeterministicTests
     [Fact]
     public void Decode_returns_err_for_missing_length()
     {
-        DecodeRootExpectingErr(Int32Sequence(ValueEncodingBinaryDeterministic.TagBlob))
+        DecodeRootExpectingErr(Int32Sequence(PineTreeBinaryEncoding.TagBlob))
             .Should().Be(new DecodeError.UnexpectedEndOfInput(Offset: 4, Expected: "byte count of blob"));
 
-        DecodeRootExpectingErr(Int32Sequence(ValueEncodingBinaryDeterministic.TagList))
+        DecodeRootExpectingErr(Int32Sequence(PineTreeBinaryEncoding.TagList))
             .Should().Be(new DecodeError.UnexpectedEndOfInput(Offset: 4, Expected: "item count of list"));
 
-        DecodeRootExpectingErr(Int32Sequence(ValueEncodingBinaryDeterministic.TagReferenceInteral))
+        DecodeRootExpectingErr(Int32Sequence(PineTreeBinaryEncoding.TagReferenceInteral))
             .Should().Be(new DecodeError.UnexpectedEndOfInput(Offset: 4, Expected: "relative address of reference"));
     }
 
@@ -795,19 +795,19 @@ public class ValueEncodingBinaryDeterministicTests
     [Fact]
     public void Decode_returns_err_for_blob_length_exceeding_input()
     {
-        DecodeRootExpectingErr(Int32Sequence(ValueEncodingBinaryDeterministic.TagBlob, 5, 0))
+        DecodeRootExpectingErr(Int32Sequence(PineTreeBinaryEncoding.TagBlob, 5, 0))
             .Should().Be(
             new DecodeError.LengthExceedsRemainingInput(
                 Offset: 0,
-                Tag: ValueEncodingBinaryDeterministic.TagBlob,
+                Tag: PineTreeBinaryEncoding.TagBlob,
                 Length: 5,
                 RemainingBytes: 4));
 
-        DecodeRootExpectingErr(Int32Sequence(ValueEncodingBinaryDeterministic.TagBlob, int.MaxValue))
+        DecodeRootExpectingErr(Int32Sequence(PineTreeBinaryEncoding.TagBlob, int.MaxValue))
             .Should().Be(
             new DecodeError.LengthExceedsRemainingInput(
                 Offset: 0,
-                Tag: ValueEncodingBinaryDeterministic.TagBlob,
+                Tag: PineTreeBinaryEncoding.TagBlob,
                 Length: int.MaxValue,
                 RemainingBytes: 0));
     }
@@ -815,37 +815,37 @@ public class ValueEncodingBinaryDeterministicTests
     [Fact]
     public void Decode_returns_err_for_negative_lengths()
     {
-        DecodeRootExpectingErr(Int32Sequence(ValueEncodingBinaryDeterministic.TagBlob, -1))
+        DecodeRootExpectingErr(Int32Sequence(PineTreeBinaryEncoding.TagBlob, -1))
             .Should().Be(
-            new DecodeError.NegativeLength(Offset: 0, Tag: ValueEncodingBinaryDeterministic.TagBlob, Length: -1));
+            new DecodeError.NegativeLength(Offset: 0, Tag: PineTreeBinaryEncoding.TagBlob, Length: -1));
 
-        DecodeRootExpectingErr(Int32Sequence(ValueEncodingBinaryDeterministic.TagList, -1))
+        DecodeRootExpectingErr(Int32Sequence(PineTreeBinaryEncoding.TagList, -1))
             .Should().Be(
-            new DecodeError.NegativeLength(Offset: 0, Tag: ValueEncodingBinaryDeterministic.TagList, Length: -1));
+            new DecodeError.NegativeLength(Offset: 0, Tag: PineTreeBinaryEncoding.TagList, Length: -1));
     }
 
     [Fact]
     public void Decode_returns_err_for_list_item_count_exceeding_input()
     {
-        DecodeRootExpectingErr(Int32Sequence(ValueEncodingBinaryDeterministic.TagList, int.MaxValue))
+        DecodeRootExpectingErr(Int32Sequence(PineTreeBinaryEncoding.TagList, int.MaxValue))
             .Should().Be(
             new DecodeError.LengthExceedsRemainingInput(
                 Offset: 0,
-                Tag: ValueEncodingBinaryDeterministic.TagList,
+                Tag: PineTreeBinaryEncoding.TagList,
                 Length: int.MaxValue,
                 RemainingBytes: 0));
 
         // Declares two items but contains only one.
         DecodeRootExpectingErr(
             Int32Sequence(
-                ValueEncodingBinaryDeterministic.TagList,
+                PineTreeBinaryEncoding.TagList,
                 2,
-                ValueEncodingBinaryDeterministic.TagBlob,
+                PineTreeBinaryEncoding.TagBlob,
                 0))
             .Should().Be(
             new DecodeError.LengthExceedsRemainingInput(
                 Offset: 0,
-                Tag: ValueEncodingBinaryDeterministic.TagList,
+                Tag: PineTreeBinaryEncoding.TagList,
                 Length: 2,
                 RemainingBytes: 8));
     }
@@ -861,7 +861,7 @@ public class ValueEncodingBinaryDeterministicTests
 
         for (var length = 0; length < encoded.Length; length++)
         {
-            ValueEncodingBinaryDeterministic.DecodeRoot(encoded.AsMemory(0, length))
+            PineTreeBinaryEncoding.DecodeRoot(encoded.AsMemory(0, length))
                 .IsErr().Should().BeTrue("truncated to " + length + " bytes");
         }
     }
@@ -870,20 +870,20 @@ public class ValueEncodingBinaryDeterministicTests
     public void Decode_returns_err_for_invalid_reference()
     {
         // Reference pointing to itself (no completed value there).
-        DecodeRootExpectingErr(Int32Sequence(ValueEncodingBinaryDeterministic.TagReferenceInteral, -4))
+        DecodeRootExpectingErr(Int32Sequence(PineTreeBinaryEncoding.TagReferenceInteral, -4))
             .Should().Be(new DecodeError.InvalidInternalReference(Offset: 0, ReferencedAddress: 0));
 
         // Reference pointing outside of the input.
-        DecodeRootExpectingErr(Int32Sequence(ValueEncodingBinaryDeterministic.TagReferenceInteral, int.MinValue))
+        DecodeRootExpectingErr(Int32Sequence(PineTreeBinaryEncoding.TagReferenceInteral, int.MinValue))
             .Should().Be(
             new DecodeError.InvalidInternalReference(Offset: 0, ReferencedAddress: 4L + int.MinValue));
 
         // Reference from inside a list to the enclosing (not yet completed) list.
         DecodeRootExpectingErr(
             Int32Sequence(
-                ValueEncodingBinaryDeterministic.TagList,
+                PineTreeBinaryEncoding.TagList,
                 1,
-                ValueEncodingBinaryDeterministic.TagReferenceInteral,
+                PineTreeBinaryEncoding.TagReferenceInteral,
                 -12))
             .Should().Be(new DecodeError.InvalidInternalReference(Offset: 8, ReferencedAddress: 0));
     }
@@ -944,9 +944,9 @@ public class ValueEncodingBinaryDeterministicTests
 
         var encoded =
             Concat(
-                Int32Sequence(ValueEncodingBinaryDeterministic.TagList, 3),
+                Int32Sequence(PineTreeBinaryEncoding.TagList, 3),
                 EncodeExternalReference(referenceAlfa),
-                Int32Sequence(ValueEncodingBinaryDeterministic.TagBlob, 1),
+                Int32Sequence(PineTreeBinaryEncoding.TagBlob, 1),
                 [0x07, 0, 0, 0],
                 EncodeExternalReference(referenceBeta));
 
@@ -983,9 +983,9 @@ public class ValueEncodingBinaryDeterministicTests
         // The internal reference is located at offset 8 + 4 + 32 = 44, its address base is 48.
         var encoded =
             Concat(
-                Int32Sequence(ValueEncodingBinaryDeterministic.TagList, 2),
+                Int32Sequence(PineTreeBinaryEncoding.TagList, 2),
                 EncodeExternalReference(reference),
-                Int32Sequence(ValueEncodingBinaryDeterministic.TagReferenceInteral, 8 - 48));
+                Int32Sequence(PineTreeBinaryEncoding.TagReferenceInteral, 8 - 48));
 
         var resolveCount = 0;
 
@@ -1011,11 +1011,11 @@ public class ValueEncodingBinaryDeterministicTests
 
         var encoded =
             Concat(
-                Int32Sequence(ValueEncodingBinaryDeterministic.TagList, 1),
+                Int32Sequence(PineTreeBinaryEncoding.TagList, 1),
                 EncodeExternalReference(reference));
 
         var error =
-            ValueEncodingBinaryDeterministic.DecodeRoot(
+            PineTreeBinaryEncoding.DecodeRoot(
                 encoded,
                 resolveExternalReference: _ => null);
 
@@ -1050,7 +1050,7 @@ public class ValueEncodingBinaryDeterministicTests
 
         for (var length = 4; length < encoded.Length; length++)
         {
-            ValueEncodingBinaryDeterministic.DecodeRoot(
+            PineTreeBinaryEncoding.DecodeRoot(
                 encoded.AsMemory(0, length),
                 resolveExternalReference:
                 _ =>
@@ -1146,7 +1146,7 @@ public class ValueEncodingBinaryDeterministicTests
 
         var encoded =
             Concat(
-                Int32Sequence(ValueEncodingBinaryDeterministic.TagList, 3),
+                Int32Sequence(PineTreeBinaryEncoding.TagList, 3),
                 expressionBytes,
                 environmentBytes,
                 EncodeEval(evalExpression, evalEnvironment));
@@ -1191,7 +1191,7 @@ public class ValueEncodingBinaryDeterministicTests
             kind switch
             {
                 0 => literal,
-                1 => Int32Sequence(ValueEncodingBinaryDeterministic.TagReferenceInteral, address - (offset + 4)),
+                1 => Int32Sequence(PineTreeBinaryEncoding.TagReferenceInteral, address - (offset + 4)),
                 2 => EncodeExternalReference(externalReference),
 
                 _ =>
@@ -1211,7 +1211,7 @@ public class ValueEncodingBinaryDeterministicTests
         var encoded =
             EncodeEval(
                 Concat(
-                    Int32Sequence(ValueEncodingBinaryDeterministic.TagList, 2),
+                    Int32Sequence(PineTreeBinaryEncoding.TagList, 2),
                     EncodeEval(EncodeToBytes(firstExpression), EncodeToBytes(PineValue.EmptyList)),
                     EncodeToBytes(PineValue.EmptyBlob)),
                 EncodeEval(EncodeToBytes(secondExpression), EncodeToBytes(PineValue.EmptyBlob)));
@@ -1257,12 +1257,12 @@ public class ValueEncodingBinaryDeterministicTests
 
         var encoded =
             Concat(
-                Int32Sequence(ValueEncodingBinaryDeterministic.TagList, 3),
+                Int32Sequence(PineTreeBinaryEncoding.TagList, 3),
                 firstEval,
-                Int32Sequence(ValueEncodingBinaryDeterministic.TagReferenceInteral, 8 - (referenceAddress + 4)),
+                Int32Sequence(PineTreeBinaryEncoding.TagReferenceInteral, 8 - (referenceAddress + 4)),
                 EncodeEval(
-                    Int32Sequence(ValueEncodingBinaryDeterministic.TagReferenceInteral, 8 - (secondEvalAddress + 8)),
-                    Int32Sequence(ValueEncodingBinaryDeterministic.TagReferenceInteral, 8 - (secondEvalAddress + 16))));
+                    Int32Sequence(PineTreeBinaryEncoding.TagReferenceInteral, 8 - (secondEvalAddress + 8)),
+                    Int32Sequence(PineTreeBinaryEncoding.TagReferenceInteral, 8 - (secondEvalAddress + 16))));
 
         var invocations = new List<(PineValue Expression, PineValue Environment)>();
 
@@ -1289,7 +1289,7 @@ public class ValueEncodingBinaryDeterministicTests
     public void Decode_invokes_delegate_for_each_eval_even_when_arguments_are_identical()
     {
         var eval = EncodeEval(EncodeToBytes(PineValue.EmptyBlob), EncodeToBytes(PineValue.EmptyList));
-        var encoded = Concat(Int32Sequence(ValueEncodingBinaryDeterministic.TagList, 2), eval, eval);
+        var encoded = Concat(Int32Sequence(PineTreeBinaryEncoding.TagList, 2), eval, eval);
         var evalCount = 0;
 
         var decoded =
@@ -1314,7 +1314,7 @@ public class ValueEncodingBinaryDeterministicTests
 
         var encoded =
             Concat(
-                Int32Sequence(ValueEncodingBinaryDeterministic.TagList, 3),
+                Int32Sequence(PineTreeBinaryEncoding.TagList, 3),
                 allowedEval,
                 rejectedEval,
                 allowedEval);
@@ -1322,7 +1322,7 @@ public class ValueEncodingBinaryDeterministicTests
         var evalCount = 0;
 
         var result =
-            ValueEncodingBinaryDeterministic.DecodeRoot(
+            PineTreeBinaryEncoding.DecodeRoot(
                 encoded,
                 evaluate:
                 (expression, env) =>
@@ -1367,7 +1367,7 @@ public class ValueEncodingBinaryDeterministicTests
 
         var encoded =
             Concat(
-                Int32Sequence(ValueEncodingBinaryDeterministic.TagList, 3),
+                Int32Sequence(PineTreeBinaryEncoding.TagList, 3),
                 expressionBytes,
                 environmentBytes,
                 EncodeEval(
@@ -1375,17 +1375,17 @@ public class ValueEncodingBinaryDeterministicTests
                     ?
                     EncodeExternalReference(expressionReference)
                     :
-                    Int32Sequence(ValueEncodingBinaryDeterministic.TagReferenceInteral, 8 - (evalAddress + 8)),
+                    Int32Sequence(PineTreeBinaryEncoding.TagReferenceInteral, 8 - (evalAddress + 8)),
                     external
                     ?
                     EncodeExternalReference(environmentReference)
                     :
                     Int32Sequence(
-                        ValueEncodingBinaryDeterministic.TagReferenceInteral,
+                        PineTreeBinaryEncoding.TagReferenceInteral,
                         8 + expressionBytes.Length - (evalAddress + 16))));
 
         var result =
-            ValueEncodingBinaryDeterministic.DecodeRoot(
+            PineTreeBinaryEncoding.DecodeRoot(
                 encoded,
                 resolveExternalReference:
                 reference =>
@@ -1423,7 +1423,7 @@ public class ValueEncodingBinaryDeterministicTests
         var encoded = EncodeEval(EncodeToBytes(PineValue.EmptyBlob), EncodeToBytes(PineValue.EmptyList));
 
         Action decode =
-            () => ValueEncodingBinaryDeterministic.DecodeRoot(
+            () => PineTreeBinaryEncoding.DecodeRoot(
                 encoded,
                 evaluate: (_, _) => default);
 
@@ -1442,7 +1442,7 @@ public class ValueEncodingBinaryDeterministicTests
 
         for (var length = 0; length < encoded.Length; length++)
         {
-            ValueEncodingBinaryDeterministic.DecodeRoot(
+            PineTreeBinaryEncoding.DecodeRoot(
                 encoded.AsMemory(0, length),
                 evaluate:
                 (_, _) =>
@@ -1466,16 +1466,16 @@ public class ValueEncodingBinaryDeterministicTests
             ?
             EncodeEval(
                 EncodeToBytes(PineValue.EmptyList),
-                Int32Sequence(ValueEncodingBinaryDeterministic.TagReferenceInteral, -16))
+                Int32Sequence(PineTreeBinaryEncoding.TagReferenceInteral, -16))
             :
             EncodeEval(
-                Int32Sequence(ValueEncodingBinaryDeterministic.TagReferenceInteral, -8),
+                Int32Sequence(PineTreeBinaryEncoding.TagReferenceInteral, -8),
                 EncodeToBytes(PineValue.EmptyList));
 
         var evalCount = 0;
 
         var result =
-            ValueEncodingBinaryDeterministic.DecodeRoot(
+            PineTreeBinaryEncoding.DecodeRoot(
                 encoded,
                 evaluate:
                 (_, _) =>
@@ -1499,7 +1499,7 @@ public class ValueEncodingBinaryDeterministicTests
         var evalCount = 0;
 
         var result =
-            ValueEncodingBinaryDeterministic.DecodeRoot(
+            PineTreeBinaryEncoding.DecodeRoot(
                 encoded,
                 resolveExternalReference: _ => null,
                 evaluate:
@@ -1523,14 +1523,14 @@ public class ValueEncodingBinaryDeterministicTests
 
         using var stream = new MemoryStream();
 
-        var evalTag = Int32Sequence(ValueEncodingBinaryDeterministic.TagEval);
+        var evalTag = Int32Sequence(PineTreeBinaryEncoding.TagEval);
 
         for (var i = 0; i < depth; i++)
         {
             stream.Write(evalTag);
         }
 
-        ValueEncodingBinaryDeterministic.Encode(stream, PineValue.EmptyBlob);
+        PineTreeBinaryEncoding.Encode(stream, PineValue.EmptyBlob);
 
         var environment = EncodeToBytes(PineValue.EmptyList);
 
@@ -1588,7 +1588,7 @@ public class ValueEncodingBinaryDeterministicTests
     {
         var chunks = new List<byte[]>();
 
-        ValueEncodingBinaryDeterministic.Encode(
+        PineTreeBinaryEncoding.Encode(
             bytes => chunks.Add(bytes.ToArray()),
             PineValue.Blob([1, 2, 3, 4]));
 
@@ -1606,7 +1606,7 @@ public class ValueEncodingBinaryDeterministicTests
         Action encode =
             () =>
             {
-                using var writer = new ValueEncodingBinaryDeterministic.TreeEncoder<object>(stream.Write);
+                using var writer = new PineTreeBinaryEncoding.TreeEncoder<object>(stream.Write);
                 writer.Ascii(text);
             };
 
@@ -1624,7 +1624,7 @@ public class ValueEncodingBinaryDeterministicTests
         {
             using var stream = new MemoryStream();
 
-            using (var encoder = new ValueEncodingBinaryDeterministic.TreeEncoder<string>(stream.Write, reuseReferences: true, comparer))
+            using (var encoder = new PineTreeBinaryEncoding.TreeEncoder<string>(stream.Write, reuseReferences: true, comparer))
             {
                 encoder.StartList(2);
 
@@ -1649,7 +1649,7 @@ public class ValueEncodingBinaryDeterministicTests
         var secondHash = ExternalReferenceBytes(2);
         using var stream = new MemoryStream();
 
-        using (var writer = new ValueEncodingBinaryDeterministic.TreeEncoder<object>(stream.Write))
+        using (var writer = new PineTreeBinaryEncoding.TreeEncoder<object>(stream.Write))
         {
             writer.StartList(3);
             writer.StartExternalEval(firstHash, 1);
@@ -1707,7 +1707,7 @@ public class ValueEncodingBinaryDeterministicTests
         evaluated[0].Should().BeSameAs(evaluated[1]);
 
         var state = new ExternalDecodeState();
-        using var reader = new ValueEncodingBinaryDeterministic.TreeDecoder<PineValue>(bytes.AsMemory(8));
+        using var reader = new PineTreeBinaryEncoding.TreeDecoder<PineValue>(bytes.AsMemory(8));
         var adapter = new ExternalBlobDecoding(state);
 
         for (var index = 1; index <= 3; index++)
@@ -1730,7 +1730,7 @@ public class ValueEncodingBinaryDeterministicTests
         var hashes = Enumerable.Range(0, count).Select(index => ExternalReferenceBytes((byte)index)).ToArray();
         using var stream = new MemoryStream();
 
-        using (var writer = new ValueEncodingBinaryDeterministic.TreeEncoder<object>(stream.Write))
+        using (var writer = new PineTreeBinaryEncoding.TreeEncoder<object>(stream.Write))
         {
             for (var repetition = 0; repetition < 2; repetition++)
             {
@@ -1744,7 +1744,7 @@ public class ValueEncodingBinaryDeterministicTests
 
         stream.Length.Should().Be(count * (60 + 32));
         var state = new ExternalDecodeState();
-        using var reader = new ValueEncodingBinaryDeterministic.TreeDecoder<PineValue>(stream.ToArray());
+        using var reader = new PineTreeBinaryEncoding.TreeDecoder<PineValue>(stream.ToArray());
 
         for (var repetition = 0; repetition < 2; repetition++)
         {
@@ -1774,7 +1774,7 @@ public class ValueEncodingBinaryDeterministicTests
                 ]);
 
         var nestedState = new ExternalDecodeState();
-        using var nestedReader = new ValueEncodingBinaryDeterministic.TreeDecoder<PineValue>(nested);
+        using var nestedReader = new PineTreeBinaryEncoding.TreeDecoder<PineValue>(nested);
 
         nestedReader.Read<PineValue, NestedExternalDecoding>(new(nestedState)).Should().Be(
             IntegerEncoding.EncodeSignedInteger(7));
@@ -1790,9 +1790,9 @@ public class ValueEncodingBinaryDeterministicTests
         var hash = ExternalReferenceBytes(5);
         var bytes = Concat(EncodeExternalReference(hash), Int32Sequence(6, 4, -44, 3, 1, 1, 2), [4, 9, 0, 0]);
         var resolves = 0;
-        using var reader = new ValueEncodingBinaryDeterministic.TreeDecoder<PineValue>(bytes);
+        using var reader = new PineTreeBinaryEncoding.TreeDecoder<PineValue>(bytes);
 
-        reader.Read<PineValue, ValueEncodingBinaryDeterministic.PineDecoding<PineValue>>(
+        reader.Read<PineValue, PineTreeBinaryEncoding.PineDecoding<PineValue>>(
             new(
                 resolve:
                 _ =>
@@ -1820,7 +1820,7 @@ public class ValueEncodingBinaryDeterministicTests
             using var stream = new MemoryStream();
 
             using var writer =
-                new ValueEncodingBinaryDeterministic.TreeEncoder<object>(stream.Write, reuseReferences: true);
+                new PineTreeBinaryEncoding.TreeEncoder<object>(stream.Write, reuseReferences: true);
 
             writer.StartExternalEval(mutableHash, 0);
             secondHash.CopyTo(mutableHash, 0);
@@ -1865,12 +1865,12 @@ public class ValueEncodingBinaryDeterministicTests
         Action decode =
             () =>
             {
-                using var reader = new ValueEncodingBinaryDeterministic.TreeDecoder<PineValue>(bytes);
+                using var reader = new PineTreeBinaryEncoding.TreeDecoder<PineValue>(bytes);
                 reader.Read<PineValue, ExternalBlobDecoding>(new(state));
                 reader.Read<PineValue, ExternalBlobDecoding>(new(state));
             };
 
-        decode.Should().Throw<ValueEncodingBinaryDeterministic.DecodeException>()
+        decode.Should().Throw<PineTreeBinaryEncoding.DecodeException>()
             .Which.Error.Should().Be(new DecodeError.InvalidInternalReference(64, target));
 
         state.Hashes.Should().HaveCount(1);
@@ -1881,7 +1881,7 @@ public class ValueEncodingBinaryDeterministicTests
         public List<byte[]> Hashes { get; } = [];
     }
 
-    private readonly struct ExternalBlobDecoding(ExternalDecodeState state) : ValueEncodingBinaryDeterministic.IDecoding<PineValue, PineValue>
+    private readonly struct ExternalBlobDecoding(ExternalDecodeState state) : PineTreeBinaryEncoding.IDecoding<PineValue, PineValue>
     {
         public PineValue Blob(ReadOnlyMemory<byte> bytes) =>
             throw new InvalidOperationException("Unexpected generic blob decoding.");
@@ -1903,7 +1903,7 @@ public class ValueEncodingBinaryDeterministicTests
         public int MaximumDepth => 512;
 
         public PineValue EvaluateExternal(
-            ref ValueEncodingBinaryDeterministic.TreeDecoder<PineValue> decoder,
+            ref PineTreeBinaryEncoding.TreeDecoder<PineValue> decoder,
             ReadOnlyMemory<byte> reference)
         {
             state.Hashes.Add(reference.ToArray());
@@ -1915,7 +1915,7 @@ public class ValueEncodingBinaryDeterministicTests
         }
     }
 
-    private readonly struct NestedExternalDecoding(ExternalDecodeState state) : ValueEncodingBinaryDeterministic.IDecoding<PineValue, PineValue>
+    private readonly struct NestedExternalDecoding(ExternalDecodeState state) : PineTreeBinaryEncoding.IDecoding<PineValue, PineValue>
     {
         public PineValue Blob(ReadOnlyMemory<byte> bytes) => PineValue.Blob(bytes);
 
@@ -1936,7 +1936,7 @@ public class ValueEncodingBinaryDeterministicTests
         public int MaximumDepth => 512;
 
         public PineValue EvaluateExternal(
-            ref ValueEncodingBinaryDeterministic.TreeDecoder<PineValue> decoder,
+            ref PineTreeBinaryEncoding.TreeDecoder<PineValue> decoder,
             ReadOnlyMemory<byte> reference)
         {
             state.Hashes.Add(reference.ToArray());
@@ -1952,7 +1952,7 @@ public class ValueEncodingBinaryDeterministicTests
     {
         using var stream = new MemoryStream();
 
-        ValueEncodingBinaryDeterministic.Encode(stream, value);
+        PineTreeBinaryEncoding.Encode(stream, value);
 
         return stream.ToArray();
     }
@@ -1965,7 +1965,7 @@ public class ValueEncodingBinaryDeterministicTests
         Func<PineValue, PineValue, ValueResult<string, PineValue>>? evaluate = null)
     {
         var decodeResult =
-            ValueEncodingBinaryDeterministic.DecodeRoot(
+            PineTreeBinaryEncoding.DecodeRoot(
                 sourceBytes,
                 blobInstancesToReuse: blobInstancesToReuse,
                 listInstancesToReuse: listInstancesToReuse,
@@ -1982,7 +1982,7 @@ public class ValueEncodingBinaryDeterministicTests
 
     private static DecodeError DecodeRootExpectingErr(ReadOnlyMemory<byte> sourceBytes)
     {
-        var decodeResult = ValueEncodingBinaryDeterministic.DecodeRoot(sourceBytes);
+        var decodeResult = PineTreeBinaryEncoding.DecodeRoot(sourceBytes);
 
         if (decodeResult is Result<DecodeError, PineValue>.Err err)
         {
@@ -1994,7 +1994,7 @@ public class ValueEncodingBinaryDeterministicTests
 
     private static byte[] ExternalReferenceBytes(byte seed)
     {
-        var bytes = new byte[ValueEncodingBinaryDeterministic.ReferenceExternal256Length];
+        var bytes = new byte[PineTreeBinaryEncoding.ReferenceExternal256Length];
 
         for (var i = 0; i < bytes.Length; i++)
         {
@@ -2005,10 +2005,10 @@ public class ValueEncodingBinaryDeterministicTests
     }
 
     private static byte[] EncodeExternalReference(byte[] reference) =>
-        Concat(Int32Sequence(ValueEncodingBinaryDeterministic.TagReferenceExternal256), reference);
+        Concat(Int32Sequence(PineTreeBinaryEncoding.TagReferenceExternal256), reference);
 
     private static byte[] EncodeEval(byte[] encodedExpression, byte[] environment) =>
-        Concat(Int32Sequence(ValueEncodingBinaryDeterministic.TagEval), encodedExpression, environment);
+        Concat(Int32Sequence(PineTreeBinaryEncoding.TagEval), encodedExpression, environment);
 
     private static byte[] Concat(params byte[][] parts) =>
         [.. parts.SelectMany(part => part)];
@@ -2026,7 +2026,7 @@ public class ValueEncodingBinaryDeterministicTests
     }
 
     /// <summary>
-    /// Walks the encoded stream entry-by-entry and counts how many <see cref="ValueEncodingBinaryDeterministic.TagReferenceInteral"/>
+    /// Walks the encoded stream entry-by-entry and counts how many <see cref="PineTreeBinaryEncoding.TagReferenceInteral"/>
     /// entries appear. The walk uses the on-the-wire layout, so it implicitly
     /// validates that all non-reference headers are well-formed.
     /// </summary>
@@ -2039,7 +2039,7 @@ public class ValueEncodingBinaryDeterministicTests
         {
             var tag = BinaryPrimitives.ReadInt32BigEndian(encoded.Slice(offset, 4));
 
-            if (tag == ValueEncodingBinaryDeterministic.TagReferenceInteral)
+            if (tag == PineTreeBinaryEncoding.TagReferenceInteral)
             {
                 count++;
                 offset += 8;
@@ -2063,12 +2063,12 @@ public class ValueEncodingBinaryDeterministicTests
     /// </summary>
     private static int AdvancePastNonReferenceEntry(ReadOnlySpan<byte> encoded, int offset, int tag)
     {
-        if (tag == ValueEncodingBinaryDeterministic.TagList)
+        if (tag == PineTreeBinaryEncoding.TagList)
         {
             return 8;
         }
 
-        if (tag == ValueEncodingBinaryDeterministic.TagBlob)
+        if (tag == PineTreeBinaryEncoding.TagBlob)
         {
             var length = BinaryPrimitives.ReadInt32BigEndian(encoded.Slice(offset + 4, 4));
             var paddedLength = (length + 3) & ~3;

@@ -57,7 +57,7 @@ public class PineValueHashFlat
 
         try
         {
-            ValueEncodingBinaryDeterministic.Encode(Write, value);
+            PineTreeBinaryEncoding.Encode(Write, value);
             Flush();
             return (hash.GetHashAndReset(), encodingLength);
         }

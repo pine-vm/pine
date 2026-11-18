@@ -5,7 +5,7 @@ using System;
 using System.IO;
 using System.Runtime.InteropServices;
 
-using TreeReader = Pine.Core.Encodings.ValueEncodingBinaryDeterministic.TreeDecoder<object>;
+using TreeReader = Pine.Core.Encodings.PineTreeBinaryEncoding.TreeDecoder<object>;
 
 namespace Pine.Core.Runtime.InternalExpression;
 
@@ -32,7 +32,7 @@ public static partial class ExpressionBinary
             {
                 _reader = new(source);
             }
-            catch (ValueEncodingBinaryDeterministic.DecodeException error)
+            catch (PineTreeBinaryEncoding.DecodeException error)
             {
                 throw new InvalidDataException(error.Message, error);
             }
@@ -48,7 +48,7 @@ public static partial class ExpressionBinary
             {
                 return Read(ref _reader);
             }
-            catch (ValueEncodingBinaryDeterministic.DecodeException error)
+            catch (PineTreeBinaryEncoding.DecodeException error)
             {
                 throw new InvalidDataException(error.Message, error);
             }
@@ -61,7 +61,7 @@ public static partial class ExpressionBinary
     private static Expression Read(ref TreeReader reader) => reader.Read<Expression, ExpressionDecoding>(default);
 
     private static PineValue Value(ref TreeReader reader) =>
-        reader.Read<PineValue, ValueEncodingBinaryDeterministic.PineDecoding<object>>(default);
+        reader.Read<PineValue, PineTreeBinaryEncoding.PineDecoding<object>>(default);
 
     private static int Int32(ref TreeReader reader)
     {
@@ -101,7 +101,7 @@ public static partial class ExpressionBinary
             throw reader.Invalid("Invalid expression constructor environment arity");
     }
 
-    private readonly struct ExpressionDecoding : ValueEncodingBinaryDeterministic.IDecoding<Expression, object>
+    private readonly struct ExpressionDecoding : PineTreeBinaryEncoding.IDecoding<Expression, object>
     {
         public Expression Blob(ReadOnlyMemory<byte> bytes) =>
             throw new InvalidDataException("Expected an expression constructor, not a blob.");
@@ -114,7 +114,7 @@ public static partial class ExpressionBinary
         public ValueResult<string, Expression> Evaluate(Expression expression, Expression environment) =>
             "Expected an external constructor expression.";
 
-        public ValueEncodingBinaryDeterministic.DecodeError Rejected(
+        public PineTreeBinaryEncoding.DecodeError Rejected(
             long offset, Expression expression, Expression environment, string reason) =>
             throw new InvalidDataException(reason);
 

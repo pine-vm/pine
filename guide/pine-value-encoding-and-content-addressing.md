@@ -11,9 +11,9 @@ These representations are independent of the storage or transport medium: the sa
 ## Canonical Representation
 
 The canonical representation of a Pine value follows the content-addressed model of loose objects in Git:
-Each value is represented independently, and lists refer to their items using a cryptographic hashes.
+Each value is represented independently, and lists refer to their items using cryptographic hashes.
 
-The identifier hash from this representation is the durable, canonical name for the value.
+The hash of the root object in this representation is the durable, canonical name for the value.
 
 This representation offers high storage efficiency where we need to store many trees with overlapping nodes.
 A disadvantage of this representation is overhead for the computation of the hashes.
@@ -30,7 +30,7 @@ When packing multiple nodes into a single byte sequence, we use a deterministic 
 
 ## Mixed Representation
 
-When computing hashes for cache keys for `Eval` results, neither of the two extremes are optimal.
+When we want to derive hashes to be used as cache keys, often neither of the two extremes are optimal.
 
 Hashing for cache keys uses a representation that mixes both external references via hashes and internal references via indices.
 
@@ -40,7 +40,7 @@ Therefore we couple the policy deciding between internal and external reference 
 
 ## Eval Nodes
 
-In contrast to Git, the serialized representation also supports using `Eval` nodes.
+In contrast to Git, the serialized representation also supports `Eval` nodes.
 
 Usage of `Eval`, combined with specialized internal representations of values enables reducing overhead for computing representations for exchange.
 

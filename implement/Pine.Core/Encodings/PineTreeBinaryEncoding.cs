@@ -7,7 +7,7 @@ using System.Collections.Generic;
 namespace Pine.Core.Encodings;
 
 /// <summary>Deterministic binary Pine trees, also usable through retained-model adapters.</summary>
-public static partial class ValueEncodingBinaryDeterministic
+public static partial class PineTreeBinaryEncoding
 {
     /// <summary>All tags are big-endian Int32 values.</summary>
     public const int TagSize = 4;

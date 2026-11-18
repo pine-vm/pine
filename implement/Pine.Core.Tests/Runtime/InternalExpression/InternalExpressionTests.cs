@@ -843,7 +843,7 @@ public class InternalExpressionTests
             ExpressionConversion.ToCanonical(decoded).Should().Be(ExpressionConversion.ToCanonical(original));
 
             var interpreted =
-                ValueEncodingBinaryDeterministic.DecodeRoot(
+                PineTreeBinaryEncoding.DecodeRoot(
                     bytes,
                     resolveExternalReference: ExpressionBinary.ResolveConstructorExpression,
                     evaluate: Evaluate)
@@ -1155,7 +1155,7 @@ public class InternalExpressionTests
 
         using (var stream = new MemoryStream())
         {
-            ValueEncodingBinaryDeterministic.Encode(stream, PineValue.EmptyList);
+            PineTreeBinaryEncoding.Encode(stream, PineValue.EmptyList);
             Action decode = () => ExpressionBinary.Decode(stream.ToArray(), out _);
             decode.Should().Throw<InvalidDataException>();
         }
@@ -1167,7 +1167,7 @@ public class InternalExpressionTests
 
             BinaryPrimitives.WriteInt32BigEndian(
                 bytes.AsSpan(environment.Length),
-                ValueEncodingBinaryDeterministic.TagReferenceInteral);
+                PineTreeBinaryEncoding.TagReferenceInteral);
 
             BinaryPrimitives.WriteInt32BigEndian(
                 bytes.AsSpan(environment.Length + 4),
@@ -1198,7 +1198,7 @@ public class InternalExpressionTests
             {
                 using var stream = new MemoryStream();
 
-                using (var writer = new ValueEncodingBinaryDeterministic.TreeEncoder<object>(stream.Write))
+                using (var writer = new PineTreeBinaryEncoding.TreeEncoder<object>(stream.Write))
                 {
                     writer.StartExternalEval(
                         Pine.Core.Addressing.PineValueHashTree.ComputeHash(
@@ -1252,7 +1252,7 @@ public class InternalExpressionTests
 
         using var stream = new MemoryStream();
 
-        using (var writer = new ValueEncodingBinaryDeterministic.TreeEncoder<object>(stream.Write))
+        using (var writer = new PineTreeBinaryEncoding.TreeEncoder<object>(stream.Write))
         {
             var headHash = Encode(new Expression.HeadSkip(0, Expression.Environment.Instance)).AsSpan(8, 32).ToArray();
 

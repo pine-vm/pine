@@ -105,7 +105,7 @@ if (args.Contains("--encoder-tables"))
     var wide = (Ast.ListExpr)ast["wide-1024"];
     Action fill = () =>
     {
-        using var encoder = new ValueEncodingBinaryDeterministic.TreeEncoder<object>(discard, reuseReferences: true);
+        using var encoder = new PineTreeBinaryEncoding.TreeEncoder<object>(discard, reuseReferences: true);
         encoder.TryReference(wide);
         for (var index = 0; index < wide.Elements.Count; ++index)
         {
@@ -129,7 +129,7 @@ if (args.Contains("--index-only"))
     var bytes = Bytes(stream => ElmSyntaxAbstractBinary.Encode(stream, ast[name]));
     Action index = () =>
     {
-        using var decoder = new ValueEncodingBinaryDeterministic.TreeDecoder<object>(bytes);
+        using var decoder = new PineTreeBinaryEncoding.TreeDecoder<object>(bytes);
     };
     var first = Measure(index, repetitions: 1, warm: false);
     var warmed = Measure(index);
@@ -183,13 +183,13 @@ foreach (var (name, value) in pine)
 {
     // Encode first-use costs must be measured before preparing decode inputs.
     Compare("Pine", name, "encode", 0, 0,
-        () => OriginalPine.Encode(discard, value), () => ValueEncodingBinaryDeterministic.Encode(discard, value));
+        () => OriginalPine.Encode(discard, value), () => PineTreeBinaryEncoding.Encode(discard, value));
     var original = Bytes(stream => OriginalPine.Encode(stream, value));
-    var shared = Bytes(stream => ValueEncodingBinaryDeterministic.Encode(stream, value));
+    var shared = Bytes(stream => PineTreeBinaryEncoding.Encode(stream, value));
     if (!original.AsSpan().SequenceEqual(shared))
         throw new Exception("Pine wire format changed: " + name);
     Compare("Pine", name, "decode", original.Length, shared.Length,
-        () => GC.KeepAlive(OriginalPine.DecodeRoot(original)), () => GC.KeepAlive(ValueEncodingBinaryDeterministic.DecodeRoot(shared)));
+        () => GC.KeepAlive(OriginalPine.DecodeRoot(original)), () => GC.KeepAlive(PineTreeBinaryEncoding.DecodeRoot(shared)));
 }
 
 foreach (var (name, value) in ast)
@@ -216,7 +216,7 @@ if (!cold)
                 .ToArray();
             var value = PineValue.List(children);
             var old = Measure(() => OriginalPine.Encode(discard, value), repetitions: 16);
-            var current = Measure(() => ValueEncodingBinaryDeterministic.Encode(discard, value), repetitions: 16);
+            var current = Measure(() => PineTreeBinaryEncoding.Encode(discard, value), repetitions: 16);
             if (current.Total > old.Total)
                 throw new Exception($"Pine allocation regression at {blobs} blobs / {lists} lists: {old.Total} -> {current.Total}");
         }

@@ -10,7 +10,7 @@ using System.Runtime.InteropServices;
 using System.Text;
 
 using InfixDirection = Pine.Core.Elm.Syntax.Concrete.InfixDirection;
-using TreeReader = Pine.Core.Encodings.ValueEncodingBinaryDeterministic.TreeDecoder<object>;
+using TreeReader = Pine.Core.Encodings.PineTreeBinaryEncoding.TreeDecoder<object>;
 
 namespace Pine.Core.Elm.Syntax.Abstract;
 
@@ -63,7 +63,7 @@ public static partial class ElmSyntaxAbstractBinary
             {
                 return Array<Declaration>(ref _reader, _reader.ReadInlineListLength());
             }
-            catch (ValueEncodingBinaryDeterministic.DecodeException error)
+            catch (PineTreeBinaryEncoding.DecodeException error)
             {
                 throw new InvalidDataException(error.Message, error);
             }
@@ -79,7 +79,7 @@ public static partial class ElmSyntaxAbstractBinary
         {
             return reader.Read<T, SyntaxDecoding<T>>(default);
         }
-        catch (ValueEncodingBinaryDeterministic.DecodeException error)
+        catch (PineTreeBinaryEncoding.DecodeException error)
         {
             throw new InvalidDataException(error.Message, error);
         }
@@ -102,7 +102,7 @@ public static partial class ElmSyntaxAbstractBinary
     }
 
     internal static PineValue Value(ref TreeReader reader) =>
-        reader.Read<PineValue, ValueEncodingBinaryDeterministic.PineDecoding<object>>(default);
+        reader.Read<PineValue, PineTreeBinaryEncoding.PineDecoding<object>>(default);
 
     private static BigInteger Integer(ref TreeReader reader)
     {
@@ -171,7 +171,7 @@ public static partial class ElmSyntaxAbstractBinary
         throw reader.Invalid("Invalid optional " + typeof(T).Name);
     }
 
-    private readonly struct SyntaxDecoding<T> : ValueEncodingBinaryDeterministic.IDecoding<T, object> where T : class
+    private readonly struct SyntaxDecoding<T> : PineTreeBinaryEncoding.IDecoding<T, object> where T : class
     {
         public T Blob(ReadOnlyMemory<byte> bytes) =>
             throw new InvalidDataException("Expected a syntax constructor, not a blob.");
@@ -183,7 +183,7 @@ public static partial class ElmSyntaxAbstractBinary
         public ValueResult<string, T> Evaluate(T expression, T environment) =>
             "Expected an external constructor expression.";
 
-        public ValueEncodingBinaryDeterministic.DecodeError Rejected(
+        public PineTreeBinaryEncoding.DecodeError Rejected(
             long offset,
             T expression,
             T environment,

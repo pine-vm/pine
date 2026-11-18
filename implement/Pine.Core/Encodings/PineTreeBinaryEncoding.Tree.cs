@@ -13,7 +13,7 @@ using System.Threading;
 
 namespace Pine.Core.Encodings;
 
-public static partial class ValueEncodingBinaryDeterministic
+public static partial class PineTreeBinaryEncoding
 {
     /// <summary>
     /// Supplies retained representations for the shared reader. Implement as a struct to avoid

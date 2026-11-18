@@ -186,7 +186,7 @@ records the recognizer port and its matched workload measurements.
 ## Binary constructor contract
 
 `ExpressionBinary` uses the existing
-`ValueEncodingBinaryDeterministic.TreeEncoder<object>` /
+`PineTreeBinaryEncoding.TreeEncoder<object>` /
 `TreeDecoder<object>` facility. Each expression kind has a real, canonical
 Pine constructor program `C`:
 

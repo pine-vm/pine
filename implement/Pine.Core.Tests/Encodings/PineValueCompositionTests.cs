@@ -32,7 +32,7 @@ public class PineValueCompositionTests
             var value = PineValue.List([subtree, subtree, equalSubtree, blob, PineValue.EmptyBlob]);
 
             using var encoded = new MemoryStream();
-            ValueEncodingBinaryDeterministic.Encode(encoded, value);
+            PineTreeBinaryEncoding.Encode(encoded, value);
             var canonicalBytes = encoded.ToArray();
             var (digest, encodingLength) = PineValueHashFlat.ComputeHashForValue(value);
 
@@ -47,7 +47,7 @@ public class PineValueCompositionTests
             deep = PineValue.List([deep]);
 
         using var deepEncoding = new MemoryStream();
-        ValueEncodingBinaryDeterministic.Encode(deepEncoding, deep);
+        PineTreeBinaryEncoding.Encode(deepEncoding, deep);
         var deepHash = PineValueHashFlat.ComputeHashForValue(deep);
         deepHash.hashBytes.ToArray().Should().Equal(SHA256.HashData(deepEncoding.ToArray()));
         deepHash.encodingBytesLength.Should().Be((int)deepEncoding.Length);

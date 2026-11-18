@@ -131,13 +131,13 @@ public static partial class ElmSyntaxAbstractBinary
     /// <remarks>Starts an independent reference scope.</remarks>
     public sealed partial class Encoder(Action<ReadOnlySpan<byte>> write) : IDisposable
     {
-        private ValueEncodingBinaryDeterministic.TreeEncoder<object> _writer = new(write, reuseReferences: true);
+        private PineTreeBinaryEncoding.TreeEncoder<object> _writer = new(write, reuseReferences: true);
 
         internal Encoder(Action<ReadOnlySpan<byte>> write, IEqualityComparer<object> referenceComparer)
             : this(write) =>
             _writer = new(write, reuseReferences: true, referenceComparer);
 
-        internal ref ValueEncodingBinaryDeterministic.TreeEncoder<object> Writer => ref _writer;
+        internal ref PineTreeBinaryEncoding.TreeEncoder<object> Writer => ref _writer;
 
         /// <summary>All writes are synchronous; no bytes remain buffered.</summary>
         public void Flush() => _writer.EnsureActive();

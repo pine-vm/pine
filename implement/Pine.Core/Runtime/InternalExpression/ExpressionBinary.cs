@@ -80,7 +80,7 @@ public static partial class ExpressionBinary
     /// <summary>A scoped writer sharing structurally equal retained nodes across roots.</summary>
     public struct Encoder(Action<ReadOnlySpan<byte>> write) : IDisposable
     {
-        private ValueEncodingBinaryDeterministic.TreeEncoder<object> _writer = new(write, reuseReferences: true);
+        private PineTreeBinaryEncoding.TreeEncoder<object> _writer = new(write, reuseReferences: true);
 
         /// <summary>Writes a root without resetting session references.</summary>
         public void WriteExpression(Expression expression) => WriteExpression(expression, 0);

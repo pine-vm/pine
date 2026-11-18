@@ -61,7 +61,7 @@ public partial class BinaryEncodingTests
             ElmSyntaxAbstractTestHelper.Encode(decoded).Should().Equal(bytes);
 
             var ordinary =
-                ValueEncodingBinaryDeterministic.DecodeRoot(
+                PineTreeBinaryEncoding.DecodeRoot(
                     bytes,
                     resolveExternalReference: ElmSyntaxAbstractBinary.ResolveConstructorExpression,
                     evaluate:
@@ -125,7 +125,7 @@ public partial class BinaryEncodingTests
         using var malformed = new MemoryStream();
         var import = ElmSyntaxAbstractTestHelper.Encode(new Import([], ["L"], null));
 
-        using (var writer = new ValueEncodingBinaryDeterministic.TreeEncoder<object>(malformed.Write))
+        using (var writer = new PineTreeBinaryEncoding.TreeEncoder<object>(malformed.Write))
         {
             writer.StartExternalEval(import.AsSpan(8, 32), 2);
             malformed.Write(ElmSyntaxAbstractTestHelper.Encode(new Exposing.All()));
@@ -147,7 +147,7 @@ public partial class BinaryEncodingTests
         {
             using var invalid = new MemoryStream();
 
-            using (var writer = new ValueEncodingBinaryDeterministic.TreeEncoder<object>(invalid.Write))
+            using (var writer = new PineTreeBinaryEncoding.TreeEncoder<object>(invalid.Write))
             {
                 writer.StartExternalEval(import.AsSpan(8, 32), 2);
                 writer.StartExternalEval(import.AsSpan(56, 32), 1);

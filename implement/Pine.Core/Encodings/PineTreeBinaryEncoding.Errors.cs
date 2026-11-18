@@ -3,7 +3,7 @@ using System;
 
 namespace Pine.Core.Encodings;
 
-public static partial class ValueEncodingBinaryDeterministic
+public static partial class PineTreeBinaryEncoding
 {
     /// <summary>
     /// Errors that can occur when decoding a <see cref="PineValue"/> using <see cref="DecodeRoot"/>.

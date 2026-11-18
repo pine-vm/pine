@@ -8,7 +8,7 @@ using System.IO;
 
 using Ast = Pine.Core.Elm.Syntax.Abstract.ElmSyntaxAbstractBinary;
 using Engine = Pine.Core.Elm.Syntax.Interpreter.ElmSyntaxInterpreter;
-using TreeReader = Pine.Core.Encodings.ValueEncodingBinaryDeterministic.TreeDecoder<object>;
+using TreeReader = Pine.Core.Encodings.PineTreeBinaryEncoding.TreeDecoder<object>;
 
 namespace Pine.Core.Elm.Syntax.Interpreter;
 
@@ -47,7 +47,7 @@ public static partial class ElmSyntaxInterpreterPreparedBinary
         {
             return reader.Read<T, PreparedDecoding<T>>(default);
         }
-        catch (ValueEncodingBinaryDeterministic.DecodeException error)
+        catch (PineTreeBinaryEncoding.DecodeException error)
         {
             throw new InvalidDataException(error.Message, error);
         }
@@ -69,7 +69,7 @@ public static partial class ElmSyntaxInterpreterPreparedBinary
         return result;
     }
 
-    private readonly struct PreparedDecoding<T> : ValueEncodingBinaryDeterministic.IDecoding<T, object> where T : class
+    private readonly struct PreparedDecoding<T> : PineTreeBinaryEncoding.IDecoding<T, object> where T : class
     {
         public T Blob(ReadOnlyMemory<byte> bytes) =>
             throw new InvalidDataException("Expected a prepared constructor, not a blob.");
@@ -82,7 +82,7 @@ public static partial class ElmSyntaxInterpreterPreparedBinary
         public ValueResult<string, T> Evaluate(T expression, T environment) =>
             "Expected an external prepared constructor expression.";
 
-        public ValueEncodingBinaryDeterministic.DecodeError Rejected(
+        public PineTreeBinaryEncoding.DecodeError Rejected(
             long offset, T expression, T environment, string reason) =>
             throw new InvalidDataException(reason);
 

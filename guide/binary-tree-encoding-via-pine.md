@@ -1,6 +1,6 @@
-# Allocation-neutral binary tree encodings via Pine
+# Allocation-Neutral Binary Tree Encodings via Pine
 
-Use `Pine.Core.Encodings.ValueEncodingBinaryDeterministic` for both the wire
+Use `Pine.Core.Encodings.PineTreeBinaryEncoding` for both the wire
 format and reference traversal. Define a canonical mapping from the retained
 tree model to Pine values; that mapping need not be materialized by the codec.
 The Elm syntax implementation is a complete example.
