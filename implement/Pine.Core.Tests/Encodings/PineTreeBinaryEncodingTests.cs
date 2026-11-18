@@ -1595,23 +1595,33 @@ public class PineTreeBinaryEncodingTests
         chunks.Select(chunk => chunk.Length).Should().Equal(4, 4, 4);
     }
 
-    [Theory]
-    [InlineData("\u0080")]
-    [InlineData("ascii\u00e9")]
-    [InlineData("\ud800")]
-    public void ASCII_writer_rejects_non_ASCII_before_emitting_any_bytes(string text)
+    [Fact]
+    public void Streamed_blob_chunks_preserve_payload_alignment_and_following_entries()
     {
-        using var stream = new MemoryStream();
+        foreach (var length in new[] { 0, 1, 2, 3, 4, 4095, 4096, 4097 })
+        {
+            var payload = Enumerable.Range(0, length).Select(index => (byte)(index % 256)).ToArray();
+            using var stream = new MemoryStream();
 
-        Action encode =
-            () =>
+            using (var writer = new PineTreeBinaryEncoding.TreeEncoder<object>(stream.Write))
             {
-                using var writer = new PineTreeBinaryEncoding.TreeEncoder<object>(stream.Write);
-                writer.Ascii(text);
-            };
+                writer.StartList(2);
+                writer.StartBlob(length);
 
-        encode.Should().Throw<ArgumentException>();
-        stream.Length.Should().Be(0);
+                for (var index = 0; index < length; index += 3)
+                    writer.BlobChunk(payload.AsSpan(index, Math.Min(3, length - index)));
+
+                writer.EndBlob(length);
+                writer.Integer(42);
+                writer.BytesWritten.Should().Be(stream.Length);
+            }
+
+            using var expected = new MemoryStream();
+            var value = PineValue.List(PineValue.Blob(payload), IntegerEncoding.EncodeSignedInteger(42));
+            PineTreeBinaryEncoding.Encode(expected, value);
+            stream.ToArray().Should().Equal(expected.ToArray());
+            DecodeRootExpectingOk(stream.ToArray()).Should().Be(value);
+        }
     }
 
     [Fact]
@@ -1631,7 +1641,7 @@ public class PineTreeBinaryEncodingTests
                 foreach (var text in new[] { "a", "A" })
                 {
                     if (!encoder.TryReference(text))
-                        encoder.Ascii(text);
+                        encoder.Blob([(byte)text[0]]);
                 }
             }
 

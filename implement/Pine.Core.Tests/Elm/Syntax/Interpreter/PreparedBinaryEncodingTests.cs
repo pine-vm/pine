@@ -578,7 +578,7 @@ public partial class PreparedBinaryEncodingTests
         var before = GC.GetAllocatedBytesForCurrentThread();
         Codec.Encode(write, expression);
         var allocated = GC.GetAllocatedBytesForCurrentThread() - before;
-        length.Should().Be(1_000_104);
+        length.Should().Be(1_000_152);
         allocated.Should().BeLessThan(8192);
     }
 

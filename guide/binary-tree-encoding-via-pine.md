@@ -23,13 +23,16 @@ use an eight-byte backward reference to that external-reference entry, saving
 independent of the retained-node comparer and without allocating a key object
 per hash. Constructor programs and their hashes do not change.
 
-For canonical Elm strings, codecs can reuse
-`Pine.Core.Elm.ElmValueEncodingExpressions.StringFromAscii` and its static
-`StringFromAsciiHash`. The expression consumes `[asciiBlob]` and produces the
-canonical tagged string with a UTF-32 payload. `TreeEncoder<TItem>.Ascii`
-streams a validated ASCII blob without a payload-sized temporary array. The
-AST codec combines this shared expression with its own constructor whitelist;
-see its [deterministic string policy](elm-abstract-syntax-binary-encoding.md).
+Frontend-independent encoding specializations live in
+`Pine.Core.Encodings.ValueEncodingExpressions`.
+`BlobPadBytesTo4` consumes `[blob]` and returns a blob with three zero bytes
+prepended to every input byte, preserving all values from 0 through 255. Its
+static `BlobPadBytesTo4Hash` identifies that exact program without initializing
+it. This is a byte transformation, not a string or frontend constructor.
+Encoders using it must require an **output blob of at least 64 bytes** to
+amortize Eval overhead. Additional content-only restrictions, such as an ASCII
+gate in a string encoder, are permitted; cache-key encodings must use a fixed,
+deterministic selection policy.
 
 Flatten according to the **retained model**, not its canonical Pine shape.
 An application uses `[function, argument0, argument1, ...]`. A constructor with multiple variable-size components needs explicit counts or retained subobjects:
@@ -42,6 +45,10 @@ Never introduce a record/list wrapper just to mirror the canonical representatio
 external Evals. Visit fields in fixed order, use structural keys, and call
 `TryReference` before emitting a new retained node. Dictionaries must never
 determine traversal order. No depth sorting is required.
+`StartBlob(length)`, `BlobChunk(bytes)` and `EndBlob(length)` support bounded-buffer
+streaming: emit exactly the declared payload length between the header and final
+alignment padding. Text conversion belongs in the model-specific codec, not the
+shared tree writer.
 
 `TreeDecoder<TItem>.Read<TNode, TAdapter>` uses a struct
 `IDecoding<TNode, TItem>` adapter, avoiding interface boxing and captured
@@ -56,6 +63,12 @@ reads and `ReadInlineBlob` directly. Allocate only the final nodes and their
 owned arrays; no encoded expression, environment array, list wrapper, pending
 Eval object or success wrapper is needed. Enforce arity, component counts,
 field types, scalar validity, constructor whitelist and a suitable `MaximumDepth`.
+For an unreferenceable inline field Eval, `ReadInlineExternalEval` reads its
+whitelisted external expression hash (including shared hash references); the
+adapter then consumes and validates the environment itself. For example, the
+AST string adapter recognizes a padded blob inside its own string constructor
+without allocating an intermediate blob. See its
+[deterministic string policy](elm-abstract-syntax-binary-encoding.md).
 Recursive adapters must also check available execution stack: a fixed nesting
 limit alone cannot protect smaller OS thread stacks. The shared reader rejects
 specialized reads when `RuntimeHelpers.TryEnsureSufficientExecutionStack` fails,

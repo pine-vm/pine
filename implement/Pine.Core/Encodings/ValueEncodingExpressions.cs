@@ -1,31 +1,30 @@
-using Pine.Core.Encodings;
 using Pine.Core.PineLanguage;
 using System;
 
-namespace Pine.Core.Elm;
+namespace Pine.Core.Encodings;
 
-/// <summary>Reusable Pine constructor expressions for the canonical Elm value encoding.</summary>
-public static class ElmValueEncodingExpressions
+/// <summary>Reusable Pine expressions for frontend-independent value encoding specializations.</summary>
+public static class ValueEncodingExpressions
 {
     /// <summary>
-    /// Encoded Pine expression producing an Elm string from environment <c>[asciiBlob]</c>.
-    /// Input bytes must be ASCII (0 through 127). The result carries the canonical UTF-32 blob.
+    /// Encoded Pine expression consuming environment <c>[blob]</c> and returning a blob
+    /// with three zero bytes prepended to each input byte. All byte values are preserved.
     /// </summary>
-    public static PineValue StringFromAscii => EncodedExpressions.StringFromAscii;
+    public static PineValue BlobPadBytesTo4 => EncodedExpressions.BlobPadBytesTo4;
 
-    /// <summary>Content hash of <see cref="StringFromAscii"/>, without initializing the expression.</summary>
-    public static ReadOnlySpan<byte> StringFromAsciiHash =>
+    /// <summary>Content hash of <see cref="BlobPadBytesTo4"/>, without initializing the expression.</summary>
+    public static ReadOnlySpan<byte> BlobPadBytesTo4Hash =>
         [
-        0x81, 0x1f, 0xb6, 0x22, 0x5a, 0xca, 0xeb, 0xe8, 0x5c, 0x1b, 0x03, 0x65, 0x43, 0xe8, 0x1f, 0x44,
-        0x6d, 0xeb, 0x83, 0xb1, 0x85, 0x86, 0x1d, 0x2e, 0xa2, 0xb1, 0xe2, 0xa1, 0x7d, 0x0b, 0xe1, 0xde
+        0x4c, 0xc8, 0x72, 0x14, 0xc8, 0x02, 0x76, 0x40, 0x5a, 0x8e, 0xb6, 0x92, 0x8e, 0x14, 0x0c, 0xb9,
+        0x77, 0xcc, 0x32, 0x5d, 0x6b, 0x19, 0x60, 0xe8, 0x02, 0xa4, 0x63, 0x3e, 0x89, 0x7f, 0xc9, 0x87
         ];
 
     private static class EncodedExpressions
     {
-        internal static readonly PineValue StringFromAscii = BuildStringFromAscii();
+        internal static readonly PineValue BlobPadBytesTo4 = BuildBlobPadBytesTo4();
     }
 
-    private static PineValue BuildStringFromAscii()
+    private static PineValue BuildBlobPadBytesTo4()
     {
         static Expression Number(int value) => Expression.LitralInst(IntegerEncoding.EncodeSignedInteger(value));
 
@@ -66,11 +65,6 @@ public static class ElmValueEncodingExpressions
 
         return
             ExpressionEncoding.EncodeExpressionAsValue(
-                Expression.ListInst(
-                    [
-                    Expression.LitralInst(StringEncoding.ValueFromString(ElmValue.ElmChoiceTypeTagName)),
-                    Expression.LitralInst(StringEncoding.ValueFromString(ElmValue.ElmStringTypeTagName)),
-                    new Expression.Eval(encodedHelper, Expression.ListInst([encodedHelper, At(0)]))
-                    ]));
+                new Expression.Eval(encodedHelper, Expression.ListInst([encodedHelper, At(0)])));
     }
 }

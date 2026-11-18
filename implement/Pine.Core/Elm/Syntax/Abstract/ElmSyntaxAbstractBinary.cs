@@ -2,6 +2,7 @@ using Pine.Core.CodeAnalysis;
 using Pine.Core.Encodings;
 using Pine.Core.PineLanguage;
 using System;
+using System.Buffers.Binary;
 using System.Collections.Generic;
 using System.IO;
 using System.Runtime.CompilerServices;
@@ -153,16 +154,70 @@ public static partial class ElmSyntaxAbstractBinary
             if (_writer.TryReference(value))
                 return;
 
-            if (Ascii.IsValid(value))
+            Start(Constructor.String, 1);
+
+            if (value.Length >= 16 && Ascii.IsValid(value))
             {
-                _writer.StartExternalEval(ElmValueEncodingExpressions.StringFromAsciiHash, 1);
-                _writer.Ascii(value);
+                _writer.StartExternalEval(ValueEncodingExpressions.BlobPadBytesTo4Hash, 1);
+                AsciiBlob(value);
             }
             else
+                Utf32Blob(value);
+        }
+
+        private void AsciiBlob(string value)
+        {
+            _writer.StartBlob(value.Length);
+            Span<byte> buffer = stackalloc byte[4096];
+
+            for (var index = 0; index < value.Length;)
             {
-                Start(Constructor.String, 1);
-                _writer.Utf32(value);
+                var count = Math.Min(buffer.Length, value.Length - index);
+                var written = Encoding.ASCII.GetBytes(value.AsSpan(index, count), buffer);
+                _writer.BlobChunk(buffer[..written]);
+                index += count;
             }
+
+            _writer.EndBlob(value.Length);
+        }
+
+        private void Utf32Blob(string value)
+        {
+            var scalarCount = 0;
+
+            for (var index = 0; index < value.Length; ++index)
+            {
+                _ = char.ConvertToUtf32(value, index);
+                ++scalarCount;
+
+                if (char.IsHighSurrogate(value[index]))
+                    ++index;
+            }
+
+            var length = checked(scalarCount * 4);
+            _writer.StartBlob(length);
+            Span<byte> buffer = stackalloc byte[4096];
+            var position = 0;
+
+            for (var index = 0; index < value.Length; ++index)
+            {
+                if (position == buffer.Length)
+                {
+                    _writer.BlobChunk(buffer);
+                    position = 0;
+                }
+
+                BinaryPrimitives.WriteInt32BigEndian(buffer[position..], char.ConvertToUtf32(value, index));
+                position += 4;
+
+                if (char.IsHighSurrogate(value[index]))
+                    ++index;
+            }
+
+            if (position is not 0)
+                _writer.BlobChunk(buffer[..position]);
+
+            _writer.EndBlob(length);
         }
 
         private void Strings(IReadOnlyList<string> values)

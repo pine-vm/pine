@@ -1,45 +1,17 @@
 using AwesomeAssertions;
-using Pine.Core.Addressing;
-using Pine.Core.CodeAnalysis;
 using Pine.Core.Elm;
 using Pine.Core.Encodings;
 using Pine.Core.Optimization;
 using Pine.Core.PineLanguage;
-using Pine.Core.Runtime;
 using System;
 using System.Collections.Generic;
 using System.Linq;
-using System.Text;
 using Xunit;
 
 namespace Pine.Core.Tests.Elm;
 
 public class ElmValueEncodingTests
 {
-    [Fact]
-    public void Ascii_string_constructor_evaluates_to_canonical_Elm_strings()
-    {
-        var encoded = ElmValueEncodingExpressions.StringFromAscii;
-
-        PineValueHashTree.ComputeHash(encoded).ToArray().Should().Equal(
-            ElmValueEncodingExpressions.StringFromAsciiHash.ToArray());
-
-        var cache = new PineVMParseCache();
-        var interpreter = DirectInterpreter.WithoutEvalCaching(cache);
-        var expression = cache.ParseExpression(encoded).Extract(error => throw new Exception(error));
-        var allAscii = new string([.. Enumerable.Range(0, 128).Select(value => (char)value)]);
-
-        foreach (var text in new[] { "", "\0", "\u007f", "ab", "abc", allAscii, allAscii + allAscii + "x" })
-        {
-            var actual =
-                interpreter.EvaluateExpressionDefault(
-                    expression,
-                    PineValue.List(PineValue.Blob(Encoding.ASCII.GetBytes(text))));
-
-            actual.Should().Be(ElmValueEncoding.ElmValueAsPineValue(ElmValue.StringInstance(text)));
-        }
-    }
-
     [Theory]
     [InlineData(false, false)]
     [InlineData(false, true)]

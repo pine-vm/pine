@@ -8,7 +8,6 @@ using System.IO;
 using System.Numerics;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
-using System.Text;
 using System.Threading;
 
 namespace Pine.Core.Encodings;
@@ -416,6 +415,18 @@ public static partial class PineTreeBinaryEncoding
                 throw Invalid("Expected an inline blob");
 
             return BlobBytes(address);
+        }
+
+        /// <summary>
+        /// Reads an unreferenceable inline Eval's external expression reference.
+        /// The caller then consumes its environment; constructor-hash references remain shared.
+        /// </summary>
+        public ReadOnlyMemory<byte> ReadInlineExternalEval()
+        {
+            if (Int32("tag") is not TagEval)
+                throw Invalid("Expected an inline Eval");
+
+            return ReadConstructorReference();
         }
 
         private ReadOnlyMemory<byte> BlobBytes(int address)
@@ -837,14 +848,29 @@ public static partial class PineTreeBinaryEncoding
         /// <summary>Streams a blob and its alignment padding without copying the payload.</summary>
         public void Blob(ReadOnlySpan<byte> bytes)
         {
-            Int32(TagBlob);
-            Int32(bytes.Length);
-            Bytes(bytes);
-            Padding(bytes.Length);
+            StartBlob(bytes.Length);
+            BlobChunk(bytes);
+            EndBlob(bytes.Length);
         }
 
-        private void Padding(int length)
+        /// <summary>Writes a blob header; the caller then emits exactly length payload bytes.</summary>
+        public void StartBlob(int length)
         {
+            ArgumentOutOfRangeException.ThrowIfNegative(length);
+
+            Int32(TagBlob);
+            Int32(length);
+        }
+
+        /// <summary>Writes part of a blob payload after StartBlob, without a header or alignment padding.</summary>
+        public void BlobChunk(ReadOnlySpan<byte> bytes) => Bytes(bytes);
+
+        /// <summary>Finishes a streamed blob with alignment padding for its total payload length.</summary>
+        public void EndBlob(int length)
+        {
+            ArgumentOutOfRangeException.ThrowIfNegative(length);
+            EnsureActive();
+
             var count = (-length) & 3;
 
             if (count is 0)
@@ -853,66 +879,6 @@ public static partial class PineTreeBinaryEncoding
             Span<byte> padding = stackalloc byte[3];
             padding.Clear();
             Bytes(padding[..count]);
-        }
-
-        /// <summary>Streams an ASCII blob through a bounded stack buffer, rejecting non-ASCII input.</summary>
-        public void Ascii(string value)
-        {
-            if (!System.Text.Ascii.IsValid(value))
-                throw new ArgumentException("Expected an ASCII string.", nameof(value));
-
-            Int32(TagBlob);
-            Int32(value.Length);
-            Span<byte> buffer = stackalloc byte[4096];
-
-            for (var index = 0; index < value.Length;)
-            {
-                var count = Math.Min(buffer.Length, value.Length - index);
-                var written = Encoding.ASCII.GetBytes(value.AsSpan(index, count), buffer);
-                Bytes(buffer[..written]);
-                index += count;
-            }
-
-            Padding(value.Length);
-        }
-
-        /// <summary>Streams canonical Pine UTF-32 scalars through a bounded stack buffer.</summary>
-        public void Utf32(string value)
-        {
-            var scalarCount = 0;
-
-            for (var index = 0; index < value.Length; ++index)
-            {
-                _ = char.ConvertToUtf32(value, index);
-                ++scalarCount;
-
-                if (char.IsHighSurrogate(value[index]))
-                    ++index;
-            }
-
-            var length = checked(scalarCount * 4);
-            Int32(TagBlob);
-            Int32(length);
-            Span<byte> buffer = stackalloc byte[4096];
-            var position = 0;
-
-            for (var index = 0; index < value.Length; ++index)
-            {
-                if (position == buffer.Length)
-                {
-                    Bytes(buffer);
-                    position = 0;
-                }
-
-                BinaryPrimitives.WriteInt32BigEndian(buffer[position..], char.ConvertToUtf32(value, index));
-                position += 4;
-
-                if (char.IsHighSurrogate(value[index]))
-                    ++index;
-            }
-
-            if (position is not 0)
-                Bytes(buffer[..position]);
         }
 
         /// <summary>Writes a Pine signed integer directly from its magnitude, without boxing or a Pine blob.</summary>
@@ -934,7 +900,7 @@ public static partial class PineTreeBinaryEncoding
                     throw new InvalidOperationException("Failed writing an integer.");
 
                 Bytes(buffer[..written]);
-                Padding(count + 1);
+                EndBlob(count + 1);
             }
             finally
             {

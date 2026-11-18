@@ -196,36 +196,21 @@ public static partial class ElmSyntaxAbstractBinary
 
         public T EvaluateExternal(ref TreeReader reader, ReadOnlyMemory<byte> reference)
         {
-            object result;
+            var constructor = -1;
 
-            if (ElmValueEncodingExpressions.StringFromAsciiHash.SequenceEqual(reference.Span))
+            for (var index = 0; index < ConstructorHashBytes.Length / 32; ++index)
             {
-                Arity(ref reader, reader.ReadInlineListLength(), 1);
-                var bytes = reader.ReadInlineBlob();
-
-                if (!Ascii.IsValid(bytes.Span))
-                    throw reader.Invalid("Invalid ASCII string byte");
-
-                result = Encoding.ASCII.GetString(bytes.Span);
-            }
-            else
-            {
-                var constructor = -1;
-
-                for (var index = 0; index < ConstructorHashBytes.Length / 32; ++index)
+                if (ConstructorHash((Constructor)index).SequenceEqual(reference.Span))
                 {
-                    if (ConstructorHash((Constructor)index).SequenceEqual(reference.Span))
-                    {
-                        constructor = index;
-                        break;
-                    }
+                    constructor = index;
+                    break;
                 }
-
-                if (constructor < 0)
-                    throw reader.Invalid("Unknown syntax constructor expression hash");
-
-                result = Construct(ref reader, (Constructor)constructor, reader.ReadInlineListLength());
             }
+
+            if (constructor < 0)
+                throw reader.Invalid("Unknown syntax constructor expression hash");
+
+            var result = Construct(ref reader, (Constructor)constructor, reader.ReadInlineListLength());
 
             return result is T typed ? typed : throw reader.Invalid("Constructor result has the wrong retained type");
         }
@@ -239,6 +224,17 @@ public static partial class ElmSyntaxAbstractBinary
                 Arity(ref reader, count, 1);
 
                 {
+                    if (reader.PeekTag() is PineTreeBinaryEncoding.TagEval)
+                    {
+                        var reference = reader.ReadInlineExternalEval();
+
+                        if (!ValueEncodingExpressions.BlobPadBytesTo4Hash.SequenceEqual(reference.Span))
+                            throw reader.Invalid("Unknown blob padding expression hash");
+
+                        Arity(ref reader, reader.ReadInlineListLength(), 1);
+                        return Encoding.Latin1.GetString(reader.ReadInlineBlob().Span);
+                    }
+
                     var bytes = reader.ReadInlineBlob();
 
                     if (bytes.Length % 4 != 0)

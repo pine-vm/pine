@@ -78,24 +78,29 @@ these expression representations are initialized only when that resolver is used
 never by the specialized syntax route. The generated constructor hashes are
 verified against those expressions by the Elm-value equivalence tests.
 
-The resolver also admits the reusable
-`Pine.Core.Elm.ElmValueEncodingExpressions.StringFromAscii` expression. Its
-environment is `[asciiBlob]`, with one byte per character (0 through 127), and
-its result is the same canonical Elm string as the UTF-32 constructor produces.
-Other codecs can use this encoded expression and its static
-`StringFromAsciiHash` without depending on the AST model. The specialized
-decoder validates ASCII and constructs the retained .NET string directly;
-ordinary Pine interpretation expands the ASCII bytes into canonical UTF-32.
+The resolver also admits the frontend-independent
+`Pine.Core.Encodings.ValueEncodingExpressions.BlobPadBytesTo4` expression and
+its static `BlobPadBytesTo4Hash`. This expression consumes `[blob]` and returns
+a blob with three zero bytes prepended to each input byte, not an Elm string.
+The AST codec wraps this Eval in its existing string constructor. The
+specialized decoder constructs the retained .NET string directly; ordinary
+Pine interpretation performs the byte padding and then the string construction.
+All input byte values are valid for the padding expression and decode as
+U+0000 through U+00FF in this string context, although the encoder chooses the
+specialization only for ASCII.
 
-The encoder uses ASCII exactly when **every UTF-16 code unit is at most 127**,
-including the empty string, NUL and DEL. Otherwise it encodes the entire string
-as UTF-32, without replacement or normalization. This content-only policy has
-no size threshold and does not depend on culture, platform, pooling, prior
+The encoder uses the padding Eval exactly when **every UTF-16 code unit is at
+most 127 and the resulting blob is at least 64 bytes** (at least 16 characters).
+This includes sufficiently long strings containing NUL or DEL. Shorter strings,
+including the empty string, and all non-ASCII strings use raw UTF-32, without
+replacement or normalization. The 64-byte threshold amortizes Eval overhead.
+This content-only policy does not depend on culture, platform, pooling, prior
 encodings or heap sharing. It is deterministic within a Pine release and is
 part of the persistence/hash contract. Reference reuse applies to strings in
-either representation. Previously stored UTF-32 strings remain decodable,
-but re-encoding ASCII strings now changes bytes and dependent declaration/SCC
-content addresses; regenerate persistent keys across this encoding change.
+either representation. Previously stored raw UTF-32 strings remain decodable.
+The former combined ASCII-to-Elm-string expression is no longer admitted;
+regenerate its stored encodings and dependent declaration/SCC/prepared-cache
+content addresses across this encoding change.
 
 Environments follow the retained .NET model, not the canonical value shape:
 
@@ -116,7 +121,7 @@ Environments follow the retained .NET model, not the canonical value shape:
 | NamedPattern | retained qualified name, cached tag value, patterns... |
 | Qualified name | name, module components... |
 | RecordPattern | fieldCount, field names..., cached field values... |
-| String | raw ASCII blob when all characters are ASCII; otherwise raw UTF-32 blob |
+| String | padding Eval over a raw ASCII blob when ASCII and output is at least 64 bytes; otherwise raw UTF-32 blob |
 | Literal | source scalar/string, cached Pine value |
 
 Record fields, setters, function parts, signatures and other retained aggregate
@@ -174,7 +179,8 @@ Prepared constructors use the same Eval/external-hash/inline-environment
 envelope, without a separate version header. Their canonical ordinary-Pine
 result is a choice named `Prepared` plus the constructor name, with one argument
 containing the shallow environment list. `ResolveConstructorExpression`
-resolves these constructors together with the abstract and ASCII constructors.
+resolves these constructors together with the abstract constructors and generic
+blob-padding expression.
 Static hashes are checked against ordinary interpretation by the equivalence
 tests; the specialized route never builds those canonical trees.
 
