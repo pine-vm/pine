@@ -185,6 +185,26 @@ importedOperatorScope =
         (moduleScope "module Parser exposing ((|.))\ninfix left 6 (|.) = keep\nkeep left right = left")
 
 
+polygonImportScope : String -> String -> Result MakeError Scope
+polygonImportScope exports imports =
+    Result.map2
+        (\context geometry ->
+            let
+                environment =
+                    context.environment
+
+                module_ =
+                    geometry.module_
+            in
+            { context
+                | environment =
+                    { environment | modules = Dict.insert ( "author/project", "Geometry.Types" ) { module_ | name = "Geometry.Types" } environment.modules }
+            }
+        )
+        (moduleScope ("module Main exposing (..)\nimport Geometry.Types exposing (" ++ imports ++ ")\nidentity value = value"))
+        (moduleScope ("module Geometry.Types exposing (" ++ exports ++ ")\ntype Polygon vertex = Polygon2d vertex\ntype alias Polygon2d vertex = Polygon vertex\ntype alias Vertices vertex = (vertex, vertex)"))
+
+
 request : Request
 request =
     { files = []
@@ -348,6 +368,40 @@ tests =
                             , Canonicalize.resolve context [ "Bytes" ] "private"
                             , Canonicalize.resolveType context [ "Bytes" ] "Hidden"
                             )
+        , describe "wildcard type exports"
+            (List.map
+                (\imports ->
+                    test ("accept importing " ++ imports) <|
+                        \_ ->
+                            polygonImportScope ".." imports
+                                |> Result.andThen (\context -> Validate.modules context.environment context.module_)
+                                |> Result.map (\_ -> ())
+                                |> Expect.equal (Ok ())
+                )
+                [ "Polygon(..)", "Polygon", "Vertices" ]
+            )
+        , describe "type import exposure errors"
+            (List.map
+                (\( exports, imports, name ) ->
+                    test ("reject importing " ++ imports ++ " from exposing (" ++ exports ++ ")") <|
+                        \_ ->
+                            polygonImportScope exports imports
+                                |> Result.andThen (\context -> Validate.modules context.environment context.module_)
+                                |> (\result ->
+                                        case result of
+                                            Err (CompilerErrors first []) ->
+                                                first.kind
+                                                    |> Expect.equal (NamingProblem (InvalidExposure "Geometry.Types" name))
+
+                                            _ ->
+                                                Expect.fail ("Expected an invalid type exposure, got " ++ Debug.toString result)
+                                   )
+                )
+                [ ( "Polygon", "Polygon(..)", "Polygon" )
+                , ( "Vertices", "Polygon", "Polygon" )
+                , ( "..", "Missing", "Missing" )
+                ]
+            )
         , test "imported operators use their private implementing function and arity helpers" <|
             \_ ->
                 importedOperatorScope

@@ -153,7 +153,23 @@ exposedBy : Module -> Exposing -> String -> Bool
 exposedBy module_ exposing_ name =
     case exposing_ of
         All ->
-            definition module_ name /= Nothing || operatorFunction module_ name /= Nothing
+            definition module_ name
+                /= Nothing
+                || operatorFunction module_ name
+                /= Nothing
+                || List.any
+                    (\declaration ->
+                        case declaration of
+                            ChoiceTypeDeclaration choice ->
+                                choice.name == name
+
+                            AliasDeclaration alias ->
+                                alias.name == name
+
+                            _ ->
+                                False
+                    )
+                    module_.syntax.declarations
 
         Explicit names ->
             List.any

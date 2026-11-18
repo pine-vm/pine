@@ -109,6 +109,8 @@ Flattened forward pipelines allocate the input before existing function argument
 while retaining normal JavaScript call and argument order.
 Syntax, import/export names, type names, and unused declarations in imported
 modules are checked before dead-code removal.
+Wildcard exports include custom type names and type aliases independently of
+whether they define a same-named value constructor.
 Imports sharing a qualifier are resolved by the requested exported value or type;
 only references with multiple matching exports are ambiguous. Imported infix
 operators resolve to their declared implementing functions, including private
@@ -186,9 +188,10 @@ Run small Elm units with:
 pine elm test implement/elm-in-elm/elm-make-ecmascript
 ```
 
-These units cover shared import qualifiers, imported operators, cyclic thunk
-references and initialization, eager dependency analysis, character escaping,
-fresh-name allocation order, and tail calls with escaped parameter names.
+These units cover wildcard type exports, shared import qualifiers, imported
+operators, cyclic thunk references and initialization, eager dependency analysis,
+character escaping, fresh-name allocation order, and tail calls with escaped
+parameter names.
 `ElmAppCompilation_Run_all_snapshots` additionally checks complete application
 lowering, including transitive package code and embedded frontend output, against
 the unchanged classic snapshots.
