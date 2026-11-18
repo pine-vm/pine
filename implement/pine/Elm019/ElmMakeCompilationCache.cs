@@ -17,8 +17,7 @@ public sealed class ElmMakeCompilationCache(IInvocationCacheAccess? invocationCa
             invocationCache: InvocationCache,
             evaluationConfigDefault: evaluationConfig,
             parseCache: VmCaches.ParsedExpressions,
-            tryGetExpressionCompilation: VmCaches.ExpressionCompilations.TryGet,
-            getOrAddExpressionCompilation: VmCaches.ExpressionCompilations.GetOrAdd,
+            expressionCompilationCache: VmCaches.ExpressionCompilations,
             expressionEncodingCache: VmCaches.EncodedExpressions,
             reducedExpressionCache: VmCaches.ReducedExpressions,
             expressionTemplatePlanCache: VmCaches.ExpressionTemplatePlans);

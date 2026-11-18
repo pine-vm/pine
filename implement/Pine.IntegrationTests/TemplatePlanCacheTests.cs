@@ -58,8 +58,7 @@ public class TemplatePlanCacheTests
             SetupVM.Create(
                 disableReductionInCompilation: true,
                 parseCache: shareParseCache ? parsed : null,
-                tryGetExpressionCompilation: shareCompilationCache ? compiled.TryGet : null,
-                getOrAddExpressionCompilation: shareCompilationCache ? compiled.GetOrAdd : null,
+                expressionCompilationCache: shareCompilationCache ? compiled : null,
                 expressionTemplatePlanCache: cache);
     }
 

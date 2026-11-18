@@ -93,10 +93,7 @@ public partial class PineVM : ICancellablePineVM
 
     private readonly PineVMWorkProfile? _workProfile;
 
-    private readonly ConditionalWeakTable<ExpressionTemplatePlan, Lazy<StackFrameInstructions?>> _staticTemplateFunctions =
-        new();
-
-    private readonly InternalExpressionCompilation.StaticDispatchCache _staticDispatchCache = new();
+    private readonly InternalExpressionCompilation.StaticDispatchCache _staticDispatchCache;
 
     private sealed class DeferredTemplateMaterializationAccounting
     {
@@ -158,7 +155,8 @@ public partial class PineVM : ICancellablePineVM
         IDictionary<(Retained, ReductionConfig), Retained>? reducedExpressionCache = null,
         ReportEvaluationEvent? reportEvaluationEvent = null,
         bool disableDirectInvocation = false,
-        PineVMWorkProfile? workProfile = null) =>
+        PineVMWorkProfile? workProfile = null,
+        ConcurrentExpressionCompilationCache? expressionCompilationCache = null) =>
         CreateCustom(
             new PineVMExpressionTemplatePlanCache(),
             evalCache,
@@ -192,7 +190,8 @@ public partial class PineVM : ICancellablePineVM
             reducedExpressionCache,
             reportEvaluationEvent,
             disableDirectInvocation,
-            workProfile);
+            workProfile,
+            expressionCompilationCache);
 
     /// <summary>Creates a VM with a retained template-plan cache and caller-selected compilation configuration.</summary>
     public static PineVM CreateCustom(
@@ -228,9 +227,17 @@ public partial class PineVM : ICancellablePineVM
         IDictionary<(Retained, ReductionConfig), Retained>? reducedExpressionCache = null,
         ReportEvaluationEvent? reportEvaluationEvent = null,
         bool disableDirectInvocation = false,
-        PineVMWorkProfile? workProfile = null)
+        PineVMWorkProfile? workProfile = null,
+        ConcurrentExpressionCompilationCache? expressionCompilationCache = null)
     {
         ArgumentNullException.ThrowIfNull(expressionTemplatePlanCache);
+
+        if (expressionCompilationCache is not null &&
+            (tryGetExpressionCompilation is not null || getOrAddExpressionCompilation is not null))
+        {
+            throw new ArgumentException(
+                "Configure either expressionCompilationCache or the expression-compilation cache delegates, not both.");
+        }
 
         if ((tryGetExpressionCompilation is null) != (getOrAddExpressionCompilation is null))
         {
@@ -240,7 +247,7 @@ public partial class PineVM : ICancellablePineVM
 
         if (tryGetExpressionCompilation is null)
         {
-            var expressionCompilationCache = new ConcurrentExpressionCompilationCache();
+            expressionCompilationCache ??= new ConcurrentExpressionCompilationCache();
 
             tryGetExpressionCompilation = expressionCompilationCache.TryGet;
             getOrAddExpressionCompilation = expressionCompilationCache.GetOrAdd;
@@ -282,6 +289,7 @@ public partial class PineVM : ICancellablePineVM
                 new PineVMExpressionEncodingCache(),
                 reportEvaluationEvent: reportEvaluationEvent,
                 workProfile: workProfile,
+                expressionCompilationCache: expressionCompilationCache,
                 reducedExpressionCache:
                 reducedExpressionCache);
 
@@ -320,9 +328,14 @@ public partial class PineVM : ICancellablePineVM
         InvocationCacheConfiguration? invocationCacheConfiguration = null,
         ReportEvaluationEvent? reportEvaluationEvent = null,
         bool disableDirectInvocation = false,
-        PineVMWorkProfile? workProfile = null)
+        PineVMWorkProfile? workProfile = null,
+        ConcurrentExpressionCompilationCache? expressionCompilationCache = null)
     {
         _expressionTemplatePlanCache = expressionTemplatePlanCache;
+
+        _staticDispatchCache =
+            expressionCompilationCache?.StaticDispatch ?? new InternalExpressionCompilation.StaticDispatchCache();
+
         _workProfile = workProfile;
 
         if (evalCache is not null && invocationCache is not null)
@@ -590,6 +603,11 @@ public partial class PineVM : ICancellablePineVM
                 compilationEnvClasses: compilationEnvClasses,
                 sharedCache: _staticDispatchCache);
     }
+
+    private static Lazy<StackFrameInstructions?> PrepareTemplateCompilation(
+        ExpressionTemplatePlan plan,
+        InternalExpressionCompilation.StaticDispatchCompilation compilation) =>
+        new(() => compilation.CompileTemplate(plan));
 
     /// <summary>
     /// Configuration controlling evaluation limits in the intermediate VM.
@@ -1265,10 +1283,11 @@ public partial class PineVM : ICancellablePineVM
                 _selectPrecompiled is null &&
                 !(_expressionCompilationOverrides?.ContainsKey(plan.RetainedTerminalExpression) ?? false)
                 ?
-                _staticTemplateFunctions.GetValue(
+                _staticDispatchCache.Templates.GetValue(
                     plan,
-                    key => new Lazy<StackFrameInstructions?>(
-                        () => CreateStaticDispatchCompilation(key.RetainedTerminalExpression, []).CompileTemplate(key))).Value
+                    key => PrepareTemplateCompilation(
+                        key,
+                        CreateStaticDispatchCompilation(key.RetainedTerminalExpression, []))).Value
                 ?? compilation.Generic
                 :
                 compilation.SelectInstructionsForTemplate(plan.TerminalEnvironmentRecipe, environments);

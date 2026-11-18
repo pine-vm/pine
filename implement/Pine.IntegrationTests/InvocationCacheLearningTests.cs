@@ -121,8 +121,7 @@ public class InvocationCacheLearningTests
             SetupVM.Create(
                 invocationCache: cache,
                 parseCache: sharedCaches.ParsedExpressions,
-                tryGetExpressionCompilation: sharedCaches.ExpressionCompilations.TryGet,
-                getOrAddExpressionCompilation: sharedCaches.ExpressionCompilations.GetOrAdd,
+                expressionCompilationCache: sharedCaches.ExpressionCompilations,
                 expressionEncodingCache: sharedCaches.EncodedExpressions,
                 reducedExpressionCache: sharedCaches.ReducedExpressions,
                 expressionTemplatePlanCache: sharedCaches.ExpressionTemplatePlans,

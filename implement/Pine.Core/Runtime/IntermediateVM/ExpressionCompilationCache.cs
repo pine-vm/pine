@@ -28,16 +28,20 @@ public delegate ExpressionCompilationCacheEntry GetOrAddExpressionCompilation(
     Func<ExpressionCompilationCacheEntry> buildCompilation);
 
 /// <summary>
-/// Thread-safe expression-compilation cache for sharing entries between VM instances.
+/// Thread-safe compilation cache for compatible VM instances, including static callee
+/// contracts, instruction bodies and template entry points. Share only with identical
+/// compilation configuration; invocation results and VM execution state are not retained.
 /// </summary>
 public sealed class ConcurrentExpressionCompilationCache
 {
+    internal InternalExpressionCompilation.StaticDispatchCache StaticDispatch { get; } = new();
+
     private readonly ConcurrentDictionary<
         InternalExpression.Expression,
         Lazy<ExpressionCompilationCacheEntry>>
         _entries = [];
 
-    /// <summary>Number of compiled or currently compiling expressions.</summary>
+    /// <summary>Number of compiled or currently compiling root expressions.</summary>
     public int Count => _entries.Count;
 
     /// <summary>

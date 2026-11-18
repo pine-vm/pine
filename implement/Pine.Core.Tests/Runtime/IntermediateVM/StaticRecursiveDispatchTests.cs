@@ -13,6 +13,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Runtime.CompilerServices;
+using System.Threading.Tasks;
 using Xunit;
 
 using VM = Pine.Core.Runtime.IntermediateVM.PineVM;
@@ -363,16 +364,122 @@ public class StaticRecursiveDispatchTests
         frames.Should().NotBeEmpty();
     }
 
-    [Fact]
-    public void Retained_recursive_code_does_not_keep_its_vm_alive_through_an_uncalled_target()
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void Retained_recursive_code_does_not_keep_its_vm_alive_through_an_uncalled_target(bool shareCaches)
     {
-        var (owner, frame) = CompileUncalledRecursiveTarget();
+        var caches = shareCaches ? new PineVMSharedCaches() : null;
+        var (owner, frame) = CompileUncalledRecursiveTarget(caches);
         GC.Collect();
         GC.WaitForPendingFinalizers();
         GC.Collect();
 
         owner.IsAlive.Should().BeFalse();
         GC.KeepAlive(frame);
+        GC.KeepAlive(caches);
+    }
+
+    [Fact]
+    public async Task Short_lived_vms_reuse_recursive_targets_without_sharing_invocation_state()
+    {
+        var body = RecursiveBody(0, 2, 1);
+        var encoded = ExpressionEncoding.EncodeExpressionAsValue(body);
+        var group = PineValue.List([encoded]);
+
+        var entry =
+            new Expression.Eval(
+                Expression.LitralInst(encoded),
+                Expression.ListInst(
+                    [Expression.LitralInst(group), Expression.ListInst([Path(0), Path(1)]), Path(2)]));
+
+        var caches = new PineVMSharedCaches();
+
+        (StackFrameInstructions Frame, EvaluationReport Report) Run(int offset)
+        {
+            var trace = new List<ExecutedStackInstruction>();
+            var invocations = new InvocationCache();
+            var vm = CreateVM(trace, reduce: false, cache: invocations, caches: caches);
+
+            var report =
+                Evaluate(vm, Add(entry, offset), PineValue.List([NumberValue(4), NumberValue(10), NumberValue(7)]));
+
+            report.ReturnValue.Evaluate().Should().Be(NumberValue(29 + offset));
+            report.InvocationCount.Should().BeGreaterThanOrEqualTo(5);
+            invocations.Should().NotBeEmpty();
+
+            return
+                (trace.First(item => item.Instruction.OptimizedInvocation is not null)
+                .Instruction.LinkedStackFrameInstructions!,
+                report);
+        }
+
+        var first = Run(0);
+        var others = await Task.WhenAll(Enumerable.Range(1, 8).Select(offset => Task.Run(() => Run(offset))));
+
+        foreach (var other in others)
+        {
+            other.Frame.Should().BeSameAs(first.Frame);
+            other.Report.BuildListCount.Should().Be(first.Report.BuildListCount);
+        }
+    }
+
+    [Fact]
+    public void Short_lived_vms_reuse_template_entry_resolution_without_capturing_arguments()
+    {
+        var caches = new PineVMSharedCaches();
+
+        var template =
+            FunctionValueBuilder.TryBuildCurriedFunctionValueAsTemplate(Expression.EnvironmentInstance, 2)!;
+
+        var expression =
+            new Expression.Eval(
+                new Expression.Eval(Path(0), Path(1)),
+                Path(2));
+
+        var firstEnvironment = PineValue.List([template, NumberValue(11), NumberValue(13)]);
+        var first = Evaluate(CreateVM([], reduce: false, caches: caches), expression, firstEnvironment);
+        var plan = caches.ExpressionTemplatePlans.Entries[template].Plan!;
+
+        caches.ExpressionCompilations.StaticDispatch.Templates.TryGetValue(plan, out var resolution)
+            .Should().BeTrue();
+
+        var secondEnvironment = PineValue.List([template, NumberValue(17), NumberValue(19)]);
+        var second = Evaluate(CreateVM([], reduce: false, caches: caches), expression, secondEnvironment);
+
+        caches.ExpressionCompilations.StaticDispatch.Templates.TryGetValue(plan, out var reused)
+            .Should().BeTrue();
+
+        reused.Should().BeSameAs(resolution);
+        second.ReturnValue.Evaluate().Should().NotBe(first.ReturnValue.Evaluate());
+
+        foreach (var environment in new[] { firstEnvironment, secondEnvironment })
+        {
+            Evaluate(CreateVM([], reduce: false, caches: caches), expression, environment).ReturnValue.Evaluate()
+                .Should().Be(
+                DirectInterpreter.WithoutEvalCaching(caches.ParsedExpressions)
+                .EvaluateExpression(expression, environment).Extract(error => throw new Exception(error)));
+        }
+    }
+
+    [Fact]
+    public void Failed_static_preparation_can_be_retried_with_the_shared_cache()
+    {
+        var caches = new PineVMSharedCaches();
+        var expression = Add(Expression.EnvironmentInstance, 1);
+        var retained = Core.Runtime.InternalExpression.ExpressionConversion.FromCanonicalCached(expression);
+
+        caches.ExpressionCompilations.StaticDispatch.Functions[(retained, null)] =
+            new(() => throw new InvalidOperationException("Preparation interrupted."));
+
+        Action first =
+            () =>
+            Evaluate(CreateVM([], reduce: true, caches: caches), expression, NumberValue(41));
+
+        first.Should().Throw<InvalidOperationException>().WithMessage("Preparation interrupted.");
+
+        Evaluate(CreateVM([], reduce: true, caches: caches), expression, NumberValue(41))
+            .ReturnValue.Evaluate().Should().Be(NumberValue(42));
     }
 
     [Fact]
@@ -589,7 +696,8 @@ public class StaticRecursiveDispatchTests
     }
 
     [MethodImpl(MethodImplOptions.NoInlining)]
-    private static (WeakReference owner, StackFrameInstructions frame) CompileUncalledRecursiveTarget()
+    private static (WeakReference owner, StackFrameInstructions frame) CompileUncalledRecursiveTarget(
+        PineVMSharedCaches? caches = null)
     {
         var first = RecursiveBody(1, 2, 1);
 
@@ -607,7 +715,7 @@ public class StaticRecursiveDispatchTests
                     [Expression.LitralInst(group), Expression.ListInst([Path(0), Path(1)]), Path(2)]));
 
         var trace = new List<ExecutedStackInstruction>();
-        var vm = CreateVM(trace, reduce: false);
+        var vm = CreateVM(trace, reduce: false, caches: caches);
 
         Evaluate(vm, entry, PineValue.List([NumberValue(0), NumberValue(10), NumberValue(7)]))
             .ReturnValue.Evaluate().Should().Be(NumberValue(17));
@@ -639,8 +747,10 @@ public class StaticRecursiveDispatchTests
         List<ExecutedStackInstruction> trace,
         bool reduce,
         IReadOnlyDictionary<Expression, IReadOnlyList<PineValueClass>>? constraints = null,
-        InvocationCache? cache = null) =>
+        InvocationCache? cache = null,
+        PineVMSharedCaches? caches = null) =>
         VM.CreateCustom(
+            expressionTemplatePlanCache: caches?.ExpressionTemplatePlans ?? new(),
             evalCache: cache,
             evaluationConfigDefault: null,
             reportFunctionApplication: null,
@@ -652,12 +762,15 @@ public class StaticRecursiveDispatchTests
             selectPrecompiled: null,
             skipInlineForExpression: _ => true,
             enableTailRecursionOptimization: false,
-            parseCache: null,
+            parseCache: caches?.ParsedExpressions,
             precompiledLeaves: null,
             reportEnterPrecompiledLeaf: null,
             reportExitPrecompiledLeaf: null,
             optimizationParametersSerial: null,
             cacheFileStore: null,
+            expressionCompilationCache: caches?.ExpressionCompilations,
+            expressionEncodingCache: caches?.EncodedExpressions,
+            reducedExpressionCache: caches?.ReducedExpressions,
             reportExecutedStackInstruction: (in item) => trace.Add(item),
             invocationCacheConfiguration: new(0, 0, 0, 0));
 }

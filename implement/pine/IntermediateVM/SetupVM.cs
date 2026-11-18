@@ -102,7 +102,8 @@ public static class SetupVM
         GetOrAddExpressionCompilation? getOrAddExpressionCompilation = null,
         PineVMExpressionEncodingCache? expressionEncodingCache = null,
         IDictionary<(Core.Runtime.InternalExpression.Expression, ReductionConfig), Core.Runtime.InternalExpression.Expression>? reducedExpressionCache = null,
-        PineVMExpressionTemplatePlanCache? expressionTemplatePlanCache = null) =>
+        PineVMExpressionTemplatePlanCache? expressionTemplatePlanCache = null,
+        ConcurrentExpressionCompilationCache? expressionCompilationCache = null) =>
         CreateWithTemplatePlanCache(
             expressionTemplatePlanCache ?? new PineVMExpressionTemplatePlanCache(),
             evaluationConfigDefault,
@@ -122,7 +123,8 @@ public static class SetupVM
             tryGetExpressionCompilation,
             getOrAddExpressionCompilation,
             expressionEncodingCache,
-            reducedExpressionCache);
+            reducedExpressionCache,
+            expressionCompilationCache);
 
     public static Core.Runtime.IntermediateVM.PineVM CreateWithTemplatePlanCache(
         PineVMExpressionTemplatePlanCache expressionTemplatePlanCache,
@@ -143,7 +145,8 @@ public static class SetupVM
         TryGetExpressionCompilation? tryGetExpressionCompilation = null,
         GetOrAddExpressionCompilation? getOrAddExpressionCompilation = null,
         PineVMExpressionEncodingCache? expressionEncodingCache = null,
-        IDictionary<(Core.Runtime.InternalExpression.Expression, ReductionConfig), Core.Runtime.InternalExpression.Expression>? reducedExpressionCache = null)
+        IDictionary<(Core.Runtime.InternalExpression.Expression, ReductionConfig), Core.Runtime.InternalExpression.Expression>? reducedExpressionCache = null,
+        ConcurrentExpressionCompilationCache? expressionCompilationCache = null)
     {
         precompiledLeaves ??= DefaultPrecompiledLeaves;
 
@@ -170,6 +173,7 @@ public static class SetupVM
                 invocationCacheConfiguration: invocationCacheConfiguration,
                 tryGetExpressionCompilation: tryGetExpressionCompilation,
                 getOrAddExpressionCompilation: getOrAddExpressionCompilation,
+                expressionCompilationCache: expressionCompilationCache,
                 expressionEncodingCache: expressionEncodingCache,
                 reducedExpressionCache: reducedExpressionCache);
     }

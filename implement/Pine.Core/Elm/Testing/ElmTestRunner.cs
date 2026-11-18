@@ -1600,8 +1600,7 @@ public static class ElmTestRunner
             cacheFileStore: null,
             invocationCache: invocationCache,
             invocationCacheConfiguration: invocationCacheConfiguration,
-            tryGetExpressionCompilation: sharedCaches.ExpressionCompilations.TryGet,
-            getOrAddExpressionCompilation: sharedCaches.ExpressionCompilations.GetOrAdd,
+            expressionCompilationCache: sharedCaches.ExpressionCompilations,
             expressionEncodingCache: sharedCaches.EncodedExpressions,
             reducedExpressionCache: sharedCaches.ReducedExpressions);
 

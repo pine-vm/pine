@@ -115,6 +115,20 @@ Caller-supplied caches and diagnostic callbacks must also be safe for concurrent
 use when sharing a VM. `PineVMSharedCaches` provides thread-safe compilation caches
 for reuse across VM instances with identical compilation configuration.
 
+Pass `PineVMSharedCaches.ExpressionCompilations` through the typed
+`expressionCompilationCache` argument. That cache owns both root entries and
+static-dispatch preparation, recursive instruction bodies, and template entry
+resolution. Sharing only the legacy root lookup/build delegates does not share
+the auxiliary static-dispatch cache. The typed cache and custom delegates are
+mutually exclusive; custom storage remains supported.
+
+Static compilation caches retain immutable code/contracts, not invocation
+buffers, counters, arguments, or their originating VM. A fresh per-test VM still
+gets its own invocation-cache execution scope. Compilation configuration
+(including native/override boundaries and inlining policies) must remain
+identical for the lifetime of a shared compilation cache. Structural template
+plan caches remain independent and may be shared across compilation policies.
+
 ## Optional invocation-cache statistics
 
 `InvocationCacheStatistics` is an explicit observer, not part of invocation
@@ -170,8 +184,9 @@ references and other eliminated inputs are not runtime parameters. The call
 retains the selected constraint and a shared, lazily compiled target, so
 recursive back-edges do not require expression lookup or specialization scans.
 Body compilation is separate from interface preparation; preparing a recursive
-call does not demand completion of the callee's body. A VM shares these contracts
-across entry points and template plans, keyed by expression and constraint.
+call does not demand completion of the callee's body. The compilation-cache owner
+shares these contracts across entry points, template plans, and compatible VMs,
+keyed by expression and constraint.
 Retaining a lazy target does not keep its originating VM alive.
 Automatic code constraints concern direct callee-code projections, not
 code-shaped program data or arguments used to compute a function. They do not

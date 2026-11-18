@@ -6,6 +6,7 @@ using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Linq;
+using System.Runtime.CompilerServices;
 
 using Expression = Pine.Core.Runtime.InternalExpression.Expression;
 
@@ -21,6 +22,9 @@ internal static partial class InternalExpressionCompilation
 
     internal sealed class StaticDispatchCache
     {
+        public readonly ConditionalWeakTable<ExpressionTemplatePlan, Lazy<StackFrameInstructions?>>
+            Templates = new();
+
         public readonly ConcurrentDictionary<
             (Expression, PineValueClass?), Lazy<StaticFunction>>
             Functions = new();
@@ -100,10 +104,27 @@ internal static partial class InternalExpressionCompilation
             return constraint is null ? null : GetFunction(plan.RetainedTerminalExpression, constraint).Instructions.Value;
         }
 
-        public StaticFunction GetFunction(Expression expression, PineValueClass? constraint) =>
-            _functions.GetOrAdd(
-                (expression, constraint),
-                key => new Lazy<StaticFunction>(() => PrepareFunction(key.Item1, key.Item2))).Value;
+        public StaticFunction GetFunction(Expression expression, PineValueClass? constraint)
+        {
+            var key = (expression, constraint);
+
+            var function =
+                _functions.GetOrAdd(
+                    key,
+                    key => new Lazy<StaticFunction>(() => PrepareFunction(key.Item1, key.Item2)));
+
+            try
+            {
+                return function.Value;
+            }
+            catch
+            {
+                ((ICollection<KeyValuePair<(Expression, PineValueClass?), Lazy<StaticFunction>>>)_functions)
+                    .Remove(new(key, function));
+
+                throw;
+            }
+        }
 
         private Expression PrepareBody(Expression expression, PineValueClass? constraint) =>
             _prepared.GetOrAdd(

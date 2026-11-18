@@ -12,7 +12,8 @@ namespace Pine.Core.Runtime.IntermediateVM;
 public sealed class PineVMSharedCaches
 {
     /// <summary>
-    /// Compiled sequential IR, shared by compatible VM instances.
+    /// Root compilations, static callee contracts/bodies and template entry points,
+    /// shared by compatible VM instances.
     /// </summary>
     public ConcurrentExpressionCompilationCache ExpressionCompilations { get; } = new();
 

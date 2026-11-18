@@ -482,8 +482,10 @@ public class ExpressionCompiledCallbackTests
             .IsOkOrNull().Should().Be(IntegerEncoding.EncodeSignedInteger(11));
     }
 
-    [Fact]
-    public void Shared_cache_reuses_compilation_across_VM_instances()
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void Shared_cache_reuses_compilation_across_VM_instances(bool useTypedCache)
     {
         var cache = new ConcurrentExpressionCompilationCache();
         var compilationCount = 0;
@@ -507,8 +509,9 @@ public class ExpressionCompiledCallbackTests
                 reportExpressionCompiled:
                 (in _) =>
                 compilationCount++,
-                tryGetExpressionCompilation: cache.TryGet,
-                getOrAddExpressionCompilation: cache.GetOrAdd);
+                tryGetExpressionCompilation: useTypedCache ? null : cache.TryGet,
+                getOrAddExpressionCompilation: useTypedCache ? null : cache.GetOrAdd,
+                expressionCompilationCache: useTypedCache ? cache : null);
 
         var expression =
             Expression.BuiltinInst(
