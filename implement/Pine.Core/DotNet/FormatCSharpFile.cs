@@ -3802,6 +3802,13 @@ public static class FormatCSharpFile
         var opLine = LineOf(node.OperatorToken);
         var rightLine = LineOf(node.Right);
 
+        var opLeading =
+            opLine > EndLineOf(node.Left)
+            ?
+            EnsureLeadingBreaks(node.OperatorToken.LeadingTrivia, 1, ctx.IndentLevel)
+            :
+            new SyntaxTriviaList(s_space);
+
         if (rightLine > opLine)
         {
             fmtRight =
@@ -3810,13 +3817,13 @@ public static class FormatCSharpFile
 
             return
                 node.WithLeft(fmtLeft)
-                .WithOperatorToken(node.OperatorToken.WithLeadingTrivia(s_space).WithTrailingTrivia())
+                .WithOperatorToken(node.OperatorToken.WithLeadingTrivia(opLeading).WithTrailingTrivia())
                 .WithRight(fmtRight);
         }
 
         return
             node.WithLeft(fmtLeft)
-            .WithOperatorToken(node.OperatorToken.WithLeadingTrivia(s_space).WithTrailingTrivia(s_space))
+            .WithOperatorToken(node.OperatorToken.WithLeadingTrivia(opLeading).WithTrailingTrivia(s_space))
             .WithRight(fmtRight.WithLeadingTrivia());
     }
 

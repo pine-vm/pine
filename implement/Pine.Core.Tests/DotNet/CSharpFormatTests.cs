@@ -5787,6 +5787,70 @@ public class CSharpFormatTests
         AssertFormattedSyntax(input, input, scriptMode: true);
     }
 
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public void Preserves_line_breaks_before_or_patterns_in_switch_expression_arms(bool scriptMode)
+    {
+        var input =
+            """
+            class C
+            {
+                public static StackEffect GetStackEffect(StackInstruction instruction) =>
+                    instruction.Kind switch
+                    {
+                        StackInstructionKind.Local_Set_Literal
+                        or StackInstructionKind.Local_Int_Add_Const
+                        or StackInstructionKind.Jump_Const =>
+                        new(PopCount: 0, PushCount: 0),
+
+                        _ =>
+                        throw new NotImplementedException()
+                    };
+            }
+            """;
+
+        AssertFormattedSyntax(input, input, scriptMode);
+    }
+
+    [Theory]
+    [InlineData("or")]
+    [InlineData("and")]
+    public void Binary_pattern_operators_on_separate_lines_have_consistent_indentation(string patternOperator)
+    {
+        var input =
+            $$"""
+            var r =
+                o switch
+                {
+                    >= 0
+                        {{patternOperator}}
+                            <= 100 =>
+                    true,
+
+                    _ =>
+                    false
+                };
+            """;
+
+        var expected =
+            $$"""
+            var r =
+                o switch
+                {
+                    >= 0
+                    {{patternOperator}}
+                    <= 100 =>
+                    true,
+
+                    _ =>
+                    false
+                };
+            """;
+
+        AssertFormattedSyntax(input, expected, scriptMode: true);
+    }
+
     [Fact]
     public void Formats_expression_body_containing_switch_after_comment()
     {
