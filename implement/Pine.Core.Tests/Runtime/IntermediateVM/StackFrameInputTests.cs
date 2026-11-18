@@ -1,8 +1,10 @@
 using AwesomeAssertions;
 using Pine.Core.CodeAnalysis;
+using Pine.Core.Encodings;
 using Pine.Core.Internal;
 using Pine.Core.PineLanguage;
 using Pine.Core.Runtime.IntermediateVM;
+using System;
 using Xunit;
 
 namespace Pine.Core.Tests.Runtime.IntermediateVM;
@@ -55,5 +57,38 @@ public class StackFrameInputTests
 
         first.GetHashCode().Should().Be(second.GetHashCode());
         first.Equals(second).Should().BeTrue();
+    }
+
+    [Fact]
+    public void Eliminated_environment_inputs_participate_in_memory_and_persistent_cache_keys()
+    {
+        var parameters = StaticFunctionInterface.FromPathsSorted([[1]]);
+
+        var firstConstraint =
+            PineValueClass.Create([new([0], IntegerEncoding.EncodeSignedInteger(7))]);
+
+        var secondConstraint =
+            PineValueClass.Create([new([0], IntegerEncoding.EncodeSignedInteger(100))]);
+
+        var argument = PineValueInProcess.Create(IntegerEncoding.EncodeSignedInteger(10));
+        var first = StackFrameInput.FromArguments(parameters, [argument], firstConstraint);
+        var second = StackFrameInput.FromArguments(parameters, [argument], secondConstraint);
+
+        var equivalent =
+            StackFrameInput.FromEnvironmentValue(
+                PineValue.List([IntegerEncoding.EncodeSignedInteger(7), argument.Evaluate()]),
+                parameters,
+                firstConstraint);
+
+        var hashes = new StackFrameInputHash();
+
+        first.Should().NotBe(second);
+        first.Should().Be(equivalent);
+
+        Convert.ToHexString(hashes.ComposeHashBytes(first).HashBytes.Span).Should()
+            .NotBe(Convert.ToHexString(hashes.ComposeHashBytes(second).HashBytes.Span))
+            .And.Be(Convert.ToHexString(hashes.ComposeHashBytes(equivalent).HashBytes.Span));
+
+        first.ToValueClass().TryGetValue([0]).Should().Be(IntegerEncoding.EncodeSignedInteger(7));
     }
 }

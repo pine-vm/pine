@@ -1,5 +1,7 @@
 using AwesomeAssertions;
 using Pine.Core.Addressing;
+using Pine.Core.CodeAnalysis;
+using Pine.Core.Internal;
 using Pine.Core.IO;
 using Pine.Core.PineLanguage;
 using Pine.Core.PineVM;
@@ -345,6 +347,64 @@ public class InvocationCacheTests
     }
 
     [Fact]
+    public void Persistent_cache_uses_omitted_fixed_inputs_for_predicates_and_result_identity()
+    {
+        var fileStore = new FileStoreFromConcurrentDictionary();
+        var expression = PineValue.Blob([1]);
+
+        var predicate =
+            new OptimizationParametersSerial.InputPredicate([new([0], 1, 0)], Threshold: 1);
+
+        var optimization = PersistentOptimizationForExpression(expression, predicate);
+        var first = new PersistentInvocationCacheAccess(null, fileStore, optimization);
+        var second = new PersistentInvocationCacheAccess(null, fileStore, optimization);
+
+        foreach (var fixedValue in new byte[] { 7, 100 })
+        {
+            var key =
+                new EvalCacheEntryKey(
+                    expression,
+                    StackFrameInput.FromArguments(
+                        StaticFunctionInterface.FromPathsSorted([[1]]),
+                        [PineValueInProcess.Create(PineValue.Blob([10]))],
+                        PineValueClass.Create([new([0], PineValue.Blob([fixedValue]))])));
+
+            var value = PineValue.Blob([fixedValue]);
+
+            first.TryAdd(key, value).Should().BeTrue();
+            second.TryGet(key, out var loaded).Should().BeTrue();
+            loaded.Should().Be(value);
+        }
+
+        fileStore.ListFilesInDirectory([]).Should().HaveCount(2);
+    }
+
+    [Fact]
+    public void Persistent_cache_declines_policies_requiring_unavailable_eliminated_inputs()
+    {
+        var fileStore = new FileStoreFromConcurrentDictionary();
+        var expression = PineValue.Blob([1]);
+
+        var input =
+            StackFrameInput.FromArguments(
+                StaticFunctionInterface.ZeroParameters,
+                [],
+                PineValueClass.Create([new([0], PineValue.EmptyList)]));
+
+        var predicate =
+            new OptimizationParametersSerial.InputPredicate([new([1], 1, 0)], Threshold: 1);
+
+        var cache =
+            new PersistentInvocationCacheAccess(
+                null,
+                fileStore,
+                PersistentOptimizationForExpression(expression, predicate));
+
+        cache.TryAdd(new(expression, input), PineValue.EmptyList).Should().BeFalse();
+        fileStore.ListFilesInDirectory([]).Should().BeEmpty();
+    }
+
+    [Fact]
     public void Persistent_cache_ignores_entries_without_matching_configuration()
     {
         var fileStore = new FileStoreFromConcurrentDictionary();
@@ -369,7 +429,8 @@ public class InvocationCacheTests
                 PineValue.Blob(BitConverter.GetBytes(argument))));
 
     private static OptimizationParametersSerial PersistentOptimizationForExpression(
-        PineValue expressionValue)
+        PineValue expressionValue,
+        OptimizationParametersSerial.InputPredicate? predicate = null)
     {
         var (hashBytes, _) = PineValueHashFlat.ComputeHashForValue(expressionValue);
 
@@ -380,7 +441,7 @@ public class InvocationCacheTests
                         Convert.ToHexStringLower(hashBytes.Span),
                         new OptimizationParametersSerial.ExpressionConfig(
                             PersistentCachePredicate:
-                            OptimizationParametersSerial.InputPredicate.Unconditional,
+                            predicate ?? OptimizationParametersSerial.InputPredicate.Unconditional,
                             ParallelThreadPredicate: null))
                 ]);
     }

@@ -11,7 +11,7 @@ using Expression = Pine.Core.Runtime.InternalExpression.Expression;
 
 namespace Pine.Core.Runtime.IntermediateVM;
 
-internal static class InternalExpressionCompilation
+internal static partial class InternalExpressionCompilation
 {
     private static bool DuplicatesArgumentEvaluations(
         Expression.Eval call,
@@ -41,82 +41,27 @@ internal static class InternalExpressionCompilation
         int pathMaxHighInclusive = DefaultPathMaxHighInclusive,
         bool disableGenericApplicationChainConsolidation = false,
         bool enableDirectInvocation = true,
-        Func<PineValue, bool>? skipDirectInvocation = null)
+        Func<PineValue, bool>? skipDirectInvocation = null,
+        IReadOnlyDictionary<Expression, IReadOnlyList<PineValueClass>>? compilationEnvClasses = null)
     {
-        var genericParameters =
-            StaticFunctionInterface.FromExpression(rootExpression);
+        var dispatch =
+            new StaticDispatchCompilation(
+                rootExpression,
+                specializations,
+                parseCache,
+                disableReduction,
+                enableTailRecursionOptimization,
+                skipInlining,
+                reducedExpressionCache,
+                pathMaxLowExclusive,
+                pathMaxHighInclusive,
+                disableGenericApplicationChainConsolidation,
+                enableDirectInvocation,
+                skipDirectInvocation,
+                compilationEnvClasses);
 
-        var generic =
-            new StackFrameInstructions(
-                genericParameters,
-                InstructionsFromExpressionTransitive(
-                    rootExpression,
-                    envConstraintId: null,
-                    parametersAsLocals: genericParameters,
-                    parseCache: parseCache,
-                    disableReduction: disableReduction,
-                    skipInlining: skipInlining,
-                    enableTailRecursionOptimization: enableTailRecursionOptimization,
-                    reducedExpressionCache: reducedExpressionCache,
-                    pathMaxLowExclusive: pathMaxLowExclusive,
-                    pathMaxHighInclusive: pathMaxHighInclusive,
-                    disableGenericApplicationChainConsolidation: disableGenericApplicationChainConsolidation,
-                    enableDirectInvocation: enableDirectInvocation,
-                    skipDirectInvocation: skipDirectInvocation),
-                TrackEnvConstraint: null);
-
-        var specialized =
-            specializations
-            // Order to prefer more specific constraints when selecting at runtime.
-            .OrderDescending(PineValueClassSpecificityComparer.Instance)
-            .Select(
-                specialization =>
-                ((IReadOnlyList<EnvConstraintItem>)
-                [
-                ..specialization.ParsedItems
-                .Select(envItem => new EnvConstraintItem(envItem.Key.ToArray(), envItem.Value))
-                ],
-                new StackFrameInstructions(
-                    genericParameters,
-                    InstructionsFromExpressionTransitive(
-                        rootExpression,
-                        envConstraintId: specialization,
-                        parametersAsLocals: genericParameters,
-                        parseCache: parseCache,
-                        disableReduction: disableReduction,
-                        enableTailRecursionOptimization: enableTailRecursionOptimization,
-                        skipInlining: skipInlining,
-                        reducedExpressionCache: reducedExpressionCache,
-                        pathMaxLowExclusive: pathMaxLowExclusive,
-                        pathMaxHighInclusive: pathMaxHighInclusive,
-                        disableGenericApplicationChainConsolidation: disableGenericApplicationChainConsolidation,
-                        enableDirectInvocation: enableDirectInvocation,
-                        skipDirectInvocation: skipDirectInvocation),
-                    TrackEnvConstraint: specialization)))
-            .ToImmutableArray();
-
-        return
-            new ExpressionCompilation(
-                Generic: generic,
-                Specialized: specialized);
+        return dispatch.CompileExpression();
     }
-
-    /*
-     * 
-     * In the older impl to compile to C#, we had CompilationUnitEnvExprEntry to inform which
-     * declarations will be available in the environment to reference.
-     * Here, we dont need that info for the first iteration:
-     * Instead of a global shared representation, we can inline were referenced.
-     * For recursive functions, we can stop inlining which will lead to a lookup in the dictionary for each iteration.
-     * However, in some cases (like the adaptive partial application emitted by the Elm compiler),
-     * inlining the same expression multiple times can be better.
-     * For that specific case, expanding the environment constraint (collected by CA) to enable erasing conditionals might
-     * improve overall efficiency a lot.
-     * Optimizing for more runtime efficiency follows in later iterations.
-     * 
-     * (In addition to maybe being easier to implement and read, the inlining will also improve runtime efficiency in many cases.)
-     * 
-     * */
 
     /// <summary>
     /// Compiles an expression into intermediate VM instructions, applying transitive inlining and reduction decisions as configured.
@@ -134,6 +79,8 @@ internal static class InternalExpressionCompilation
     /// <param name="disableGenericApplicationChainConsolidation">Whether generic application-chain consolidation should be disabled.</param>
     /// <param name="enableDirectInvocation">Whether direct invocation should be enabled.</param>
     /// <param name="skipDirectInvocation">Optional predicate identifying values that should skip direct invocation.</param>
+    /// <param name="resolveStaticInvocation">Resolves constrained callees without compiling their bodies recursively.</param>
+    /// <param name="preparedExpression">An already reduced expression for this environment constraint.</param>
     public static IReadOnlyList<StackInstruction> InstructionsFromExpressionTransitive(
         Expression rootExpression,
         PineValueClass? envConstraintId,
@@ -147,7 +94,67 @@ internal static class InternalExpressionCompilation
         int pathMaxHighInclusive = DefaultPathMaxHighInclusive,
         bool disableGenericApplicationChainConsolidation = false,
         bool enableDirectInvocation = true,
-        Func<PineValue, bool>? skipDirectInvocation = null)
+        Func<PineValue, bool>? skipDirectInvocation = null,
+        Func<Expression, PineValue, Expression, DirectInvocation?>? resolveStaticInvocation = null,
+        Expression? preparedExpression = null)
+    {
+        var reducedExpression =
+            preparedExpression ??
+            PrepareExpression(
+                rootExpression,
+                envConstraintId,
+                parseCache,
+                disableReduction,
+                skipInlining,
+                reducedExpressionCache,
+                pathMaxLowExclusive,
+                pathMaxHighInclusive,
+                disableGenericApplicationChainConsolidation);
+
+        var graph =
+            ControlFlowGraphFromExpression(
+                rootExpression: reducedExpression,
+                rootExprAlternativeForms: [rootExpression],
+                envClass: envConstraintId,
+                parametersAsLocals: parametersAsLocals,
+                parseCache,
+                enableTailRecursionOptimization,
+                enableDirectInvocation,
+                skipDirectInvocation,
+                resolveStaticInvocation);
+
+        var optimizedGraph =
+            enableTailRecursionOptimization
+            ?
+            graph
+            :
+            InlineStaticInvocations(
+                graph,
+                parseCache,
+                parametersAsLocals.ParamsPaths.Count,
+                skipInlining,
+                envConstraintId,
+                enableDirectInvocation,
+                skipDirectInvocation,
+                activeExpressions: [rootExpression, reducedExpression],
+                remainingDepth: 8);
+
+        return
+            optimizedGraph
+            .OptimizeForExecution(parametersAsLocals.ParamsPaths.Count)
+            .LowerToStackInstructions();
+    }
+
+    private static Expression PrepareExpression(
+        Expression rootExpression,
+        PineValueClass? envConstraintId,
+        PineVMParseCache parseCache,
+        bool disableReduction,
+        Func<Expression, PineValueClass?, bool> skipInlining,
+        IDictionary<(Expression, ReductionConfig), Expression>? reducedExpressionCache,
+        int pathMaxLowExclusive,
+        int pathMaxHighInclusive,
+        bool disableGenericApplicationChainConsolidation)
     {
         var inlinedStaticInvocations =
             disableReduction
@@ -180,7 +187,7 @@ internal static class InternalExpressionCompilation
          * Substituting subexpressions for the given environment constraint once at the root should be enough.
          * */
 
-        var reducedExpression =
+        return
             disableReduction
             ?
             expressionWithEnvConstraint
@@ -200,37 +207,6 @@ internal static class InternalExpressionCompilation
                 pathMaxHighInclusive: pathMaxHighInclusive,
                 disableGenericApplicationChainConsolidation: disableGenericApplicationChainConsolidation);
 
-        var graph =
-            ControlFlowGraphFromExpression(
-                rootExpression: reducedExpression,
-                rootExprAlternativeForms: [rootExpression],
-                envClass: enableTailRecursionOptimization ? envConstraintId : null,
-                parametersAsLocals: parametersAsLocals,
-                parseCache,
-                enableTailRecursionOptimization,
-                enableDirectInvocation,
-                skipDirectInvocation);
-
-        var optimizedGraph =
-            enableTailRecursionOptimization
-            ?
-            graph
-            :
-            InlineStaticInvocations(
-                graph,
-                parseCache,
-                parametersAsLocals.ParamsPaths.Count,
-                skipInlining,
-                envConstraintId,
-                enableDirectInvocation,
-                skipDirectInvocation,
-                activeExpressions: [rootExpression, reducedExpression],
-                remainingDepth: 8);
-
-        return
-            optimizedGraph
-            .OptimizeForExecution(parametersAsLocals.ParamsPaths.Count)
-            .LowerToStackInstructions();
     }
 
     private static PineControlFlowGraph InlineStaticInvocations(
@@ -297,12 +273,19 @@ internal static class InternalExpressionCompilation
                 .ToArray();
 
             var calleeEnvironmentClass =
-                knownParameterValues.Length is 0 ? null : PineValueClass.Create(knownParameterValues);
+                direct.EnvironmentConstraint ??
+                (knownParameterValues.Length is 0 ? null : PineValueClass.Create(knownParameterValues));
 
             var calleeGraph =
                 ControlFlowGraphFromExpression(
-                    target,
-                    rootExprAlternativeForms: [],
+                    direct.PreparedExpression ??
+                    (
+                    calleeEnvironmentClass is null
+                    ?
+                    target
+                    :
+                    SubstituteSubexpressionsForEnvironmentConstraint(target, calleeEnvironmentClass)),
+                    rootExprAlternativeForms: [target],
                     envClass: calleeEnvironmentClass,
                     parametersAsLocals: parameters,
                     parseCache,
@@ -1272,7 +1255,8 @@ internal static class InternalExpressionCompilation
         PineVMParseCache parseCache,
         bool enableTailRecursionOptimization = false,
         bool enableDirectInvocation = true,
-        Func<PineValue, bool>? skipDirectInvocation = null)
+        Func<PineValue, bool>? skipDirectInvocation = null,
+        Func<Expression, PineValue, Expression, DirectInvocation?>? resolveStaticInvocation = null)
     {
         var compiled =
             InternalPineIRCompiler.CompileExpression(
@@ -1283,7 +1267,8 @@ internal static class InternalExpressionCompilation
                 parseCache,
                 enableTailRecursionOptimization,
                 enableDirectInvocation,
-                skipDirectInvocation);
+                skipDirectInvocation,
+                resolveStaticInvocation);
 
         return PineControlFlowGraph.FromFragment(compiled.Fragment);
     }

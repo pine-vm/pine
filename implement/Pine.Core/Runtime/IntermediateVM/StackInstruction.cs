@@ -536,6 +536,13 @@ public record DirectInvocation
     /// <summary>The argument layout of the target frame.</summary>
     public StaticFunctionInterface InvocationInterface { get; init; }
 
+    /// <summary>The assumptions pinned by a statically specialized call.</summary>
+    public PineValueClass? EnvironmentConstraint { get; init; }
+
+    internal Lazy<StackFrameInstructions>? StaticInstructions { get; init; }
+
+    internal InternalExpression.Expression? PreparedExpression { get; init; }
+
     internal InternalExpression.Expression InternalExpression =>
         _internalExpression ??= Runtime.InternalExpression.ExpressionConversion.FromCanonicalCached(Expression);
 
@@ -565,11 +572,21 @@ public record DirectInvocation
         ReferenceEquals(this, other) ||
         other is not null && InternalExpression.Equals(other.InternalExpression) &&
         ExpressionEncoded.Equals(other.ExpressionEncoded) && InvocationInterface.Equals(other.InvocationInterface) &&
-        Equals(_linkedStackFrameInstructions, other._linkedStackFrameInstructions);
+        Equals(EnvironmentConstraint, other.EnvironmentConstraint) &&
+        ReferenceEquals(_linkedStackFrameInstructions, other._linkedStackFrameInstructions);
 
     /// <inheritdoc/>
     public override int GetHashCode() =>
-        HashCode.Combine(InternalExpression, ExpressionEncoded, InvocationInterface, _linkedStackFrameInstructions);
+        HashCode.Combine(
+            InternalExpression,
+            ExpressionEncoded,
+            InvocationInterface,
+            EnvironmentConstraint,
+            _linkedStackFrameInstructions is null
+            ?
+            0
+            :
+            System.Runtime.CompilerServices.RuntimeHelpers.GetHashCode(_linkedStackFrameInstructions));
 
     /// <summary>Deconstructs the public canonical invocation contract.</summary>
     public void Deconstruct(
@@ -588,7 +605,7 @@ public record DirectInvocation
     /// The linked target stack-frame instructions, resolved after compile-time linking.
     /// </summary>
     public StackFrameInstructions? LinkedStackFrameInstructions =>
-        _linkedStackFrameInstructions;
+        _linkedStackFrameInstructions ?? StaticInstructions?.Value;
 
     /// <summary>
     /// Links the target stack-frame instructions for this direct invocation.

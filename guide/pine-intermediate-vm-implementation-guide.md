@@ -156,6 +156,36 @@ And since every list creation adds significant runtime overhead, avoiding them i
 
 > Note: specialized interface currently only implemented for the input side, output side remains TODO.
 
+Known recursive callees use `Invoke_StackFrame_Const` with an interface derived
+from the expression under its environment constraint. Fixed function-group
+references and other eliminated inputs are not runtime parameters. The call
+retains the selected constraint and a shared, lazily compiled target, so
+recursive back-edges do not require expression lookup or specialization scans.
+Body compilation is separate from interface preparation; preparing a recursive
+call does not demand completion of the callee's body. A VM shares these contracts
+across entry points and template plans, keyed by expression and constraint.
+Retaining a lazy target does not keep its originating VM alive.
+Automatic code constraints concern direct callee-code projections, not
+code-shaped program data or arguments used to compute a function. They do not
+freeze whole environments. Template entry specialization fixes function-group
+containers rather than individual embedded encoded-expression values, avoiding
+a new specialized generic wrapper for each dynamically generated code value.
+
+Argument forwarding projects through constructed nested lists rather than
+building an environment envelope first. Computations containing `Eval` are
+evaluated before projection and shared through locals, including unused
+arguments that can fail. Common-subexpression analysis also spans the projected
+arguments so pure producers are not duplicated. The same interface selection
+applies to template invocations with statically known function-group components.
+
+`StackFrameInput` retains the environment constraint alongside the runtime
+arguments. Equality, in-memory and persistent invocation-cache keys, and
+diagnostic value reconstruction include those fixed inputs; identical dynamic
+arguments under different constraints must not share a cached result.
+Persistent-cache predicates can read fixed inputs from that constraint; when a
+removed input is no longer reconstructible, the size-based policy declines
+persistence rather than using incomplete input data.
+
 ### Expression Templates and Deferred Evaluation Chains
 
 An expression template constructs an encoded Pine expression from an environment.

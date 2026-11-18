@@ -35,10 +35,17 @@ public class StackFrameInputHash
         var paramHashBytes =
             GetOrComputeHashForFunctionInterface(stackFrameInput.Parameters);
 
+        ReadOnlyMemory<byte> constraintHashBytes =
+            stackFrameInput.EnvironmentConstraint is { } constraint
+            ?
+            Convert.FromHexString(constraint.HashBase16)
+            :
+            ReadOnlyMemory<byte>.Empty;
+
         var argumentsHashes =
             new ReadOnlyMemory<byte>[stackFrameInput.Arguments.Count];
 
-        var aggregateBytesCount = paramHashBytes.Length;
+        var aggregateBytesCount = paramHashBytes.Length + constraintHashBytes.Length;
 
         long aggregateHashedBytesCount = 0;
 
@@ -63,6 +70,9 @@ public class StackFrameInputHash
         paramHashBytes.Span.CopyTo(hashSourceBytes.AsSpan(offset));
 
         offset += paramHashBytes.Length;
+
+        constraintHashBytes.Span.CopyTo(hashSourceBytes.AsSpan(offset));
+        offset += constraintHashBytes.Length;
 
         for (var i = 0; i < argumentsHashes.Length; i++)
         {

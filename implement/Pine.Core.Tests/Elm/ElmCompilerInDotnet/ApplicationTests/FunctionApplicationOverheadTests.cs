@@ -329,7 +329,7 @@ public class FunctionApplicationOverheadTests
             BuildListCount: 0
             BuildListItemCount: 0
             LoopIterationCount: 0
-            InstructionCount: 12
+            InstructionCount: 7
             DeferredTemplateValueAllocationCount: 0
             TemplateDirectInvocationCount: 2
             DeferredTemplateValueMaterializationCount: 0
@@ -370,8 +370,8 @@ public class FunctionApplicationOverheadTests
             BuildListCount: 0
             BuildListItemCount: 0
             LoopIterationCount: 0
-            InstructionCount: 17
-            DeferredTemplateValueAllocationCount: 2
+            InstructionCount: 11
+            DeferredTemplateValueAllocationCount: 1
             TemplateDirectInvocationCount: 2
             DeferredTemplateValueMaterializationCount: 0
             TemplateConsolidatedEvalCount: 4
@@ -409,7 +409,7 @@ public class FunctionApplicationOverheadTests
             BuildListCount: 0
             BuildListItemCount: 0
             LoopIterationCount: 0
-            InstructionCount: 20
+            InstructionCount: 11
             DeferredTemplateValueAllocationCount: 0
             TemplateDirectInvocationCount: 3
             DeferredTemplateValueMaterializationCount: 0
@@ -451,10 +451,10 @@ public class FunctionApplicationOverheadTests
         EvalWorkCountersFormatting.FormatCounts(report).ShouldBeWithDiff(
             """
             InvocationCount: 7
-            BuildListCount: 3
-            BuildListItemCount: 9
+            BuildListCount: 2
+            BuildListItemCount: 6
             LoopIterationCount: 0
-            InstructionCount: 64
+            InstructionCount: 61
             DeferredTemplateValueAllocationCount: 0
             TemplateDirectInvocationCount: 4
             DeferredTemplateValueMaterializationCount: 0
@@ -857,7 +857,7 @@ public class FunctionApplicationOverheadTests
             BuildListCount: 0
             BuildListItemCount: 0
             LoopIterationCount: 0
-            InstructionCount: 22
+            InstructionCount: 13
             DeferredTemplateValueAllocationCount: 0
             TemplateDirectInvocationCount: 3
             DeferredTemplateValueMaterializationCount: 0
@@ -910,10 +910,10 @@ public class FunctionApplicationOverheadTests
         EvalWorkCountersFormatting.FormatCounts(report).ShouldBeWithDiff(
             """
             InvocationCount: 41
-            BuildListCount: 21
-            BuildListItemCount: 62
+            BuildListCount: 19
+            BuildListItemCount: 56
             LoopIterationCount: 0
-            InstructionCount: 396
+            InstructionCount: 390
             DeferredTemplateValueAllocationCount: 0
             TemplateDirectInvocationCount: 21
             DeferredTemplateValueMaterializationCount: 0
@@ -960,11 +960,11 @@ public class FunctionApplicationOverheadTests
 
         EvalWorkCountersFormatting.FormatCounts(report).ShouldBeWithDiff(
             """
-            InvocationCount: 7
-            BuildListCount: 3
-            BuildListItemCount: 12
+            InvocationCount: 6
+            BuildListCount: 2
+            BuildListItemCount: 8
             LoopIterationCount: 0
-            InstructionCount: 64
+            InstructionCount: 61
             DeferredTemplateValueAllocationCount: 0
             TemplateDirectInvocationCount: 4
             DeferredTemplateValueMaterializationCount: 0
@@ -1018,11 +1018,11 @@ public class FunctionApplicationOverheadTests
 
         EvalWorkCountersFormatting.FormatCounts(report).ShouldBeWithDiff(
             """
-            InvocationCount: 41
-            BuildListCount: 21
-            BuildListItemCount: 82
+            InvocationCount: 39
+            BuildListCount: 19
+            BuildListItemCount: 74
             LoopIterationCount: 0
-            InstructionCount: 390
+            InstructionCount: 384
             DeferredTemplateValueAllocationCount: 0
             TemplateDirectInvocationCount: 21
             DeferredTemplateValueMaterializationCount: 0
@@ -1065,10 +1065,10 @@ public class FunctionApplicationOverheadTests
         EvalWorkCountersFormatting.FormatCounts(report).ShouldBeWithDiff(
             """
             InvocationCount: 7
-            BuildListCount: 3
-            BuildListItemCount: 9
+            BuildListCount: 2
+            BuildListItemCount: 6
             LoopIterationCount: 0
-            InstructionCount: 68
+            InstructionCount: 65
             DeferredTemplateValueAllocationCount: 0
             TemplateDirectInvocationCount: 4
             DeferredTemplateValueMaterializationCount: 0
@@ -1119,10 +1119,10 @@ public class FunctionApplicationOverheadTests
         EvalWorkCountersFormatting.FormatCounts(report).ShouldBeWithDiff(
             """
             InvocationCount: 41
-            BuildListCount: 21
-            BuildListItemCount: 62
+            BuildListCount: 19
+            BuildListItemCount: 56
             LoopIterationCount: 0
-            InstructionCount: 432
+            InstructionCount: 426
             DeferredTemplateValueAllocationCount: 0
             TemplateDirectInvocationCount: 21
             DeferredTemplateValueMaterializationCount: 0

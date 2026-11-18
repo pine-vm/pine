@@ -984,11 +984,11 @@ public class ElmLanguageServiceTests
 
         EvalWorkCountersFormatting.FormatCounts(aggregateCounters).ShouldBeWithDiff(
             """
-            InvocationCount: 717
-            BuildListCount: 1_361
-            BuildListItemCount: 5_957
-            LoopIterationCount: 183
-            InstructionCount: 20_912
+            InvocationCount: 607
+            BuildListCount: 1_064
+            BuildListItemCount: 4_695
+            LoopIterationCount: 163
+            InstructionCount: 18_532
             DeferredTemplateValueAllocationCount: 0
             TemplateDirectInvocationCount: 8
             DeferredTemplateValueMaterializationCount: 0
@@ -1005,8 +1005,8 @@ public class ElmLanguageServiceTests
 
         InvocationCountReportFormatting.FormatCounts(aggregateInvocationCounts).ShouldBeWithDiff(
             """
-            CompiledExpressionCount: 165
-            InvocationCountTotal: 705
+            CompiledExpressionCount: 154
+            InvocationCountTotal: 610
             InvocationCountAverage: 4
             InvocationCountPercentile10: 1
             InvocationCountMedian: 2
@@ -1539,11 +1539,11 @@ public class ElmLanguageServiceTests
 
         EvalWorkCountersFormatting.FormatCounts(aggregateCounters).ShouldBeWithDiff(
             """
-            InvocationCount: 2_024
-            BuildListCount: 3_800
-            BuildListItemCount: 16_804
-            LoopIterationCount: 641
-            InstructionCount: 56_385
+            InvocationCount: 1_664
+            BuildListCount: 2_835
+            BuildListItemCount: 12_816
+            LoopIterationCount: 542
+            InstructionCount: 48_810
             DeferredTemplateValueAllocationCount: 0
             TemplateDirectInvocationCount: 22
             DeferredTemplateValueMaterializationCount: 0
@@ -1560,12 +1560,12 @@ public class ElmLanguageServiceTests
 
         InvocationCountReportFormatting.FormatCounts(aggregateInvocationCounts).ShouldBeWithDiff(
             """
-            CompiledExpressionCount: 216
-            InvocationCountTotal: 1_979
-            InvocationCountAverage: 9
+            CompiledExpressionCount: 208
+            InvocationCountTotal: 1_668
+            InvocationCountAverage: 8
             InvocationCountPercentile10: 1
             InvocationCountMedian: 4
-            InvocationCountPercentile90: 17
+            InvocationCountPercentile90: 14
             """);
     }
 
@@ -1683,11 +1683,11 @@ public class ElmLanguageServiceTests
 
         EvalWorkCountersFormatting.FormatCounts(aggregateCounters).ShouldBeWithDiff(
             """
-            InvocationCount: 2_030
-            BuildListCount: 3_815
-            BuildListItemCount: 16_882
-            LoopIterationCount: 642
-            InstructionCount: 56_481
+            InvocationCount: 1_669
+            BuildListCount: 2_846
+            BuildListItemCount: 12_865
+            LoopIterationCount: 542
+            InstructionCount: 48_862
             DeferredTemplateValueAllocationCount: 0
             TemplateDirectInvocationCount: 23
             DeferredTemplateValueMaterializationCount: 0
@@ -1704,12 +1704,12 @@ public class ElmLanguageServiceTests
 
         InvocationCountReportFormatting.FormatCounts(aggregateInvocationCounts).ShouldBeWithDiff(
             """
-            CompiledExpressionCount: 216
-            InvocationCountTotal: 1_985
-            InvocationCountAverage: 9
+            CompiledExpressionCount: 208
+            InvocationCountTotal: 1_673
+            InvocationCountAverage: 8
             InvocationCountPercentile10: 1
             InvocationCountMedian: 4
-            InvocationCountPercentile90: 17
+            InvocationCountPercentile90: 14
             """);
     }
 
@@ -1890,15 +1890,15 @@ public class ElmLanguageServiceTests
 
         EvalWorkCountersFormatting.FormatCounts(aggregateCounters).ShouldBeWithDiff(
             """
-            InvocationCount: 4_071
-            BuildListCount: 7_335
-            BuildListItemCount: 32_532
-            LoopIterationCount: 2_704
-            InstructionCount: 118_364
+            InvocationCount: 3_377
+            BuildListCount: 5_135
+            BuildListItemCount: 23_840
+            LoopIterationCount: 1_891
+            InstructionCount: 100_045
             DeferredTemplateValueAllocationCount: 0
-            TemplateDirectInvocationCount: 35
+            TemplateDirectInvocationCount: 41
             DeferredTemplateValueMaterializationCount: 0
-            TemplateConsolidatedEvalCount: 35
+            TemplateConsolidatedEvalCount: 41
             DirectInterpreterInvocationCount: 0
             DirectInterpreterExpressionCount: 0
             DirectInterpreterLiteralCount: 0
@@ -1911,12 +1911,12 @@ public class ElmLanguageServiceTests
 
         InvocationCountReportFormatting.FormatCounts(aggregateInvocationCounts).ShouldBeWithDiff(
             """
-            CompiledExpressionCount: 246
-            InvocationCountTotal: 3_976
-            InvocationCountAverage: 16
+            CompiledExpressionCount: 231
+            InvocationCountTotal: 3_379
+            InvocationCountAverage: 15
             InvocationCountPercentile10: 1
-            InvocationCountMedian: 5
-            InvocationCountPercentile90: 40
+            InvocationCountMedian: 4
+            InvocationCountPercentile90: 31
             """);
     }
 

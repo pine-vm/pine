@@ -620,15 +620,15 @@ public class ParserFastTests
 
         EvalWorkCountersFormatting.FormatCounts(report).ShouldBeWithDiff(
             """
-            InvocationCount: 4
-            BuildListCount: 2
-            BuildListItemCount: 10
-            LoopIterationCount: 4
-            InstructionCount: 130
+            InvocationCount: 0
+            BuildListCount: 1
+            BuildListItemCount: 3
+            LoopIterationCount: 2
+            InstructionCount: 114
             DeferredTemplateValueAllocationCount: 0
-            TemplateDirectInvocationCount: 4
+            TemplateDirectInvocationCount: 0
             DeferredTemplateValueMaterializationCount: 0
-            TemplateConsolidatedEvalCount: 4
+            TemplateConsolidatedEvalCount: 0
             DirectInterpreterInvocationCount: 0
             DirectInterpreterExpressionCount: 0
             DirectInterpreterLiteralCount: 0
@@ -653,15 +653,15 @@ public class ParserFastTests
 
         EvalWorkCountersFormatting.FormatCounts(report).ShouldBeWithDiff(
             """
-            InvocationCount: 4
-            BuildListCount: 2
-            BuildListItemCount: 10
-            LoopIterationCount: 4
-            InstructionCount: 106
+            InvocationCount: 0
+            BuildListCount: 1
+            BuildListItemCount: 3
+            LoopIterationCount: 2
+            InstructionCount: 86
             DeferredTemplateValueAllocationCount: 0
-            TemplateDirectInvocationCount: 4
+            TemplateDirectInvocationCount: 0
             DeferredTemplateValueMaterializationCount: 0
-            TemplateConsolidatedEvalCount: 4
+            TemplateConsolidatedEvalCount: 0
             DirectInterpreterInvocationCount: 0
             DirectInterpreterExpressionCount: 0
             DirectInterpreterLiteralCount: 0
@@ -686,15 +686,15 @@ public class ParserFastTests
 
         EvalWorkCountersFormatting.FormatCounts(report).ShouldBeWithDiff(
             """
-            InvocationCount: 7
-            BuildListCount: 7
-            BuildListItemCount: 32
-            LoopIterationCount: 1
-            InstructionCount: 161
+            InvocationCount: 5
+            BuildListCount: 8
+            BuildListItemCount: 33
+            LoopIterationCount: 3
+            InstructionCount: 195
             DeferredTemplateValueAllocationCount: 0
-            TemplateDirectInvocationCount: 7
+            TemplateDirectInvocationCount: 5
             DeferredTemplateValueMaterializationCount: 0
-            TemplateConsolidatedEvalCount: 8
+            TemplateConsolidatedEvalCount: 5
             DirectInterpreterInvocationCount: 0
             DirectInterpreterExpressionCount: 0
             DirectInterpreterLiteralCount: 0

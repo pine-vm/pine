@@ -86,7 +86,8 @@ internal class InternalPineIRCompiler
         StaticFunctionInterface StackFrameParameters,
         bool IsTailPosition,
         bool EnableDirectInvocation,
-        Func<PineValue, bool>? SkipDirectInvocation)
+        Func<PineValue, bool>? SkipDirectInvocation,
+        Func<Expression, PineValue, Expression, DirectInvocation?>? ResolveStaticInvocation = null)
     {
         /// <summary>
         /// Creates the initial compilation context for a function with the given parameters.
@@ -154,7 +155,8 @@ internal class InternalPineIRCompiler
         PineVMParseCache parseCache,
         bool enableTailRecursionOptimization = false,
         bool enableDirectInvocation = true,
-        Func<PineValue, bool>? skipDirectInvocation = null)
+        Func<PineValue, bool>? skipDirectInvocation = null,
+        Func<Expression, PineValue, Expression, DirectInvocation?>? resolveStaticInvocation = null)
     {
         var prior =
             new NodeCompilationResult(
@@ -179,6 +181,7 @@ internal class InternalPineIRCompiler
                     enableDirectInvocation,
                     skipDirectInvocation) with
                 {
+                    ResolveStaticInvocation = resolveStaticInvocation,
                     TailLoop =
                     enableTailRecursionOptimization
                     ?
@@ -322,13 +325,12 @@ internal class InternalPineIRCompiler
     }
 
     /// <summary>
-    /// Recursively compile an expression into structured control flow.
+    /// Marks shared expressions before compiling their individual consumers.
     /// </summary>
-    public static NodeCompilationResult CompileExpressionTransitive(
+    private static CompilationContext PrepareCommonSubexpressions(
         Expression expression,
         CompilationContext context,
-        NodeCompilationResult prior,
-        PineVMParseCache parseCache)
+        NodeCompilationResult prior)
     {
         var subexprAppearingMultipleTimesIncludingConditional = new HashSet<Expression>();
 
@@ -427,13 +429,22 @@ internal class InternalPineIRCompiler
             .Union(subexprAppearingMultipleTimesUnconditional)
             .Union(subexprAppearingMultipleTimesIncludingConditional.Intersect(allSubexpressionsUnconditional));
 
+        return context with { CopyToLocal = copyToLocalNew };
+    }
+
+    /// <summary>
+    /// Recursively compile an expression into structured control flow.
+    /// </summary>
+    public static NodeCompilationResult CompileExpressionTransitive(
+        Expression expression,
+        CompilationContext context,
+        NodeCompilationResult prior,
+        PineVMParseCache parseCache)
+    {
         var lessCSE =
             CompileExpressionTransitiveLessCSE(
                 expression,
-                context with
-                {
-                    CopyToLocal = copyToLocalNew
-                },
+                PrepareCommonSubexpressions(expression, context, prior),
                 prior,
                 parseCache);
 
@@ -1119,12 +1130,13 @@ internal class InternalPineIRCompiler
                 is { EnvironmentCount: > 0 };
         }
 
-        if (evalExpr.Encoded is Expression.Literal literalEncodedExpression)
+        if (evalExpr.Encoded.EvalCount is 0 &&
+            TryEvalIndependent(evalExpr.Encoded, parseCache) is { } encodedValue)
         {
             if (context.EnableDirectInvocation &&
-                !(context.SkipDirectInvocation?.Invoke(literalEncodedExpression.Value) ?? false) &&
+                !(context.SkipDirectInvocation?.Invoke(encodedValue) ?? false) &&
                 ExpressionTemplatePlan.TryParseTemplate(
-                    literalEncodedExpression.Value,
+                    encodedValue,
                     parseCache) is { } templatePlan)
             {
                 return
@@ -1134,10 +1146,14 @@ internal class InternalPineIRCompiler
             }
 
             if (context.EnableDirectInvocation &&
-                !(context.SkipDirectInvocation?.Invoke(literalEncodedExpression.Value) ?? false) &&
-                parseCache.ParseInternalExpression(literalEncodedExpression.Value).IsOkOrNull() is { } targetExpression)
+                !(context.SkipDirectInvocation?.Invoke(encodedValue) ?? false) &&
+                parseCache.ParseInternalExpression(encodedValue).IsOkOrNull() is { } targetExpression)
             {
+                var resolvedInvocation =
+                    context.ResolveStaticInvocation?.Invoke(targetExpression, encodedValue, evalExpr.Environment);
+
                 var targetParameters =
+                    resolvedInvocation?.InvocationInterface ??
                     StaticFunctionInterface.FromExpression(targetExpression);
 
                 return
@@ -1148,10 +1164,17 @@ internal class InternalPineIRCompiler
                         prior,
                         parseCache)
                     .AppendInstruction(
+                        resolvedInvocation is null
+                        ?
                         StackInstruction.Invoke_StackFrame_Const(
                             targetExpression,
-                            literalEncodedExpression.Value,
-                            targetParameters));
+                            encodedValue,
+                            targetParameters)
+                        :
+                        new StackInstruction(
+                            StackInstructionKind.Invoke_StackFrame_Const,
+                            TakeCount: targetParameters.ParamsPaths.Count,
+                            OptimizedInvocation: resolvedInvocation));
             }
 
             return
@@ -1161,7 +1184,7 @@ internal class InternalPineIRCompiler
                     context,
                     parseCache)
                 .AppendInstruction(
-                    StackInstruction.Eval_Const(literalEncodedExpression.Value));
+                    StackInstruction.Eval_Const(encodedValue));
         }
 
         var afterEnvironment =
@@ -1264,64 +1287,25 @@ internal class InternalPineIRCompiler
         NodeCompilationResult prior,
         PineVMParseCache parseCache)
     {
-        if (targetParameters.ParamsPaths.Any(path => path.Count > 1))
-        {
-            var (afterEnvironment, environmentLocalIndex) =
-                CompileExpressionTransitiveAsLocal(
-                    environment,
-                    context with { IsTailPosition = false },
-                    prior,
-                    parseCache);
+        var result = PrepareArgumentEvaluations(environment, context, prior, parseCache);
 
-            var nestedResult = afterEnvironment.AppendInstruction(StackInstruction.Pop);
+        var arguments =
+            targetParameters.ParamsPaths.Select(path => BuildArgument(path, environment)).ToArray();
 
-            for (var parameterIndex = 0;
-                parameterIndex < targetParameters.ParamsPaths.Count;
-                parameterIndex++)
-            {
-                var path = targetParameters.ParamsPaths[parameterIndex];
-
-                if (path.Count is 0)
-                {
-                    nestedResult =
-                        nestedResult.AppendInstruction(
-                            StackInstruction.Local_Get(environmentLocalIndex));
-
-                    continue;
-                }
-
-                nestedResult =
-                    nestedResult.AppendInstruction(
-                        StackInstruction.Local_Get_Skip_Head_Const(
-                            environmentLocalIndex,
-                            path[0]));
-
-                for (var pathIndex = 1; pathIndex < path.Count; pathIndex++)
-                {
-                    nestedResult =
-                        nestedResult.AppendInstruction(
-                            StackInstruction.Skip_Head_Const(path[pathIndex]));
-                }
-            }
-
-            return nestedResult;
-        }
-
-        var result = prior;
+        var argumentContext =
+            PrepareCommonSubexpressions(
+                Expression.ListInst(arguments),
+                context with { IsTailPosition = false },
+                result);
 
         for (var parameterIndex = 0;
-            parameterIndex < targetParameters.ParamsPaths.Count;
+            parameterIndex < arguments.Length;
             parameterIndex++)
         {
-            var argument =
-                BuildArgument(
-                    targetParameters.ParamsPaths[parameterIndex],
-                    environment);
-
             result =
                 CompileExpressionTransitive(
-                    argument,
-                    context with { IsTailPosition = false },
+                    arguments[parameterIndex],
+                    argumentContext,
                     result,
                     parseCache);
         }
@@ -1329,7 +1313,36 @@ internal class InternalPineIRCompiler
         return result;
     }
 
-    private static Expression BuildArgument(
+    private static NodeCompilationResult PrepareArgumentEvaluations(
+        Expression environment,
+        CompilationContext context,
+        NodeCompilationResult prior,
+        PineVMParseCache parseCache)
+    {
+        if (environment.EvalCount is 0)
+            return prior;
+
+        if (environment is Expression.List list)
+        {
+            var result = prior;
+
+            foreach (var item in list.Items)
+                result = PrepareArgumentEvaluations(item, context, result, parseCache);
+
+            return result;
+        }
+
+        var (compiled, _) =
+            CompileExpressionTransitiveAsLocal(
+                environment,
+                context with { IsTailPosition = false },
+                prior,
+                parseCache);
+
+        return compiled.AppendInstruction(StackInstruction.Pop);
+    }
+
+    internal static Expression BuildArgument(
         IReadOnlyList<int> path,
         Expression environment)
     {

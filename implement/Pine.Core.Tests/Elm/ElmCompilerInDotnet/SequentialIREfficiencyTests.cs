@@ -47,7 +47,7 @@ public class SequentialIREfficiencyTests
                 functionRecord.InnerFunction,
                 parseCache);
 
-        renderedFrame.Should().Contain("Local_Set ([ 3, 2, 1, 0 ]), Pop(4)");
+        renderedFrame.Should().Contain("Local_Set ([ 3, 2, 1 ]), Pop(3)");
     }
 
     [Fact]

@@ -1,4 +1,5 @@
 using Pine.Core.Addressing;
+using Pine.Core.CodeAnalysis;
 using Pine.Core.Encodings;
 using Pine.Core.Functional;
 using Pine.Core.IO;
@@ -361,12 +362,35 @@ public sealed class PersistentInvocationCacheAccess : IInvocationCacheAccess
 
         var config = _optimizationParameters.ConfigForExpression(expressionHashBytes);
 
-        if (!(config?.PersistentCachePredicate?.SatisfiedBy(
-            parameters: key.StackFrameInput.Parameters,
-            arguments: key.StackFrameInput.EvaluatedArguments) ?? false))
-        {
+        if (config?.PersistentCachePredicate is not { } predicate)
             return null;
+
+        var parameters = key.StackFrameInput.Parameters;
+        var arguments = key.StackFrameInput.EvaluatedArguments;
+
+        if (key.StackFrameInput.EnvironmentConstraint is not null && predicate.Factors.Count > 0)
+        {
+            var knownInput = key.StackFrameInput.ToValueClass();
+
+            parameters =
+                StaticFunctionInterface.FromPathsSorted([.. predicate.Factors.Select(factor => factor.ParamPath)]);
+
+            var predicateArguments = new PineValue[parameters.ParamsPaths.Count];
+
+            for (var index = 0; index < predicateArguments.Length; index++)
+            {
+                // Removed inputs cannot always be reconstructed for size-based cache policies.
+                if (knownInput.TryGetValue(parameters.ParamsPaths[index]) is not { } value)
+                    return null;
+
+                predicateArguments[index] = value;
+            }
+
+            arguments = predicateArguments;
         }
+
+        if (!predicate.SatisfiedBy(parameters, arguments))
+            return null;
 
         var expressionHashBase16 =
             Convert.ToHexStringLower(expressionHashBytes.Span);

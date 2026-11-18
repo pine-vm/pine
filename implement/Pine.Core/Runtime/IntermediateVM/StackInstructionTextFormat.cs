@@ -211,6 +211,13 @@ public static class StackInstructionTextFormat
                     Value(
                         StackInstructionMetadataEncoding.EncodePaths(invocation.InvocationInterface.ParamsPaths)));
 
+                if (invocation.EnvironmentConstraint is { } invocationConstraint)
+                {
+                    fields.Add(
+                        "InvocationConstraint: " +
+                        Value(StackInstructionMetadataEncoding.EncodeConstraint(invocationConstraint)));
+                }
+
                 if (invocation.LinkedStackFrameInstructions is { } linked)
                     fields.Add("LinkedFrame: " + Number(FrameId(linked)));
             }
@@ -462,7 +469,15 @@ public static class StackInstructionTextFormat
                             Value(Required(fields, "InvocationExpressionEncoded")),
                             StaticFunctionInterface.FromPathsSorted(
                                 StackInstructionMetadataEncoding.DecodePaths(
-                                    Value(Required(fields, "InvocationInterface")))));
+                                    Value(Required(fields, "InvocationInterface")))))
+                        {
+                            EnvironmentConstraint =
+                            fields.Remove("InvocationConstraint", out var invocationConstraint)
+                            ?
+                            StackInstructionMetadataEncoding.DecodeConstraint(Value(invocationConstraint))
+                            :
+                            null
+                        };
                 }
 
                 if (fields.Remove("LinkedFrame", out var linked))

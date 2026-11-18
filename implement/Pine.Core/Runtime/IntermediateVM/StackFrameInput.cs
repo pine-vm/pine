@@ -9,7 +9,7 @@ namespace Pine.Core.Runtime.IntermediateVM;
 
 /// <summary>
 /// Represents the input to a stack frame, consisting of a parameter layout and the corresponding argument values.
-/// Equality and hashing are based on the evaluated argument values and the parameter layout.
+/// Equality and hashing include the evaluated arguments, parameter layout, and omitted fixed inputs.
 /// </summary>
 public record StackFrameInput
 {
@@ -22,6 +22,9 @@ public record StackFrameInput
     /// The argument values supplied to this stack frame, before evaluation.
     /// </summary>
     public IReadOnlyList<PineValueInProcess> Arguments { get; }
+
+    /// <summary>Fixed inputs omitted from the runtime parameter layout.</summary>
+    public PineValueClass? EnvironmentConstraint { get; }
 
     private PineValue[]? _evaluatedArguments;
 
@@ -46,16 +49,21 @@ public record StackFrameInput
     {
         Parameters = original.Parameters;
         Arguments = original.Arguments;
+        EnvironmentConstraint = original.EnvironmentConstraint;
         _evaluatedArguments = original._evaluatedArguments;
         _hashCode = original._hashCode;
     }
 
     private StackFrameInput(
         StaticFunctionInterface parameters,
-        IReadOnlyList<PineValueInProcess> arguments)
+        IReadOnlyList<PineValueInProcess> arguments,
+        PineValueClass? environmentConstraint = null)
     {
         Parameters = parameters;
         Arguments = arguments;
+
+        EnvironmentConstraint =
+            environmentConstraint?.ParsedItems.Count > 0 ? environmentConstraint : null;
     }
 
     private PineValue[] GetEvaluatedArguments()
@@ -80,6 +88,7 @@ public record StackFrameInput
         var hashCode = new HashCode();
 
         hashCode.Add(Parameters);
+        hashCode.Add(EnvironmentConstraint);
 
         var evaluatedArguments = GetEvaluatedArguments();
 
@@ -109,7 +118,8 @@ public record StackFrameInput
     /// </summary>
     public static StackFrameInput FromEnvironmentValue(
         PineValue environmentValue,
-        StaticFunctionInterface parameters)
+        StaticFunctionInterface parameters,
+        PineValueClass? environmentConstraint = null)
     {
         var arguments =
             parameters.ParamsPaths.Count is 0
@@ -133,7 +143,8 @@ public record StackFrameInput
         return
             new StackFrameInput(
                 parameters,
-                arguments);
+                arguments,
+                environmentConstraint);
     }
 
     /// <summary>
@@ -142,7 +153,8 @@ public record StackFrameInput
     /// </summary>
     public static StackFrameInput FromEnvironmentValue(
         PineValueInProcess environmentValue,
-        StaticFunctionInterface parameters)
+        StaticFunctionInterface parameters,
+        PineValueClass? environmentConstraint = null)
     {
         var arguments =
             parameters.ParamsPaths.Count is 0
@@ -167,7 +179,8 @@ public record StackFrameInput
         return
             new StackFrameInput(
                 parameters,
-                arguments);
+                arguments,
+                environmentConstraint);
     }
 
     /// <summary>
@@ -188,10 +201,12 @@ public record StackFrameInput
     /// </summary>
     /// <param name="parameters">The parameter layout describing the forwarded arguments.</param>
     /// <param name="arguments">The argument values to expose to the stack frame.</param>
+    /// <param name="environmentConstraint">Fixed inputs not supplied as runtime arguments.</param>
     /// <exception cref="ArgumentException">Thrown when the number of arguments does not match the number of parameters.</exception>
     public static StackFrameInput FromArguments(
         StaticFunctionInterface parameters,
-        IReadOnlyList<PineValueInProcess> arguments)
+        IReadOnlyList<PineValueInProcess> arguments,
+        PineValueClass? environmentConstraint = null)
     {
         if (parameters.ParamsPaths.Count != arguments.Count)
         {
@@ -203,7 +218,50 @@ public record StackFrameInput
         return
             new StackFrameInput(
                 parameters,
-                arguments);
+                arguments,
+                environmentConstraint);
+    }
+
+    internal StackFrameInput ForInstructions(StackFrameInstructions instructions)
+    {
+        if (Parameters.Equals(instructions.Parameters) &&
+            PineValueClass.Equal(EnvironmentConstraint, instructions.TrackEnvConstraint))
+        {
+            return this;
+        }
+
+        if (Parameters.Equals(instructions.Parameters))
+            return FromArguments(Parameters, Arguments, instructions.TrackEnvConstraint);
+
+        var arguments = new PineValueInProcess[instructions.Parameters.ParamsPaths.Count];
+
+        for (var index = 0; index < arguments.Length; index++)
+        {
+            var path = instructions.Parameters.ParamsPaths[index];
+            PineValueInProcess? value = null;
+
+            for (var source = 0; source < Parameters.ParamsPaths.Count; source++)
+            {
+                var sourcePath = Parameters.ParamsPaths[source];
+
+                if (path.Count >= sourcePath.Count && path.Take(sourcePath.Count).SequenceEqual(sourcePath))
+                {
+                    value =
+                        PineValueInProcess.ValueInProcessFromPathOrNull(
+                            Arguments[source],
+                            path.Skip(sourcePath.Count).ToArray()) ??
+                        PineValueInProcess.EmptyList;
+
+                    break;
+                }
+            }
+
+            arguments[index] =
+                value ??
+                throw new InvalidOperationException("The selected callee interface requires an unavailable argument.");
+        }
+
+        return FromArguments(instructions.Parameters, arguments, instructions.TrackEnvConstraint);
     }
 
     /// <inheritdoc/>
@@ -224,8 +282,11 @@ public record StackFrameInput
         if (GetHashCode() != other.GetHashCode())
             return false;
 
-        if (!Parameters.Equals(other.Parameters))
+        if (!Parameters.Equals(other.Parameters) ||
+            !PineValueClass.Equal(EnvironmentConstraint, other.EnvironmentConstraint))
+        {
             return false;
+        }
 
         var evaluatedArguments = GetEvaluatedArguments();
         var otherEvaluatedArguments = other.GetEvaluatedArguments();
@@ -273,7 +334,19 @@ public record StackFrameInput
                     evaluatedArguments[index]))
             ];
 
-        return PineValueClass.Create(parsedItems);
+        if (EnvironmentConstraint is null)
+            return PineValueClass.Create(parsedItems);
+
+        var combined =
+            new SortedDictionary<IReadOnlyList<int>, PineValue>(IntPathComparer.Instance);
+
+        foreach (var item in EnvironmentConstraint.ParsedItems)
+            combined[item.Key] = item.Value;
+
+        foreach (var item in parsedItems)
+            combined[item.Key] = item.Value;
+
+        return PineValueClass.Create([.. combined]);
     }
 
     /// <summary>

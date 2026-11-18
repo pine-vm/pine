@@ -93,6 +93,11 @@ public partial class PineVM : ICancellablePineVM
 
     private readonly PineVMWorkProfile? _workProfile;
 
+    private readonly ConditionalWeakTable<ExpressionTemplatePlan, Lazy<StackFrameInstructions?>> _staticTemplateFunctions =
+        new();
+
+    private readonly InternalExpressionCompilation.StaticDispatchCache _staticDispatchCache = new();
+
     private sealed class DeferredTemplateMaterializationAccounting
     {
         public DirectInterpreterCounters Counters { get; } = new();
@@ -374,7 +379,7 @@ public partial class PineVM : ICancellablePineVM
             ?
             null
             :
-            expression => skipInlineForExpression(_expressionEncodingCache.GetIdentity(expression));
+            expression => skipInlineForExpression(expressionEncodingCache.GetIdentity(expression));
 
         _enableTailRecursionOptimization = enableTailRecursionOptimization;
 
@@ -525,15 +530,31 @@ public partial class PineVM : ICancellablePineVM
 
         _compilationEnvClasses?.TryGetValue(rootExpression, out specializations);
 
+        return
+            new ExpressionCompilationCacheEntry(
+                Compilation: CreateStaticDispatchCompilation(rootExpression, specializations ?? []).CompileExpression(),
+                Identity: _expressionEncodingCache.GetIdentity(rootExpression));
+    }
+
+    private InternalExpressionCompilation.StaticDispatchCompilation CreateStaticDispatchCompilation(
+        Retained rootExpression,
+        IReadOnlyList<PineValueClass> specializations)
+    {
+        var skipInlineForExpression = _skipInlineForExpression;
+        var expressionCompilationOverrides = _expressionCompilationOverrides;
+        var compilationEnvClasses = _compilationEnvClasses;
+        var precompiledLeaves = _precompiledLeaves;
+        var parseCache = ParseCache;
+
         bool SkipInlining(Retained expr, PineValueClass? envConstraintId)
         {
-            if (_skipInlineForExpression?.Invoke(expr) is true ||
-                _expressionCompilationOverrides?.ContainsKey(expr) is true)
+            if (skipInlineForExpression?.Invoke(expr) is true ||
+                expressionCompilationOverrides?.ContainsKey(expr) is true)
             {
                 return true;
             }
 
-            if (envConstraintId is null && (_compilationEnvClasses?.ContainsKey(expr) ?? false))
+            if (envConstraintId is null && (compilationEnvClasses?.ContainsKey(expr) ?? false))
             {
                 return true;
             }
@@ -541,15 +562,15 @@ public partial class PineVM : ICancellablePineVM
             return false;
         }
 
-        var compilation =
-            InternalExpressionCompilation.CompileExpression(
+        return
+            new InternalExpressionCompilation.StaticDispatchCompilation(
                 rootExpression,
-                specializations ?? [],
-                parseCache: ParseCache,
+                specializations,
+                parseCache: parseCache,
                 disableReduction: _disableReductionInCompilation,
                 skipInlining:
-                _skipInlineForExpression is null && _expressionCompilationOverrides is null &&
-                _compilationEnvClasses is null
+                skipInlineForExpression is null && expressionCompilationOverrides is null &&
+                compilationEnvClasses is null
                 ?
                 static (_, _) => false
                 :
@@ -562,12 +583,12 @@ public partial class PineVM : ICancellablePineVM
                 enableDirectInvocation: !_disableDirectInvocation && _selectPrecompiled is null,
                 skipDirectInvocation:
                 expressionValue =>
-                _precompiledLeaves?.ContainsKey(expressionValue) is true);
-
-        return
-            new ExpressionCompilationCacheEntry(
-                Compilation: compilation,
-                Identity: _expressionEncodingCache.GetIdentity(rootExpression));
+                precompiledLeaves?.ContainsKey(expressionValue) is true ||
+                (expressionCompilationOverrides is not null &&
+                parseCache.ParseInternalExpression(expressionValue).IsOkOrNull() is { } overridden &&
+                expressionCompilationOverrides.ContainsKey(overridden)),
+                compilationEnvClasses: compilationEnvClasses,
+                sharedCache: _staticDispatchCache);
     }
 
     /// <summary>
@@ -870,7 +891,8 @@ public partial class PineVM : ICancellablePineVM
         var rootStackFrameInput =
             StackFrameInput.FromEnvironmentValue(
                 environmentValue: rootEnvironment,
-                parameters: rootInstructions.Parameters);
+                parameters: rootInstructions.Parameters,
+                environmentConstraint: rootInstructions.TrackEnvConstraint);
 
         void FireTailLoopIteration(
             TailLoopIterationKind kind,
@@ -1092,7 +1114,8 @@ public partial class PineVM : ICancellablePineVM
                     var stackFrameInput =
                         StackFrameInput.FromEnvironmentValue(
                             environmentValue: environmentValue,
-                            parameters: instructions.Parameters);
+                            parameters: instructions.Parameters,
+                            environmentConstraint: instructions.TrackEnvConstraint);
 
                     return
                         InvokeStackFrame
@@ -1238,9 +1261,19 @@ public partial class PineVM : ICancellablePineVM
             var compilation = GetExpressionEntry(plan.RetainedTerminalExpression).Compilation;
 
             var instructions =
+                compilation.Specialized.Count is 0 &&
+                _selectPrecompiled is null &&
+                !(_expressionCompilationOverrides?.ContainsKey(plan.RetainedTerminalExpression) ?? false)
+                ?
+                _staticTemplateFunctions.GetValue(
+                    plan,
+                    key => new Lazy<StackFrameInstructions?>(
+                        () => CreateStaticDispatchCompilation(key.RetainedTerminalExpression, []).CompileTemplate(key))).Value
+                ?? compilation.Generic
+                :
                 compilation.SelectInstructionsForTemplate(plan.TerminalEnvironmentRecipe, environments);
 
-            var prepared = PreparedTemplateInput.Get(compilation, plan.TerminalEnvironmentRecipe);
+            var prepared = PreparedTemplateInput.Get(instructions, plan.TerminalEnvironmentRecipe);
             return (instructions, prepared.Instantiate(environments));
         }
 
@@ -3070,7 +3103,8 @@ public partial class PineVM : ICancellablePineVM
                             var directInput =
                                 StackFrameInput.FromArguments(
                                     invocationInterface,
-                                    forwardedArguments);
+                                    forwardedArguments,
+                                    directInvocation.EnvironmentConstraint);
 
                             var replaceCurrentFrame =
                                 currentFrame.InstructionPointer + 1 < currentFrame.Instructions.Instructions.Count &&
@@ -3088,7 +3122,7 @@ public partial class PineVM : ICancellablePineVM
                                 expressionValue: directInvocation.ExpressionEncoded,
                                 expression: invocationExpression,
                                 instructions: targetInstructions,
-                                stackFrameInput: directInput,
+                                stackFrameInput: directInput.ForInstructions(targetInstructions),
                                 replaceCurrentFrame: replaceCurrentFrame) is { } stackDepthError)
                             {
                                 return stackDepthError;

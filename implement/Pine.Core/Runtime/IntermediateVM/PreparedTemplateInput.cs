@@ -12,7 +12,7 @@ namespace Pine.Core.Runtime.IntermediateVM;
 /// </summary>
 internal sealed class PreparedTemplateInput
 {
-    private static readonly ConditionalWeakTable<ExpressionCompilation, ProjectionCache> s_compilations = [];
+    private static readonly ConditionalWeakTable<StackFrameInstructions, ProjectionCache> s_compilations = [];
 
     private readonly ImmutableArray<TemplateValueRecipe> _arguments;
 
@@ -20,9 +20,13 @@ internal sealed class PreparedTemplateInput
 
     public StaticFunctionInterface Parameters { get; }
 
-    private PreparedTemplateInput(TemplateValueRecipe recipe, StaticFunctionInterface parameters)
+    private readonly PineValueClass? _constraint;
+
+    private PreparedTemplateInput(TemplateValueRecipe recipe, StackFrameInstructions instructions)
     {
+        var parameters = instructions.Parameters;
         Parameters = parameters;
+        _constraint = instructions.TrackEnvConstraint;
         var arguments = ImmutableArray.CreateBuilder<TemplateValueRecipe>(parameters.ParamsPaths.Count);
 
         foreach (var path in parameters.ParamsPaths)
@@ -69,9 +73,12 @@ internal sealed class PreparedTemplateInput
     }
 
     public static PreparedTemplateInput Get(ExpressionCompilation compilation, TemplateValueRecipe recipe) =>
+        Get(compilation.Generic, recipe);
+
+    public static PreparedTemplateInput Get(StackFrameInstructions instructions, TemplateValueRecipe recipe) =>
         s_compilations.GetValue(
-            compilation,
-            static compilation => new ProjectionCache(compilation.Generic.Parameters)).Get(recipe);
+            instructions,
+            static frame => new ProjectionCache(frame)).Get(recipe);
 
     public StackFrameInput Instantiate(IReadOnlyList<PineValueInProcess> environments)
     {
@@ -83,15 +90,15 @@ internal sealed class PreparedTemplateInput
         for (var index = 0; index < arguments.Length; ++index)
             arguments[index] = _arguments[index].Instantiate(environments, ref memo, _requiresMemo);
 
-        return StackFrameInput.FromArguments(Parameters, arguments);
+        return StackFrameInput.FromArguments(Parameters, arguments, _constraint);
     }
 
-    private sealed class ProjectionCache(StaticFunctionInterface parameters)
+    private sealed class ProjectionCache(StackFrameInstructions instructions)
     {
         private readonly ConditionalWeakTable<TemplateValueRecipe, PreparedTemplateInput> _recipes = [];
 
         private readonly ConditionalWeakTable<TemplateValueRecipe, PreparedTemplateInput>.CreateValueCallback _prepare =
-            recipe => new PreparedTemplateInput(recipe, parameters);
+            recipe => new PreparedTemplateInput(recipe, instructions);
 
         public PreparedTemplateInput Get(TemplateValueRecipe recipe) => _recipes.GetValue(recipe, _prepare);
     }
