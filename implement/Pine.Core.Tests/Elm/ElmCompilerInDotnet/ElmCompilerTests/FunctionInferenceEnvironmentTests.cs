@@ -131,7 +131,7 @@ public class FunctionInferenceEnvironmentTests
     }
 
     [Theory]
-    [InlineData("", "consume", typeof(TypeInference.InferredType.IntType))]
+    [InlineData("", "consume", null)]
     [InlineData("Second", "consume", typeof(TypeInference.InferredType.FloatType))]
     [InlineData("", "length", typeof(TypeInference.InferredType.CharType))]
     [InlineData("List", "length", typeof(TypeInference.InferredType.CharType))]
@@ -139,7 +139,7 @@ public class FunctionInferenceEnvironmentTests
     [InlineData("Missing", "consume", null)]
     [InlineData("", "missing", null)]
     [InlineData("", "CONSUME", null)]
-    public void Indexed_usage_inference_preserves_qualified_and_first_suffix_matches(
+    public void Indexed_usage_inference_preserves_qualified_and_unambiguous_suffix_matches(
         string module, string name, Type? expectedParameterType)
     {
         var source =
@@ -175,6 +175,36 @@ public class FunctionInferenceEnvironmentTests
 
         else
             indexed["value"].Should().BeOfType(expectedParameterType);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void Conflicting_unqualified_signatures_do_not_depend_on_enumeration_order(bool reverse)
+    {
+        var source = new Dictionary<string, TypeInference.InferredType>();
+        var first = KeyValuePair.Create("First.consume", Signature(new TypeInference.InferredType.IntType()));
+        var second = KeyValuePair.Create("Second.consume", Signature(new TypeInference.InferredType.FloatType()));
+        source.Add(reverse ? second.Key : first.Key, reverse ? second.Value : first.Value);
+        source.Add(reverse ? first.Key : second.Key, reverse ? first.Value : second.Value);
+
+        var environment = new TypeInference.FunctionInferenceEnvironment(source);
+
+        var expression =
+            new Expression.Application(
+                Expression.Identifier.Create([], "consume"),
+                [Expression.Identifier.Create([], "value")]);
+
+        var parameters = new Dictionary<string, int> { ["value"] = 0 };
+
+        TypeInference.InferParameterTypesFromUsage(expression, parameters, environment.FunctionSignatures)
+            .Should().NotContainKey("value");
+
+        TypeInference.InferParameterTypesFromUsage(
+            expression,
+            parameters,
+            new ObservedSignatures(environment.FunctionSignatures))
+            .Should().NotContainKey("value");
     }
 
     [Fact]

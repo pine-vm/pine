@@ -3554,7 +3554,7 @@ public static partial class TypeInference
 
         private readonly IReadOnlyDictionary<string, InferredType> typeOnly;
 
-        private readonly Dictionary<string, InferredType> unqualified = new(StringComparer.Ordinal);
+        private readonly Dictionary<string, InferredType?> unqualified = new(StringComparer.Ordinal);
 
         public FunctionSignatureLookup(
             IReadOnlyDictionary<string, InferredType> source,
@@ -3563,13 +3563,18 @@ public static partial class TypeInference
             this.source = source;
             this.typeOnly = typeOnly;
 
-            // Preserve the suffix scan's first match and source-over-interface precedence.
+            // Conflicting suffix matches cannot safely constrain an unqualified reference.
             foreach (var (name, type) in Entries)
             {
                 var separator = name.LastIndexOf('.');
 
                 if (separator >= 0)
-                    unqualified.TryAdd(name[(separator + 1)..], type);
+                {
+                    var suffix = name[(separator + 1)..];
+
+                    if (!unqualified.TryAdd(suffix, type) && !Equals(unqualified[suffix], type))
+                        unqualified[suffix] = null;
+                }
             }
         }
 
@@ -4056,8 +4061,13 @@ public static partial class TypeInference
                             {
                                 if (kvp.Key.EndsWith(suffix, StringComparison.Ordinal))
                                 {
+                                    if (funcType is not null && !Equals(funcType, kvp.Value))
+                                    {
+                                        funcType = null;
+                                        break;
+                                    }
+
                                     funcType = kvp.Value;
-                                    break;
                                 }
                             }
                         }
