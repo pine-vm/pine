@@ -98,6 +98,7 @@ public static class HelpCommand
                 "elm",
                 "interactive",
                 "compile",
+                "value",
                 "screenshot",
                 "dotnet",
                 "describe",

@@ -168,7 +168,7 @@ public record ReusedInstances(
         .Extract(
             err =>
             {
-                System.Console.WriteLine("Failed loading from embedded resource: " + err);
+                System.Console.Error.WriteLine("Failed loading from embedded resource: " + err);
 
                 return
                     BuildPineListValueReusedInstances(

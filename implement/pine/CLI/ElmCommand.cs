@@ -11,6 +11,7 @@ public static class ElmCommand
             {
                 InteractiveCommand.Create(),
                 MakeCommand.Create(),
+                Elm.CompileCommand.Create(),
                 Elm.FormatCommand.Create(),
                 Elm.TestCommand.Create(),
                 Elm.MaintainCommand.Create()

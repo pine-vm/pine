@@ -33,7 +33,7 @@ public record BundledDeclarations(
 
     /// <summary>
     /// Loads <see cref="BundledDeclarations"/> from an assembly's embedded resource using <see cref="ResourceFilePath"/>.
-    /// Returns <c>null</c> on failure and logs a message to <see cref="Console"/>.
+    /// Returns <c>null</c> on failure and logs a message to <see cref="Console.Error"/>.
     /// </summary>
     /// <param name="assembly">The assembly containing the embedded resource.</param>
     /// <returns>The loaded <see cref="BundledDeclarations"/>, or <c>null</c> if loading failed.</returns>
@@ -44,7 +44,7 @@ public record BundledDeclarations(
             fromErr:
             err =>
             {
-                Console.WriteLine("Failed loading from embedded resource: " + err);
+                Console.Error.WriteLine("Failed loading from embedded resource: " + err);
 
                 return null;
             },

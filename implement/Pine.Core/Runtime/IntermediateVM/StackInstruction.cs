@@ -1852,13 +1852,15 @@ public record StackInstruction(
 
             StackInstructionKind.Eval_Multi =>
             new(
-                PopCount: (instruction.TakeCount ?? throw new Exception("Missing TakeCount for Eval_Multi instruction")) + 1,
+                PopCount:
+                (instruction.TakeCount ?? throw new Exception("Missing TakeCount for Eval_Multi instruction")) + 1,
                 PushCount: 1),
 
             StackInstructionKind.Invoke_StackFrame_Const =>
             new(
                 PopCount:
-                instruction.TakeCount ?? throw new Exception("Missing TakeCount for Invoke_StackFrame_Const instruction"),
+                instruction.TakeCount ??
+                throw new Exception("Missing TakeCount for Invoke_StackFrame_Const instruction"),
                 PushCount: instruction.OptimizedInvocation?.ReturnLayout.SlotCount ?? 1),
 
             StackInstructionKind.Switch_Jump_If_Slice_Skip_Var_Equal_Const =>

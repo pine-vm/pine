@@ -78,6 +78,7 @@ public partial class PineCliCommand
         rootCommand.Add(ApplyFunctionCommand.Create());
         rootCommand.Add(TruncateProcessHistoryCommand.Create());
         rootCommand.Add(ElmCommand.Create());
+        rootCommand.Add(ValueCommand.Create());
 
         var interactiveAlias = InteractiveCommand.Create();
         interactiveAlias.Description = "Alias for 'elm interactive'.";
