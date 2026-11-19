@@ -10,7 +10,6 @@ using Pine.Core.Runtime;
 using Pine.Core.Runtime.IntermediateVM;
 using Pine.Elm;
 using Pine.IntermediateVM;
-using Pine.PineVM;
 using System;
 using System.Collections.Generic;
 using System.Collections.Immutable;
@@ -33,8 +32,6 @@ public class CompileElmCompiler2024Tests
     [Fact(Skip = "TODO: Reimplement after switch to new Elm compiler")]
     public void Test_call_Basics_modBy()
     {
-        using var pgoShare = new DynamicPGOShare();
-
         var compilerProgram = ElmCompilerInElm2024.CompilerSourceFilesDefault.Value;
 
         using var interactiveSession =
@@ -43,8 +40,7 @@ public class CompileElmCompiler2024Tests
                 appCodeTree: (AppCompilationUnits?)null,
                 overrideSkipLowering: true,
                 entryPointsFilePaths: null,
-                caching: true,
-                autoPGO: pgoShare);
+                caching: true);
 
         // Force integration of the 'Basics' module.
         var testSubmissionResult = interactiveSession.Submit(" Basics.modBy  13 17 ");
@@ -273,8 +269,6 @@ public class CompileElmCompiler2024Tests
     [Fact(Skip = "TODO: Reimplement after switch to new Elm compiler")]
     public void Test_call_String_split()
     {
-        using var pgoShare = new DynamicPGOShare();
-
         var compilerProgram = ElmCompilerInElm2024.CompilerSourceFilesDefault.Value;
 
         using var interactiveSession =
@@ -283,8 +277,7 @@ public class CompileElmCompiler2024Tests
                 overrideSkipLowering: true,
                 appCodeTree: (AppCompilationUnits?)null,
                 entryPointsFilePaths: null,
-                caching: true,
-                autoPGO: pgoShare);
+                caching: true);
 
         // Force integration of the 'String' module.
         var testSubmissionResult = interactiveSession.Submit(""" String.isEmpty  "test" """);
@@ -335,14 +328,6 @@ public class CompileElmCompiler2024Tests
     [Fact(Skip = "Productive side not ready yet")]
     public void Elm_compiler_compiles_Elm_compiler()
     {
-        /*
-         * 2024-06-08: Switching from auto-PGO to manual PGO to improve readability of the test output.
-         * 
-        using var pgoShare = new DynamicPGOShare(
-            compiledExpressionsCountLimit: 160,
-            limitSampleCountPerSubmissionDefault: 100);
-        */
-
         var compilerProgram = Core.Elm.ElmInElm.BundledFiles.CompilerSourceContainerFilesDefault.Value;
 
         var compilerPackageSourcesTrees =
@@ -408,8 +393,7 @@ public class CompileElmCompiler2024Tests
                 appCodeTree: compilerWithPackagesTree,
                 overrideSkipLowering: true,
                 entryPointsFilePaths: null,
-                caching: true,
-                autoPGO: null);
+                caching: true);
 
         var interactiveInitialState = compilerInteractiveSession.CurrentEnvironmentValue();
 
@@ -546,8 +530,7 @@ public class CompileElmCompiler2024Tests
         var pineValueEmptyListInCompiler =
             ElmValueEncoding.ElmValueAsPineValue(pineValueEmptyListElmValue);
 
-        // var (optimizingPineVM, pineVMCache) = InteractiveSessionPine2024.BuildPineVM(caching: true, autoPGO: pgoShare);
-        var (optimizingPineVM, pineVMCache) = InteractiveSessionPine2024.BuildPineVM(caching: true, autoPGO: null);
+        var (optimizingPineVM, pineVMCache) = InteractiveSessionPine2024.BuildPineVM(caching: true);
 
         {
             var compilerResponseValue =
@@ -703,8 +686,7 @@ public class CompileElmCompiler2024Tests
                     compilerSourceFiles: compilerProgram,
                     appCodeTree: simpleElmModuleAppCodeTree,
                     entryPointsFilePaths: null,
-                    caching: true,
-                    autoPGO: null);
+                    caching: true);
 
             var jsSessionState = newCompilerInteractiveSession.CurrentEnvironmentValue();
 
@@ -829,8 +811,7 @@ public class CompileElmCompiler2024Tests
                     compileElmProgramCodeFiles: compilerProgram,
                     initialState: null,
                     appCodeTree: simpleElmModuleAppCodeTree,
-                    caching: true,
-                    autoPGO: null);
+                    caching: true);
 
             var jsSessionState = newCompilerInteractiveSession.CurrentEnvironmentValue();
 
@@ -883,204 +864,6 @@ public class CompileElmCompiler2024Tests
                 pineSimpleModuleCompiled.moduleValue,
                 "Compiled simple module value");
         }
-        */
-
-        /*
-         * Begin a dedicated training phase, compiling a small Elm module and then doing code-analysis
-         * and PGO for the entirety based on that simple scenario.
-         * */
-
-        /*
-
-            Console.WriteLine("Begin training with Elm compiler...");
-
-            var analysisEvalCache = new PineVMCache();
-
-            var profilingVM =
-                new ProfilingPineVM(
-                overrideParseExpression: analysisEvalCache.BuildParseExprDelegate,
-                    evalCache: analysisEvalCache.EvalCache,
-                    analysisEvalCache: analysisEvalCache);
-
-            var trainingProfilingStopwatch = System.Diagnostics.Stopwatch.StartNew();
-
-            {
-                // Compile reduced version of 'Basics' module
-
-                const string simpleElmModuleText =
-                    """
-                module ReducedBasics exposing
-                  ( Int
-                  , (+), (-), (*), (/), (//)
-                  , Bool(..), not
-                  , (++)
-                  )
-
-
-                infix right 5 (++) = append
-                infix left  6 (+)  = add
-                infix left  6 (-)  = sub
-                infix left  7 (*)  = mul
-                infix left  7 (//) = idiv
-
-
-                type Bool = True | False
-
-
-                type String
-                    = String (List Char.Char)
-
-                    -- We need another tag to prevent the compiler from assuming that the condition for tag 'String' is always true.
-                    | AnyOtherKind
-
-
-                append : appendable -> appendable -> appendable
-                append a b =
-                    case (a, b) of
-                    (String stringA, String stringB) ->
-                        String (Pine_kernel.concat [ stringA, stringB ])
-                    _ -> Pine_kernel.concat [ a, b ]
-                
-
-                """;
-
-                var simpleElmModuleParsed =
-                    TryParseModuleText(simpleElmModuleText)
-                    .Extract(err => throw new Exception("Failed parsing simple module: " + err));
-
-                var simpleModuleNameFlat = string.Join(".", simpleElmModuleParsed.Key);
-
-                var simpleElmModuleAppCodeTree =
-                    compilerProgramOnlyElmJson
-                    .SetNodeAtPathSorted(
-                        ["src", .. simpleElmModuleParsed.Key.SkipLast(1), simpleElmModuleParsed.Key.Last() + ".elm"],
-                        TreeNodeWithStringPath.Blob(Encoding.UTF8.GetBytes(simpleElmModuleText)));
-
-                using var newCompilerInteractiveSession =
-                    new InteractiveSessionPine2024(
-                        compilerSourceFiles: compilerProgram,
-                        initialState: null,
-                        appCodeTree: simpleElmModuleAppCodeTree,
-                        caching: true,
-                        autoPGO: null);
-
-                var jsSessionState = newCompilerInteractiveSession.CurrentEnvironmentValue();
-
-                var jsSessionParsedEnv =
-                    ElmInteractiveEnvironment.ParseInteractiveEnvironment(jsSessionState)
-                    .Extract(err => throw new Exception(err));
-
-                var jsSimpleModuleCompiled =
-                    jsSessionParsedEnv
-                    .Modules.Single(m => m.moduleName == simpleModuleNameFlat);
-
-                var pineSessionStateWrapped =
-                    CompileOneElmModule(
-                    prevEnvValue: pineValueEmptyListElmValue,
-                        simpleElmModuleParsed.Value.moduleText,
-                        simpleElmModuleParsed.Value.parsed,
-                        pineVM: profilingVM.PineVM)
-                    .Extract(err => throw new Exception("Failed compiling simple module: " + err));
-
-                var pineSessionState =
-                ElmValueInterop.ElmValueDecodedAsInElmCompiler(pineSessionStateWrapped)
-                    .Extract(err => throw new Exception("Failed unwrapping pine session state: " + err));
-
-                var pineSessionParsedEnv =
-                    ElmInteractiveEnvironment.ParseInteractiveEnvironment(pineSessionState)
-                    .Extract(err => throw new Exception("Failed parsing environment: " + err));
-
-                var pineSimpleModuleCompiled =
-                    pineSessionParsedEnv
-                    .Modules.Single(m => m.moduleName == simpleModuleNameFlat);
-
-                Assert.AreEqual(
-                    jsSimpleModuleCompiled.moduleContent.FunctionDeclarations.Count,
-                    pineSimpleModuleCompiled.moduleContent.FunctionDeclarations.Count,
-                    "Compiled simple module declarations count");
-
-                foreach (var declName in jsSimpleModuleCompiled.moduleContent.FunctionDeclarations.Keys)
-                {
-                    var jsDeclValue = jsSimpleModuleCompiled.moduleContent.FunctionDeclarations[declName];
-                    var pineDeclValue = pineSimpleModuleCompiled.moduleContent.FunctionDeclarations[declName];
-
-                    Assert.AreEqual(
-                        jsDeclValue,
-                        pineDeclValue,
-                        "Compiled reduced Basics module declaration " + declName);
-                }
-
-                Assert.AreEqual(
-                    jsSimpleModuleCompiled.moduleValue,
-                    pineSimpleModuleCompiled.moduleValue,
-                    "Compiled reduced Basics module value");
-            }
-
-            trainingProfilingStopwatch.Stop();
-
-            var exprUsageCombinations = profilingVM.ExprEnvUsagesFlat;
-
-        var totalSampleCount = exprUsageCombinations.Sum(sample => sample.Value.OrigEvalDurations.Count);
-
-            Console.WriteLine(
-                "Ran training scenario on profiling VM in " +
-                trainingProfilingStopwatch.Elapsed.TotalSeconds.ToString("0.00") + " seconds and collected " +
-                exprUsageCombinations.Count + " unique combinations from " + totalSampleCount + " execution samples.");
-
-        var limitSampleCount = 100;
-
-            var samplesUniqueExpressions =
-                exprUsageCombinations
-                .Select(sample => sample.Key)
-                .Distinct()
-                .ToImmutableArray();
-
-            var exprUsageCombinationsAfterFilter =
-                exprUsageCombinations
-                .Where(report => report.Value.ParseAndEvalCountMax < 100)
-                .ToImmutableArray();
-
-            var includedSamples =
-                DynamicPGOShare.SubsequenceWithEvenDistribution(
-                    [.. exprUsageCombinationsAfterFilter], limitSampleCount);
-
-            var trainingAnalysisStopwatch = System.Diagnostics.Stopwatch.StartNew();
-
-            IReadOnlyList<ExpressionUsageAnalysis> expressionUsages =
-                [..includedSamples
-                .Select(sample => sample.Value.Analysis.Value.ToMaybe())
-                .WhereNotNothing()
-                .SelectMany(usage => usage)];
-
-            trainingAnalysisStopwatch.Stop();
-
-            Console.WriteLine(
-                "Completed analysis in " +
-                trainingAnalysisStopwatch.Elapsed.TotalSeconds.ToString("0.00") + " seconds and collected " +
-                expressionUsages.Count + " usages");
-
-        var usageProfiles = ProfilingPineVM.UsageProfileDictionaryFromListOfUsages(expressionUsages);
-
-            var compilation =
-                DynamicPGOShare.GetOrCreateCompilationForProfiles(
-                    inputProfiles: [usageProfiles],
-                    limitCompiledExpressionsCount: 160,
-                    previousCompilations: []);
-
-            var compiledParseExpressionOverrides =
-                compilation.DictionaryResult
-                .Extract(err => throw new Exception("Failed compilation: " + err));
-
-            Console.WriteLine(
-                "Compiled dictionary contains " + compiledParseExpressionOverrides.Count + " entries");
-
-
-            var compiledPineVMCache = new PineVMCache();
-
-        var compiledPineVM = PineVM.Construct(
-            parseExpressionOverrides: compiledParseExpressionOverrides,
-                    evalCache: compiledPineVMCache.EvalCache);
-
         */
 
         /*
@@ -1141,7 +924,6 @@ public class CompileElmCompiler2024Tests
                         compiledNewEnvInCompiler,
                         parsedModule.Value.moduleText,
                         parsedModule.Value.parsed,
-                        // pineVM: compiledPineVM
                         pineVM: optimizingPineVM
                         );
 

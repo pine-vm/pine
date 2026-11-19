@@ -1,6 +1,5 @@
 using Pine.Core;
 using Pine.Core.IO;
-using Pine.PineVM;
 using System;
 using System.Collections.Immutable;
 using System.CommandLine;
@@ -27,12 +26,11 @@ public partial class PineCliCommand
 
     internal static int Invoke(string[] args)
     {
-        return MainLessDispose(args, dynamicPGOShare: null);
+        return MainLessDispose(args);
     }
 
     private static int MainLessDispose(
-        string[] args,
-        DynamicPGOShare? dynamicPGOShare)
+        string[] args)
     {
         using var branchResolution = GitBranchResolutionCache.BeginScope();
 
@@ -79,9 +77,9 @@ public partial class PineCliCommand
         rootCommand.Add(ListFunctionsCommand.Create());
         rootCommand.Add(ApplyFunctionCommand.Create());
         rootCommand.Add(TruncateProcessHistoryCommand.Create());
-        rootCommand.Add(ElmCommand.Create(dynamicPGOShare));
+        rootCommand.Add(ElmCommand.Create());
 
-        var interactiveAlias = InteractiveCommand.Create(dynamicPGOShare);
+        var interactiveAlias = InteractiveCommand.Create();
         interactiveAlias.Description = "Alias for 'elm interactive'.";
         rootCommand.Add(interactiveAlias);
 

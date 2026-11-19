@@ -16,68 +16,12 @@ public static class SetupVM
     private static readonly IFileStore s_cacheFileStoreDefault =
         new FileStoreFromSystemIOFile(Path.Combine(Filesystem.CacheDirectory, "eval"));
 
-    public static IReadOnlyDictionary<PineValue, PrecompiledLeaf>? PrecompiledLeavesDefault;
-
     /// <summary>
-    /// Aggregate of the precompiled-leaf dictionaries available to this VM:
-    /// the per-area entries exposed by
-    /// <see cref="Core.IntermediateVM.SetupVM.DefaultPrecompiledLeaves"/>
-    /// (kernel-module leaves from the <c>Pine.Core</c> project), plus the
-    /// bundle of hot-path .NET short-circuits from
-    /// <see cref="Core.Bundle.BundledPineToDotnet"/> (overridable via
-    /// <see cref="PrecompiledLeavesDefault"/>).
-    /// This is the dictionary used by <see cref="Create"/> when no explicit
-    /// <c>precompiledLeaves</c> argument is supplied, so consumers benefit from
-    /// every precompiled leaf available in the project rather than only the
-    /// per-area leaves.
+    /// Handwritten in-process leaves used by <see cref="Create"/> when no explicit
+    /// <c>precompiledLeaves</c> argument is supplied.
     /// </summary>
     public static IReadOnlyDictionary<PineValue, PrecompiledLeaf> DefaultPrecompiledLeaves =>
-        BuildAggregatePrecompiledLeaves();
-
-    private static readonly Lazy<IReadOnlyDictionary<PineValue, PrecompiledLeaf>?> s_embeddedBundledLeaves =
-        new(() => Core.Bundle.BundledPineToDotnet.LoadBundledTask.Result?.BuildDictionary());
-
-    private static IReadOnlyDictionary<PineValue, PrecompiledLeaf>? s_aggregateCacheValue;
-
-    private static IReadOnlyDictionary<PineValue, PrecompiledLeaf>? s_aggregateCacheBundleSource;
-
-    private static IReadOnlyDictionary<PineValue, PrecompiledLeaf> BuildAggregatePrecompiledLeaves()
-    {
-        var coreLeaves = Core.IntermediateVM.SetupVM.DefaultPrecompiledLeaves;
-
-        // Prefer an explicitly configured bundle, otherwise fall back to the
-        // bundle embedded in the Pine.Core assembly.
-        var bundledLeaves = PrecompiledLeavesDefault ?? s_embeddedBundledLeaves.Value;
-
-        if (bundledLeaves is null || bundledLeaves.Count is 0)
-        {
-            return coreLeaves;
-        }
-
-        if (s_aggregateCacheValue is null ||
-            !ReferenceEquals(s_aggregateCacheBundleSource, bundledLeaves))
-        {
-            var merged =
-                new Dictionary<PineValue, PrecompiledLeaf>(
-                    bundledLeaves.Count + coreLeaves.Count);
-
-            foreach (var entry in bundledLeaves)
-            {
-                merged[entry.Key] = entry.Value;
-            }
-
-            // The per-area leaves from Pine.Core take precedence for shared keys.
-            foreach (var entry in coreLeaves)
-            {
-                merged[entry.Key] = entry.Value;
-            }
-
-            s_aggregateCacheValue = merged;
-            s_aggregateCacheBundleSource = bundledLeaves;
-        }
-
-        return s_aggregateCacheValue;
-    }
+        Core.IntermediateVM.SetupVM.DefaultPrecompiledLeaves;
 
     /// <summary>
     /// Creates a VM with independently configurable caches. An omitted template-plan cache is created per VM.

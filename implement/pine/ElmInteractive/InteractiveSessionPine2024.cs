@@ -13,7 +13,6 @@ using Pine.Core.Runtime;
 using Pine.Core.Runtime.IntermediateVM;
 using Pine.Elm;
 using Pine.IntermediateVM;
-using Pine.PineVM;
 using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
@@ -76,8 +75,7 @@ public class InteractiveSessionPine2024(
         FileTree? appCodeTree,
         bool? overrideSkipLowering,
         IReadOnlyList<IReadOnlyList<string>>? entryPointsFilePaths,
-        bool caching,
-        DynamicPGOShare? autoPGO)
+        bool caching)
         :
         this(
             compilerSourceFiles: compilerSourceFiles,
@@ -87,7 +85,6 @@ public class InteractiveSessionPine2024(
             entryPointsFilePaths: entryPointsFilePaths,
             BuildPineVM(
                 caching: caching,
-                autoPGO: autoPGO,
                 new PineVM.EvaluationConfig(InvocationCountLimit: 10_000_000, LoopIterationCountLimit: 10_000_000, StackDepthLimit: 100_000)))
     {
     }
@@ -97,8 +94,7 @@ public class InteractiveSessionPine2024(
         AppCompilationUnits? appCodeTree,
         bool? overrideSkipLowering,
         IReadOnlyList<IReadOnlyList<string>>? entryPointsFilePaths,
-        bool caching,
-        DynamicPGOShare? autoPGO)
+        bool caching)
         :
         this(
             compilerSourceFiles: compilerSourceFiles,
@@ -107,7 +103,6 @@ public class InteractiveSessionPine2024(
             entryPointsFilePaths: entryPointsFilePaths,
             BuildPineVM(
                 caching: caching,
-                autoPGO: autoPGO,
                 new PineVM.EvaluationConfig(InvocationCountLimit: 10_000_000, LoopIterationCountLimit: 10_000_000, StackDepthLimit: 100_000)))
     {
     }
@@ -147,25 +142,17 @@ public class InteractiveSessionPine2024(
 
     public static (IPineVM, InvocationCache?) BuildPineVM(
         bool caching,
-        DynamicPGOShare? autoPGO,
         PineVM.EvaluationConfig? evaluationConfig = null)
     {
         var cache = caching ? new InvocationCache() : null;
 
-        return (BuildPineVM(cache, autoPGO, evaluationConfig), cache);
+        return (BuildPineVM(cache, evaluationConfig), cache);
     }
 
     public static IPineVM BuildPineVM(
         InvocationCache? cache,
-        DynamicPGOShare? autoPGO,
         PineVM.EvaluationConfig? evaluationConfig)
     {
-        if (autoPGO is not null)
-        {
-            return
-                autoPGO.GetVMAutoUpdating(evalCache: cache);
-        }
-
         return
             SetupVM.Create(
                 evalCache: cache,
@@ -686,77 +673,6 @@ public class InteractiveSessionPine2024(
     void IDisposable.Dispose()
     {
     }
-
-    public static Result<string, Pine.CompilePineToDotNet.CompileCSharpClassResult> CompileForProfiledScenarios(
-        FileTree compileElmProgramCodeFiles,
-        IReadOnlyList<TestElmInteractive.Scenario> scenarios,
-        Pine.CompilePineToDotNet.SyntaxContainerConfig syntaxContainerConfig,
-        int limitNumber,
-        bool enableEvalExprCache)
-    {
-        var expressionsProfiles =
-            scenarios
-            .Select(
-                scenario =>
-                CollectExpressionsToOptimizeFromScenario(
-                    compileElmProgramCodeFiles: compileElmProgramCodeFiles,
-                    scenario: scenario,
-                    enableEvalExprCache: enableEvalExprCache))
-            .ToImmutableArray();
-
-        var aggregateExpressionsProfiles =
-            ProfilingPineVM.AggregateExpressionUsageProfiles(expressionsProfiles);
-
-        var expressionsToCompile =
-            DynamicPGOShare.FilterAndRankExpressionProfilesForCompilation(aggregateExpressionsProfiles)
-            .Take(limitNumber)
-            .Select(expressionAndProfile => expressionAndProfile.Key)
-            .ToImmutableList();
-
-        return
-            Pine.CompilePineToDotNet.CompileToCSharp.CompileExpressionsToCSharpClass(
-                expressionsToCompile,
-                syntaxContainerConfig);
-    }
-
-    public static IReadOnlyDictionary<ExpressionUsageAnalysis, ExpressionUsageProfile> CollectExpressionsToOptimizeFromScenario(
-        FileTree compileElmProgramCodeFiles,
-        TestElmInteractive.Scenario scenario,
-        bool enableEvalExprCache)
-    {
-        var cache =
-            enableEvalExprCache ? new InvocationCache() : null;
-
-        var profilingVM =
-            new ProfilingPineVM(
-                evalCache: cache);
-
-        var profilingSession =
-            new InteractiveSessionPine2024(
-                compilerSourceFiles: compileElmProgramCodeFiles,
-                appCodeTree: (AppCompilationUnits?)null,
-                overrideSkipLowering: false,
-                entryPointsFilePaths: null,
-                profilingVM.PineVM);
-
-        foreach (var step in scenario.Steps)
-            profilingSession.Submit(step.step.Submission);
-
-        var exprUsageSamples = profilingVM.ExprEnvUsagesFlat;
-
-        var expressionUsages =
-            exprUsageSamples
-            .Select(sample => sample.Value.Analysis.Value.ToMaybe())
-            .WhereNotNothing()
-            .SelectMany(analysis => analysis)
-            .ToImmutableList();
-
-        var pineExpressionsToOptimize =
-            ProfilingPineVM.UsageProfileDictionaryFromListOfUsages(expressionUsages);
-
-        return pineExpressionsToOptimize;
-    }
-
 
     public class PineVMWithPersistentCache : IPineVM
     {

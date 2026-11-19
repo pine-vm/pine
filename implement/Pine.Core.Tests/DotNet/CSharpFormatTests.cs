@@ -2525,7 +2525,7 @@ public class CSharpFormatTests
     [Fact]
     public void Stable_switch_expression_keyword_whitespace()
     {
-        // Reproduces StaticProgramCSharpClass.cs instability: trailing whitespace
+        // Reproduces formatter instability: trailing whitespace
         // before 'switch' keyword is inconsistent between format passes.
         var inputSyntaxText =
             """"

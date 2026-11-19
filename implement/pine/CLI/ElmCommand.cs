@@ -1,16 +1,15 @@
-using Pine.PineVM;
 using System.CommandLine;
 
 namespace Pine.CLI;
 
 public static class ElmCommand
 {
-    public static Command Create(DynamicPGOShare? dynamicPGOShare = null)
+    public static Command Create()
     {
         var command =
             new Command("elm", "Elm development tools.")
             {
-                InteractiveCommand.Create(dynamicPGOShare),
+                InteractiveCommand.Create(),
                 MakeCommand.Create(),
                 Elm.FormatCommand.Create(),
                 Elm.TestCommand.Create(),

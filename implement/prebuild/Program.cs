@@ -7,7 +7,6 @@ using Pine.Core.Functional;
 using Pine.Core.Optimization;
 using Pine.Core.PineLanguage;
 using Pine.Elm;
-using Pine.IntermediateVM;
 using System;
 using System.Collections.Generic;
 using System.Collections.Immutable;
@@ -17,9 +16,6 @@ using System.Text;
 
 namespace prebuild;
 
-using FileTree =
-    IReadOnlyDictionary<IReadOnlyList<string>, ReadOnlyMemory<byte>>;
-
 public class Program
 {
     public const string DestinationDirectory = "./Pine.Core/";
@@ -27,37 +23,10 @@ public class Program
     public const string PreviousCompilerFilePath =
         "./history/2025-11-22-compiler-bundle/elm-syntax-parser-and-compiler.bin.gzip";
 
-    public const string LastTrainedCSharpArchiveFilePath =
-        "./history/2025-11-22-distilled-csharp-files.tar.gz";
-
     public static void Main()
     {
         Console.WriteLine(
             "Current working directory: " + Environment.CurrentDirectory);
-
-        if (false)
-        {
-            var clock = System.Diagnostics.Stopwatch.StartNew();
-
-            Console.WriteLine("Building .NET assembly from CSharp files...");
-
-            var assemblyBytes =
-                BundledPineToDotnet.LoadCSharpFilesFromFileAndBuildBundleFileAssembly(
-                    LastTrainedCSharpArchiveFilePath,
-                    DestinationDirectory,
-                    logger: Console.WriteLine);
-
-            clock.Stop();
-
-            Console.WriteLine(
-                "Completed building .NET bundle assembly.dll in " +
-                clock.Elapsed.TotalSeconds.ToString("0.00") + " seconds");
-
-            SetupVM.PrecompiledLeavesDefault =
-                BundledPineToDotnet.LoadFromAssembly(assemblyBytes.ToArray())
-                .Extract(err => throw new Exception("Failed loading from assembly: " + err))
-                .BuildDictionary();
-        }
 
         BuildAndSaveValueDictionary(
             elmCompilers: []);
@@ -73,29 +42,6 @@ public class Program
                     elmCompilerValue.sourceFiles, elmCompilerValue.compiled)
                 ]);
 
-        if (false)
-        {
-            var clock = System.Diagnostics.Stopwatch.StartNew();
-
-            Console.WriteLine("Building .NET bundle C# and assembly...");
-
-            var parsedEnvironment =
-                ElmInteractiveEnvironment.ParseInteractiveEnvironment(
-                    elmCompilerValue.compiled)
-                .Extract(err => throw new Exception(err));
-
-            Pine.Core.Bundle.BundledPineToDotnet.BuildAndWriteBundleFile(
-                parsedEnvironment,
-                DestinationDirectory,
-                logger: Console.WriteLine,
-                writeCSharpFilesArchive: true);
-
-            clock.Stop();
-
-            Console.WriteLine(
-                "Completed compilation to C# and .NET bundle assembly.dll in " +
-                clock.Elapsed.TotalSeconds.ToString("0.00") + " seconds");
-        }
         */
     }
 
@@ -130,13 +76,6 @@ public class Program
         return
             ElmCompilerInElm2024.LoadCompilerFromBundleFile(PreviousCompilerFilePath)
             .Extract(err => throw new Exception(err));
-    }
-
-    public static FileTree LoadLastTrainedCSharpFiles()
-    {
-        return
-            TarGZipArchive.ExtractArchive(
-                System.IO.File.ReadAllBytes(LastTrainedCSharpArchiveFilePath));
     }
 
     public static (Pine.Core.Files.FileTree sourceFiles, PineValue compiled) BuildElmCompiler()

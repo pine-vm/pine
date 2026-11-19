@@ -11,7 +11,6 @@ namespace Pine.Core.DotNet;
 /// </summary>
 /// <remarks>
 /// These orderings are used during code generation to emit stable, human-friendly declarations.
-/// See also <see cref="ValueSyntaxKindDeclarationOrder"/> which orders based on <see cref="ValueSyntaxKind"/> classification.
 /// </remarks>
 public class CSharpDeclarationOrder
 {
@@ -38,99 +37,6 @@ public class CSharpDeclarationOrder
         var orderedLists = OrderListValuesBySize(originalLists);
 
         return blobs.Cast<PineValue>().Concat(orderedLists);
-    }
-
-    /// <summary>
-    /// Comparer that orders instances of <see cref="ValueSyntaxKind"/>.
-    /// </summary>
-    /// <remarks>
-    /// Priority from highest to lowest:
-    /// <list type="number">
-    /// <item><description><see cref="ValueSyntaxKind.AsSignedInteger"/> (by numeric value).</description></item>
-    /// <item><description><see cref="ValueSyntaxKind.AsListOfSignedIntegers"/> (by length, then lexicographically by items).</description></item>
-    /// <item><description><see cref="ValueSyntaxKind.AsString"/> (lexicographically).</description></item>
-    /// <item><description><see cref="ValueSyntaxKind.Other"/>.</description></item>
-    /// </list>
-    /// </remarks>
-    public class ValueSyntaxKindDeclarationOrder : IComparer<ValueSyntaxKind>
-    {
-        /// <summary>
-        /// Shared singleton instance of this comparer.
-        /// </summary>
-        public static readonly ValueSyntaxKindDeclarationOrder Instance = new();
-
-        /// <summary>
-        /// Compares two <see cref="ValueSyntaxKind"/> instances following the priority described in the type remarks.
-        /// </summary>
-        /// <param name="x">Left operand.</param>
-        /// <param name="y">Right operand.</param>
-        /// <returns>
-        /// A signed integer that indicates the relative values of <paramref name="x"/> and <paramref name="y"/>.
-        /// Less than zero means <paramref name="x"/> precedes <paramref name="y"/>; greater than zero means it follows; zero means equal.
-        /// </returns>
-        public int Compare(ValueSyntaxKind? x, ValueSyntaxKind? y)
-        {
-            if (x == y)
-                return 0;
-
-            if (x is null)
-                return -1;
-
-            if (y is null)
-                return 1;
-
-            if (x is ValueSyntaxKind.AsSignedInteger xSignedInt)
-            {
-                if (y is ValueSyntaxKind.AsSignedInteger ySignedInt)
-                    return xSignedInt.Value.CompareTo(ySignedInt.Value);
-
-                return -1;
-            }
-
-            if (y is ValueSyntaxKind.AsSignedInteger)
-                return 1;
-
-            if (x is ValueSyntaxKind.AsListOfSignedIntegers xListOfSignedIntegers)
-            {
-                if (y is ValueSyntaxKind.AsListOfSignedIntegers yListOfSignedIntegers)
-                {
-                    if (xListOfSignedIntegers.Values.Count < yListOfSignedIntegers.Values.Count)
-                        return -1;
-
-                    if (yListOfSignedIntegers.Values.Count < xListOfSignedIntegers.Values.Count)
-                        return 1;
-
-                    for (var i = 0; i < xListOfSignedIntegers.Values.Count; i++)
-                    {
-                        if (xListOfSignedIntegers.Values[i] < yListOfSignedIntegers.Values[i])
-                            return -1;
-
-                        if (yListOfSignedIntegers.Values[i] < xListOfSignedIntegers.Values[i])
-                            return 1;
-                    }
-
-                    return 0;
-                }
-
-                return -1;
-            }
-
-            if (y is ValueSyntaxKind.AsListOfSignedIntegers)
-                return 1;
-
-            if (x is ValueSyntaxKind.AsString xString)
-            {
-                if (y is ValueSyntaxKind.AsString yString)
-                    return xString.Value.CompareTo(yString.Value);
-
-                return -1;
-            }
-
-            if (y is ValueSyntaxKind.AsString)
-                return 1;
-
-            return 0;
-        }
     }
 
     /// <summary>

@@ -1,14 +1,5 @@
-using AwesomeAssertions;
-using Microsoft.CodeAnalysis.CSharp;
-using Microsoft.CodeAnalysis.CSharp.Syntax;
-using Pine.Core;
 using Pine.Core.CodeAnalysis;
-using Pine.Core.DotNet;
 using Pine.Core.Elm.ElmCompilerInDotnet;
-using Pine.Core.Encodings;
-using Pine.Core.Internal;
-using Pine.Core.PineLanguage;
-using Pine.Core.Runtime;
 using System.Collections.Generic;
 using System.Linq;
 
@@ -16,41 +7,6 @@ namespace Pine.IntegrationTests.CodeAnalysis;
 
 public class CodeAnalysisTestHelper
 {
-    static public readonly DeclarationSyntaxContext DeclarationSyntaxContext = BuildDeclarationSyntaxContext();
-
-    static DeclarationSyntaxContext BuildDeclarationSyntaxContext()
-    {
-        var usingDirectivesTypes =
-            new[]
-            {
-                typeof(BuiltinFunction),
-                typeof(BuiltinFunctionSpecialized),
-                typeof(BuiltinFunctionFused),
-                typeof(PineKernelValues),
-                typeof(PrecompiledLeaf),
-                typeof(IReadOnlyDictionary<,>),
-                typeof(IntegerEncoding),
-                typeof(StringEncoding),
-                typeof(ParseExpressionException),
-                typeof(Core.DotNet.Builtins.ImmutableConcatBuilder),
-                typeof(Core.DotNet.Builtins.ImmutableSliceBuilder),
-                typeof(Core.DotNet.Builtins.MutatingConcatBuilder),
-            };
-
-        IReadOnlyList<UsingDirectiveSyntax> usingDirectives =
-            [
-            ..usingDirectivesTypes
-            .Select(t => t.Namespace)
-            .WhereNotNull()
-            .Distinct()
-            .Order()
-            .Select(ns => SyntaxFactory.UsingDirective(SyntaxFactory.ParseName(ns)))
-            ];
-
-        return
-            new DeclarationSyntaxContext(usingDirectives);
-    }
-
     public static (StaticProgram<DeclQualifiedName> staticProgram, IReadOnlyDictionary<DeclQualifiedName, StaticProgramFunctionMetadata> functionMetadata) ParseAsStaticMonomorphicProgramAndCrashOnAnyFailure(
         ElmInteractiveEnvironment.ParsedInteractiveEnvironment parsedEnvironment,
         System.Func<DeclQualifiedName, bool> includeDeclaration,

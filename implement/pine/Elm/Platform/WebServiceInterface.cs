@@ -2345,8 +2345,7 @@ type alias LoadDependencyStruct =
 
         var pineVMAndCache =
             ElmTime.ElmInteractive.InteractiveSessionPine2024.BuildPineVM(
-                caching: true,
-                autoPGO: null);
+                caching: true);
 
         var hostRoots =
             new List<DeclQualifiedName>

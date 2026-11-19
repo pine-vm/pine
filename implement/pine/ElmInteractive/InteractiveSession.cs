@@ -1,6 +1,5 @@
 using Pine.Core.Files;
 using Pine.Core.Functional;
-using Pine.PineVM;
 using System;
 using System.Collections.Generic;
 
@@ -24,8 +23,7 @@ public interface IInteractiveSession : IDisposable
                 appCodeTree: appCodeTree,
                 overrideSkipLowering: null,
                 entryPointsFilePaths: null,
-                caching: pineConfig.Caching,
-                autoPGO: pineConfig.DynamicPGOShare),
+                caching: pineConfig.Caching),
 
             _ =>
             throw new ArgumentOutOfRangeException(nameof(engineType), $"Unexpected engine type value: {engineType}"),
@@ -45,7 +43,6 @@ public enum ElmEngineTypeCLI
 public abstract record ElmEngineType
 {
     public record Pine(
-        bool Caching,
-        DynamicPGOShare? DynamicPGOShare)
+        bool Caching)
         : ElmEngineType;
 }

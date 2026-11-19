@@ -7,7 +7,6 @@ using Pine.Core.Elm.Syntax;
 using Pine.Core.Encodings;
 using Pine.Core.Files;
 using Pine.Elm;
-using Pine.PineVM;
 using System;
 using System.Collections.Generic;
 using System.Collections.Immutable;
@@ -47,7 +46,6 @@ public static class InteractiveCommand
 
     private static (Option<string?> elmEngineOption, Func<ElmEngineType> parseElmEngineTypeFromOption)
         CreateElmEngineOption(
-        DynamicPGOShare? dynamicPGOShare,
         string? defaultFromEnvironmentVariablePrefix,
         Func<ElmEngineTypeCLI?, ElmEngineTypeCLI> defaultEngineConsideringEnvironmentVariable)
     {
@@ -72,9 +70,7 @@ public static class InteractiveCommand
                 defaultEngine; // Simplified for now - would need to get actual option value
 
             return
-                ParseElmEngineType(
-                    dynamicPGOShare,
-                    cliName);
+                ParseElmEngineType(cliName);
         }
 
         return (elmEngineOption, parseElmEngineTypeFromOption);
@@ -96,7 +92,7 @@ public static class InteractiveCommand
         return (elmCompilerOption, parseElmCompilerFromOption);
     }
 
-    public static Command Create(DynamicPGOShare? dynamicPGOShare)
+    public static Command Create()
     {
         var command =
             new Command("interactive", "Enter environment for interactive exploration and composition of Elm programs.")
@@ -151,7 +147,6 @@ public static class InteractiveCommand
 
         var (elmEngineOption, parseElmEngineTypeFromOption) =
             CreateElmEngineOption(
-                dynamicPGOShare: null,
                 command,
                 defaultFromEnvironmentVariablePrefix: "interactive",
                 defaultEngineConsideringEnvironmentVariable:
@@ -563,7 +558,6 @@ public static class InteractiveCommand
 
     private static (Option<string?> elmEngineOption, Func<ParseResult, ElmEngineType> parseElmEngineTypeFromOption)
         CreateElmEngineOption(
-        DynamicPGOShare? dynamicPGOShare,
         Command cmd,
         string? defaultFromEnvironmentVariablePrefix,
         Func<ElmEngineTypeCLI?, ElmEngineTypeCLI> defaultEngineConsideringEnvironmentVariable)
@@ -597,9 +591,7 @@ public static class InteractiveCommand
                 };
 
             return
-                ParseElmEngineType(
-                    dynamicPGOShare,
-                    cliName);
+                ParseElmEngineType(cliName);
         }
 
         return (elmEngineOption, parseElmEngineTypeFromOption);
@@ -655,19 +647,16 @@ public static class InteractiveCommand
     }
 
     public static ElmEngineType ParseElmEngineType(
-        DynamicPGOShare? dynamicPGOShare,
         ElmEngineTypeCLI elmEngineTypeCLI) =>
         elmEngineTypeCLI switch
         {
             ElmEngineTypeCLI.Pine =>
             new ElmEngineType.Pine(
-                Caching: true,
-                DynamicPGOShare: null),
+                Caching: true),
 
             ElmEngineTypeCLI.Pine_without_cache =>
             new ElmEngineType.Pine(
-                Caching: false,
-                DynamicPGOShare: null),
+                Caching: false),
 
             _ =>
             throw new NotImplementedException($"Unexpected engine type value: {elmEngineTypeCLI}"),
