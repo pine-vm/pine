@@ -289,20 +289,18 @@ public class SequentialIREfficiencyTests
 
         renderedFrame.Should().Be(
             """
-            expr-0x658be8d6-no-constraint (10):
+            expr-0x658be8d6-no-constraint (8):
             0: Local_Get_Skip_Head_Const ([ 0 ], 2)
             1: Take_Const (4)
             2: Switch_Jump_If_Equal_Const (2)
-              case Blob [4] (0x00000041 | UTF32 "A"): jump (6, 8)
-              case Blob [4] (0x00000042 | UTF32 "B"): jump (6, 8)
+              case Blob [4] (0x00000041 | UTF32 "A"): jump (4, 6)
+              case Blob [4] (0x00000042 | UTF32 "B"): jump (4, 6)
             3: Local_Get_Skip_Head_Const ([ 0 ], 2)
             4: Take_Const (4)
-            5: Local_Set ([ 2 ]), Pop(1)
-            6: Local_Get ([ 2 ])
-            7: Return
+            5: Return
             jumps_arriving_from 1 (2)
-            8: Push_Literal (Blob [12] (0x000000790000006500000073 | UTF32 "yes"))
-            9: Return
+            6: Push_Literal (Blob [12] (0x000000790000006500000073 | UTF32 "yes"))
+            7: Return
             """);
     }
 
@@ -436,15 +434,13 @@ public class SequentialIREfficiencyTests
 
         renderedFrame.Should().Be(
             """
-            expr-0x0dbec914-no-constraint (8):
+            expr-0x0dbec914-no-constraint (6):
             0: Local_Get ([ 2, 1 ])
             1: Int_Mul_Const (4)
             2: Local_Get ([ 0 ])
             3: Int_Mul_Const (4)
             4: Slice_Skip_Var_Take_Var
-            5: Local_Set ([ 4 ]), Pop(1)
-            6: Local_Get ([ 4 ])
-            7: Return
+            5: Return
             """);
     }
 
@@ -483,13 +479,11 @@ public class SequentialIREfficiencyTests
 
         renderedFrame.Should().Be(
             """
-            expr-0x8f52db35-no-constraint (6):
+            expr-0x8f52db35-no-constraint (4):
             0: Local_Get ([ 1, 0 ])
             1: Int_Mul_Const (4)
             2: Slice_Skip_Var_Take_Const (12)
-            3: Local_Set ([ 3 ]), Pop(1)
-            4: Local_Get ([ 3 ])
-            5: Return
+            3: Return
             """);
     }
 

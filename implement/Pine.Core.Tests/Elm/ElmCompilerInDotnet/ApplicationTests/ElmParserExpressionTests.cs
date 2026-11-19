@@ -253,7 +253,7 @@ public class ElmParserExpressionTests
             BuildListCount: 30
             BuildListItemCount: 141
             LoopIterationCount: 5
-            InstructionCount: 581
+            InstructionCount: 577
             DeferredTemplateValueAllocationCount: 0
             TemplateDirectInvocationCount: 0
             DeferredTemplateValueMaterializationCount: 0
@@ -282,7 +282,7 @@ public class ElmParserExpressionTests
             BuildListCount: 29
             BuildListItemCount: 137
             LoopIterationCount: 1
-            InstructionCount: 546
+            InstructionCount: 540
             DeferredTemplateValueAllocationCount: 0
             TemplateDirectInvocationCount: 0
             DeferredTemplateValueMaterializationCount: 0
@@ -449,7 +449,7 @@ public class ElmParserExpressionTests
             BuildListCount: 290
             BuildListItemCount: 1_403
             LoopIterationCount: 23
-            InstructionCount: 3_782
+            InstructionCount: 3_778
             DeferredTemplateValueAllocationCount: 0
             TemplateDirectInvocationCount: 2
             DeferredTemplateValueMaterializationCount: 0

@@ -2793,11 +2793,10 @@ public partial class PineVM : ICancellablePineVM
 
                             var environmentValue = currentFrame.PopTopmostFromStack();
 
-                            var followingInstruction =
-                                currentFrame.Instructions.Instructions[currentFrame.InstructionPointer + 1];
-
                             var replaceCurrentFrame =
-                                followingInstruction.Kind is StackInstructionKind.Return;
+                                currentFrame.Instructions.CanForwardReturn(
+                                    currentFrame.InstructionPointer,
+                                    ReturnValueLayout.Canonical);
 
                             if (TryEvaluateTemplate(
                                 expressionValueInProcess,
@@ -2907,15 +2906,12 @@ public partial class PineVM : ICancellablePineVM
 
                                 if (environments.Length == remainingEnvironmentCount)
                                 {
-                                    var exactFollowingInstruction =
-                                        currentFrame.Instructions.Instructions[
-                                            currentFrame.InstructionPointer + 1];
-
                                     if (InvokeTemplateDirectly(
                                         plan,
                                         combinedEnvironments,
                                         replaceCurrentFrame:
-                                        exactFollowingInstruction.Kind is StackInstructionKind.Return) is { } error)
+                                        currentFrame.Instructions.CanForwardReturn(
+                                            currentFrame.InstructionPointer, ReturnValueLayout.Canonical)) is { } error)
                                     {
                                         return error;
                                     }
@@ -2969,14 +2965,11 @@ public partial class PineVM : ICancellablePineVM
                                         SelectedPrecompiled: native.selected,
                                         PrecompiledSelectionAttempted: true);
 
-                                var followingInstruction =
-                                    currentFrame.Instructions.Instructions[
-                                        currentFrame.InstructionPointer + 1];
-
                                 if (PushEvalContinuation(
                                     initialStep,
                                     replaceCurrentFrame:
-                                    followingInstruction.Kind is StackInstructionKind.Return) is { } continuationError)
+                                    currentFrame.Instructions.CanForwardReturn(
+                                        currentFrame.InstructionPointer, ReturnValueLayout.Canonical)) is { } continuationError)
                                 {
                                     return continuationError;
                                 }
@@ -2990,14 +2983,11 @@ public partial class PineVM : ICancellablePineVM
                                     environments,
                                     environmentIndex: 0);
 
-                            var genericFollowingInstruction =
-                                currentFrame.Instructions.Instructions[
-                                    currentFrame.InstructionPointer + 1];
-
                             if (PushEvalContinuation(
                                 genericInitialStep,
                                 replaceCurrentFrame:
-                                genericFollowingInstruction.Kind is StackInstructionKind.Return) is { } genericError)
+                                currentFrame.Instructions.CanForwardReturn(
+                                    currentFrame.InstructionPointer, ReturnValueLayout.Canonical)) is { } genericError)
                             {
                                 return genericError;
                             }
@@ -3029,11 +3019,10 @@ public partial class PineVM : ICancellablePineVM
 
                             ++evalCount;
 
-                            var followingInstruction =
-                                currentFrame.Instructions.Instructions[currentFrame.InstructionPointer + 1];
-
                             var replaceCurrentFrame =
-                                followingInstruction.Kind is StackInstructionKind.Return;
+                                currentFrame.Instructions.CanForwardReturn(
+                                    currentFrame.InstructionPointer,
+                                    ReturnValueLayout.Canonical);
 
                             if (TryEvaluateTemplate(
                                 expressionValueInProcess,
@@ -3154,9 +3143,9 @@ public partial class PineVM : ICancellablePineVM
                                     directInvocation.EnvironmentConstraint);
 
                             var replaceCurrentFrame =
-                                currentFrame.InstructionPointer + 1 < currentFrame.Instructions.Instructions.Count &&
-                                currentFrame.Instructions.Instructions[currentFrame.InstructionPointer + 1].Kind
-                                is StackInstructionKind.Return;
+                                currentFrame.Instructions.CanForwardReturn(
+                                    currentFrame.InstructionPointer,
+                                    directInvocation.ReturnLayout);
 
                             var targetInstructions =
                                 directInvocation.LinkedStackFrameInstructions

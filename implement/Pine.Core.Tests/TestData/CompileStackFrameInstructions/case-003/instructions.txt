@@ -1,6 +1,6 @@
 Local_Get ([ 0 ])
 Skip_Const (13)
 Concat_Generic
-Local_Set ([ 1 ]), Pop(1)
-Local_Get ([ 1, 1 ])
+Local_Set ([ 1 ])
+Local_Get ([ 1 ])
 Return (2)

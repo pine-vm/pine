@@ -913,7 +913,7 @@ public class FunctionApplicationOverheadTests
             BuildListCount: 18
             BuildListItemCount: 54
             LoopIterationCount: 0
-            InstructionCount: 391
+            InstructionCount: 387
             DeferredTemplateValueAllocationCount: 0
             TemplateDirectInvocationCount: 21
             DeferredTemplateValueMaterializationCount: 0
@@ -1022,7 +1022,7 @@ public class FunctionApplicationOverheadTests
             BuildListCount: 18
             BuildListItemCount: 72
             LoopIterationCount: 0
-            InstructionCount: 385
+            InstructionCount: 381
             DeferredTemplateValueAllocationCount: 0
             TemplateDirectInvocationCount: 21
             DeferredTemplateValueMaterializationCount: 0
@@ -1122,7 +1122,7 @@ public class FunctionApplicationOverheadTests
             BuildListCount: 18
             BuildListItemCount: 54
             LoopIterationCount: 0
-            InstructionCount: 427
+            InstructionCount: 423
             DeferredTemplateValueAllocationCount: 0
             TemplateDirectInvocationCount: 21
             DeferredTemplateValueMaterializationCount: 0

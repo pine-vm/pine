@@ -22,6 +22,12 @@ public record StackFrameInstructions
     /// <summary>The canonical reconstruction recipe for the frame's return slots.</summary>
     public ReturnValueLayout ReturnLayout { get; init; } = ReturnValueLayout.Canonical;
 
+    // Adjacent returns can interpret identical slot counts through different canonical recipes.
+    internal bool CanForwardReturn(int instructionPointer, ReturnValueLayout invocationLayout) =>
+        instructionPointer + 1 < Instructions.Count &&
+        Instructions[instructionPointer + 1].Kind is StackInstructionKind.Return &&
+        ReturnLayout.Equals(invocationLayout);
+
     /// <summary>Constructs a frame and computes its resource requirements.</summary>
     public StackFrameInstructions(
         StaticFunctionInterface Parameters,

@@ -163,18 +163,7 @@ public sealed class ReturnValueLayout : IEquatable<ReturnValueLayout>
 
         foreach (var slot in Slots)
         {
-            var projection = Project(slot.Path);
-
-            if (slot.IsMapped)
-            {
-                projection =
-                    projection.AppendOperation(
-                        StackInstruction.Select_Value_Const(
-                            slot.Values
-                            .Select((value, index) => KeyValuePair.Create(value, slot.Keys[index]))
-                            .ToImmutableDictionary(),
-                            fallbackValue: slot.Keys[0]));
-            }
+            var projection = ProjectSlot(slot, sourceLocal, pathOffset: 0);
 
             for (var index = slot.Guards.Length - 1; index >= 0; index--)
             {
@@ -194,6 +183,28 @@ public sealed class ReturnValueLayout : IEquatable<ReturnValueLayout>
 
         return result;
     }
+
+    internal static PineControlFlowFragment ProjectSlot(Slot slot, int sourceLocal, int pathOffset)
+    {
+        var projection = PineControlFlowFragment.Empty.AppendOperation(StackInstruction.Local_Get(sourceLocal));
+
+        for (var index = pathOffset; index < slot.Path.Length; index++)
+            projection = projection.AppendOperation(StackInstruction.Skip_Head_Const(slot.Path[index]));
+
+        return EncodeSlot(slot, projection);
+    }
+
+    internal static PineControlFlowFragment EncodeSlot(Slot slot, PineControlFlowFragment projection) =>
+        slot.IsMapped
+        ?
+        projection.AppendOperation(
+            StackInstruction.Select_Value_Const(
+                slot.Values
+                .Select((value, index) => KeyValuePair.Create(value, slot.Keys[index]))
+                .ToImmutableDictionary(),
+                fallbackValue: slot.Keys[0]))
+        :
+        projection;
 
     internal PineControlFlowFragment Reconstruct(int firstLocal, IReadOnlyList<int>? path = null)
     {

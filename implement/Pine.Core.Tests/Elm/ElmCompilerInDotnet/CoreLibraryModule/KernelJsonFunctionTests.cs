@@ -1427,7 +1427,7 @@ public partial class KernelJsonFunctionTests
             BuildListCount: 80
             BuildListItemCount: 219
             LoopIterationCount: 16
-            InstructionCount: 1_155
+            InstructionCount: 1_153
             DeferredTemplateValueAllocationCount: 1
             TemplateDirectInvocationCount: 15
             DeferredTemplateValueMaterializationCount: 1
@@ -1462,7 +1462,7 @@ public partial class KernelJsonFunctionTests
             BuildListCount: 44
             BuildListItemCount: 119
             LoopIterationCount: 18
-            InstructionCount: 776
+            InstructionCount: 774
             DeferredTemplateValueAllocationCount: 0
             TemplateDirectInvocationCount: 4
             DeferredTemplateValueMaterializationCount: 0
@@ -1568,7 +1568,7 @@ public partial class KernelJsonFunctionTests
             BuildListCount: 105
             BuildListItemCount: 286
             LoopIterationCount: 35
-            InstructionCount: 1_570
+            InstructionCount: 1_568
             DeferredTemplateValueAllocationCount: 0
             TemplateDirectInvocationCount: 18
             DeferredTemplateValueMaterializationCount: 0
@@ -1604,7 +1604,7 @@ public partial class KernelJsonFunctionTests
             BuildListCount: 64
             BuildListItemCount: 173
             LoopIterationCount: 16
-            InstructionCount: 902
+            InstructionCount: 900
             DeferredTemplateValueAllocationCount: 0
             TemplateDirectInvocationCount: 6
             DeferredTemplateValueMaterializationCount: 0
@@ -1714,7 +1714,7 @@ public partial class KernelJsonFunctionTests
             BuildListCount: 75
             BuildListItemCount: 230
             LoopIterationCount: 10
-            InstructionCount: 1_134
+            InstructionCount: 1_133
             DeferredTemplateValueAllocationCount: 0
             TemplateDirectInvocationCount: 6
             DeferredTemplateValueMaterializationCount: 0
@@ -1747,7 +1747,7 @@ public partial class KernelJsonFunctionTests
             BuildListCount: 66
             BuildListItemCount: 200
             LoopIterationCount: 11
-            InstructionCount: 1_084
+            InstructionCount: 1_083
             DeferredTemplateValueAllocationCount: 0
             TemplateDirectInvocationCount: 4
             DeferredTemplateValueMaterializationCount: 0

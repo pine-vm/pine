@@ -745,6 +745,167 @@ public class ReturnInterfaceTests
         entered.Single(frame => frame.FrameExpression == producer).Instructions.ReturnLayout.SlotCount.Should().Be(0);
     }
 
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void Return_producers_omit_nested_envelopes_before_CFG_optimization(bool choice)
+    {
+        var record =
+            Expression.ListInst(
+                [Text("<Record>"), Text("alfa"), Path(0), Text("beta"), Path(1)]);
+
+        Expression producer =
+            choice
+            ?
+            Expression.ConditionalInst(
+                Path(2),
+                falseBranch: Expression.ListInst([Text("<Choice>"), Text("Nothing")]),
+                trueBranch: Expression.ListInst([Text("<Choice>"), Text("Just"), record]))
+            :
+            record;
+
+        var retained = Core.Runtime.InternalExpression.ExpressionConversion.FromCanonicalCached(producer);
+        var parseCache = new PineVMParseCache();
+        var layout = ReturnShapeInference.Infer(retained, parseCache, (_, _, _) => null);
+        var parameters = StaticFunctionInterface.FromExpression(retained);
+
+        var graph =
+            InternalExpressionCompilation.ControlFlowGraphFromExpression(
+                retained,
+                [],
+                null,
+                parameters,
+                parseCache,
+                returnLayout: layout);
+
+        graph.Validate();
+        layout.SlotCount.Should().Be(choice ? 3 : 2);
+
+        graph.LowerToStackInstructions().Should().NotContain(
+            instruction => instruction.Kind == StackInstructionKind.Build_List ||
+                instruction.Kind == StackInstructionKind.Build_List_With_Prefix);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void Direct_return_lowering_keeps_shared_and_escaping_subtrees(bool labelled)
+    {
+        var body = Add(Path(1), Literal(11));
+
+        Expression shared =
+            Expression.ListInst([new Expression.Eval(Path(0), Expression.EnvironmentInstance), Path(1)]);
+
+        if (labelled)
+            shared = new Expression.Label("shared", shared);
+
+        var producer = Expression.ListInst([shared, shared, Path(2)]);
+
+        var consumer =
+            Expression.ListInst(
+                [Project(Call(producer), 0), Project(Call(producer), 1, 0), Project(Call(producer), 2)]);
+
+        var escaping = PineValue.List([Number(100), Number(200)]);
+        var vm = CreateVM();
+        var entered = new List<EnteredStackFrame>();
+
+        var report =
+            vm.EvaluateExpressionOnCustomStack(
+                consumer,
+                PineValue.List([ExpressionEncoding.EncodeExpressionAsValue(body), Number(42), escaping]),
+                VM.EvaluationConfig.Unbounded,
+                reportEnteredStackFrame: (in frame) => entered.Add(frame))
+            .Extract(error => throw new Exception(error.ToString()));
+
+        report.ReturnValue.Evaluate().Should().Be(
+            PineValue.List([PineValue.List([Number(53), Number(42)]), Number(53), escaping]));
+
+        entered.Count(frame => frame.FrameExpression == body).Should().Be(1);
+    }
+
+    [Theory]
+    [InlineData(false, false)]
+    [InlineData(true, false)]
+    [InlineData(false, true)]
+    [InlineData(true, true)]
+    public void Returning_a_single_call_component_does_not_tail_forward_a_different_recipe(
+        bool dynamic,
+        bool disableDirect)
+    {
+        var body = Add(Path(1), Literal(11));
+        var encoded = ExpressionEncoding.EncodeExpressionAsValue(body);
+
+        var call =
+            new Expression.Eval(dynamic ? Path(0) : Expression.LitralInst(encoded), Expression.EnvironmentInstance);
+
+        var producer = Expression.ListInst([call]);
+
+        CreateVM(disableDirect: disableDirect).EvaluateExpression(Call(producer), PineValue.List([encoded, Number(42)]))
+            .IsOkOrNull().Should().Be(PineValue.List([Number(53)]));
+    }
+
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public void Return_slots_with_a_discriminator_after_its_payload_keep_source_order(bool populated)
+    {
+        var producer =
+            Expression.ConditionalInst(
+                Path(0),
+                falseBranch: Expression.ListInst([Text("NoPayload"), Text("Nothing")]),
+                trueBranch: Expression.ListInst([Path(1), Text("Just"), Literal(0)]));
+
+        var input =
+            PineValue.List([populated ? PineKernelValues.TrueValue : PineKernelValues.FalseValue, Number(42)]);
+
+        CreateVM().EvaluateExpression(Call(producer), input).IsOkOrNull().Should().Be(
+            populated
+            ?
+            PineValue.List([Number(42), StringEncoding.ValueFromString("Just"), Number(0)])
+            :
+            PineValue.List([StringEncoding.ValueFromString("NoPayload"), StringEncoding.ValueFromString("Nothing")]));
+    }
+
+    [Fact]
+    public void Direct_return_lowering_evaluates_omitted_fixed_fields_in_source_order()
+    {
+        Expression FixedAfterCall(int codeIndex) =>
+            Expression.ConditionalInst(
+                new Expression.Eval(Path(codeIndex), Expression.EnvironmentInstance),
+                falseBranch: Literal(7),
+                trueBranch: Literal(7));
+
+        var producer =
+            Expression.ListInst(
+                [FixedAfterCall(0), Expression.ListInst([FixedAfterCall(1), Path(2)])]);
+
+        var entered = new List<EnteredStackFrame>();
+        var firstBody = Add(Path(2), Literal(11));
+        var secondBody = Add(Path(2), Literal(22));
+        var firstCode = ExpressionEncoding.EncodeExpressionAsValue(firstBody);
+        var secondCode = ExpressionEncoding.EncodeExpressionAsValue(secondBody);
+        var vm = CreateVM();
+
+        var result =
+            vm.EvaluateExpressionOnCustomStack(
+                Call(producer),
+                PineValue.List([firstCode, secondCode, Number(42)]),
+                VM.EvaluationConfig.Unbounded,
+                reportEnteredStackFrame: (in frame) => entered.Add(frame));
+
+        result.IsOkOrNull()!.ReturnValue.Evaluate().Should().Be(
+            PineValue.List([Number(7), PineValue.List([Number(7), Number(42)])]));
+
+        entered.Where(frame => frame.FrameExpression == firstBody || frame.FrameExpression == secondBody)
+            .Select(frame => frame.FrameExpression).Should().Equal(firstBody, secondBody);
+
+        vm.EvaluateExpression(Call(producer), PineValue.List([Number(123), secondCode, Number(42)]))
+            .IsOkOrNull().Should().BeNull();
+
+        vm.EvaluateExpression(Call(producer), PineValue.List([firstCode, Number(123), Number(42)]))
+            .IsOkOrNull().Should().BeNull();
+    }
+
     [Fact]
     public void Return_contract_identity_does_not_rehash_large_fixed_program_values()
     {
@@ -793,7 +954,8 @@ public class ReturnInterfaceTests
     private static VM CreateVM(
         List<ExecutedStackInstruction>? trace = null,
         IInvocationCacheAccess? cache = null,
-        IReadOnlyDictionary<Expression, IReadOnlyList<PineValueClass>>? constraints = null) =>
+        IReadOnlyDictionary<Expression, IReadOnlyList<PineValueClass>>? constraints = null,
+        bool disableDirect = false) =>
         VM.CreateCustom(
             evalCache: null,
             evaluationConfigDefault: null,
@@ -813,5 +975,6 @@ public class ReturnInterfaceTests
             cacheFileStore: null,
             reportExecutedStackInstruction: trace is null ? null : (in item) => trace.Add(item),
             invocationCache: cache,
-            invocationCacheConfiguration: new(0, 0, 0, 0));
+            invocationCacheConfiguration: new(0, 0, 0, 0),
+            disableDirectInvocation: disableDirect);
 }

@@ -223,6 +223,12 @@ internal class InternalPineIRCompiler
         if (expression is Expression.Conditional conditional)
             return CompileConditional(conditional, context, prior, parseCache, layout);
 
+        if (expression is Expression.List list &&
+            TryCompileReturningList(list, context, prior, parseCache, layout) is { } directProducer)
+        {
+            return directProducer;
+        }
+
         var compiled =
             expression is Expression.Eval eval &&
             (prior.ReturnValues.ContainsKey(eval) || !prior.LocalsSet.ContainsKey(eval))
@@ -259,6 +265,163 @@ internal class InternalPineIRCompiler
                 .AppendOperation(StackInstruction.Local_Set([local], popCount: 1))
                 .Append(layout.Deconstruct(local))
             };
+    }
+
+    private static NodeCompilationResult? TryCompileReturningList(
+        Expression.List expression,
+        CompilationContext context,
+        NodeCompilationResult prior,
+        PineVMParseCache parseCache,
+        ReturnValueLayout layout)
+    {
+        if (prior.LocalsSet.ContainsKey(expression) ||
+            context.IsAvailableAsLocalIndex(expression) is not null)
+        {
+            return null;
+        }
+
+        static PineValue? LiteralAtPath(Expression item, ImmutableArray<int> path)
+        {
+            for (var offset = 0; ; offset++)
+            {
+                while (item is Expression.Label label)
+                    item = label.Tagged;
+
+                if (item is Expression.Literal literal)
+                    return PineValueExtension.ValueFromPathOrNull(literal.Value, path.AsSpan()[offset..]);
+
+                if (offset == path.Length || item is not Expression.List list ||
+                    path[offset] < 0 || path[offset] >= list.Items.Length)
+                {
+                    return null;
+                }
+
+                item = list.Items[path[offset]];
+            }
+        }
+
+        var activeSlots = new List<int>();
+
+        for (var index = 0; index < layout.Slots.Length; index++)
+        {
+            var active = true;
+
+            foreach (var guard in layout.Slots[index].Guards)
+            {
+                if (LiteralAtPath(expression, guard.Path) is not { } value)
+                    return null;
+
+                if (!value.Equals(guard.Value))
+                {
+                    active = false;
+                    break;
+                }
+            }
+
+            if (active)
+            {
+                if (activeSlots.Count > 0 &&
+                    layout.Slots[activeSlots[^1]].Path.AsSpan().SequenceCompareTo(layout.Slots[index].Path.AsSpan()) >
+                    0)
+                {
+                    return null;
+                }
+
+                activeSlots.Add(index);
+            }
+        }
+
+        context = PrepareCommonSubexpressions(expression, context with { IsTailPosition = false }, prior);
+        var compiled = prior;
+        var nextSlot = 0;
+
+        void FillInactiveSlotsBefore(int index)
+        {
+            while (nextSlot < index)
+            {
+                compiled = compiled.AppendInstruction(StackInstruction.Push_Literal(PineValue.EmptyList));
+                nextSlot++;
+            }
+        }
+
+        void CompileProducer(Expression item, int depth, IReadOnlyList<int> slots)
+        {
+            if (item is Expression.Label label &&
+                !context.CopyToLocal.Contains(item) &&
+                !compiled.LocalsSet.ContainsKey(item))
+            {
+                CompileProducer(label.Tagged, depth, slots);
+                return;
+            }
+
+            if (item is Expression.List list &&
+                !context.CopyToLocal.Contains(item) &&
+                !compiled.LocalsSet.ContainsKey(item) &&
+                !slots.Any(index => layout.Slots[index].Path.Length == depth))
+            {
+                for (var child = 0; child < list.Items.Length; child++)
+                {
+                    CompileProducer(
+                        list.Items[child],
+                        depth + 1,
+                        slots.Where(index => layout.Slots[index].Path[depth] == child).ToArray());
+                }
+
+                return;
+            }
+
+            if (slots.Count is 0 && item is Expression.Literal)
+                return;
+
+            if (slots.Count is 1 &&
+                layout.Slots[slots[0]] is { } slot && slot.Path.Length == depth)
+            {
+                FillInactiveSlotsBefore(slots[0]);
+                compiled = CompileExpressionTransitive(item, context, compiled, parseCache);
+
+                compiled =
+                    compiled with { Fragment = ReturnValueLayout.EncodeSlot(slot, compiled.Fragment) };
+
+                nextSlot++;
+                return;
+            }
+
+            compiled = CompileExpressionTransitive(item, context, compiled, parseCache);
+
+            if (slots.Count is 0)
+            {
+                compiled = compiled.AppendInstruction(StackInstruction.Pop);
+                return;
+            }
+
+            var sourceLocal = compiled.NextLocal(context.StackFrameParameters.ParamsPaths.Count);
+
+            compiled =
+                compiled.AppendInstruction(StackInstruction.Local_Set([sourceLocal], popCount: 1)) with
+                {
+                    ReservedLocals = sourceLocal + 1
+                };
+
+            foreach (var index in slots)
+            {
+                FillInactiveSlotsBefore(index);
+
+                compiled =
+                    compiled with
+                    {
+                        Fragment =
+                        compiled.Fragment
+                        .Append(ReturnValueLayout.ProjectSlot(layout.Slots[index], sourceLocal, depth))
+                    };
+
+                nextSlot++;
+            }
+        }
+
+        CompileProducer(expression, depth: 0, activeSlots);
+        FillInactiveSlotsBefore(layout.SlotCount);
+
+        return compiled;
     }
 
     private static TailCallToRootResolution ResolveTailCallToRoot(
