@@ -304,7 +304,7 @@ public class LanguageServerTestingRpcTests
             "user.email=fixture@example.invalid",
             "commit",
             "-am",
-            message + "\n\nCo-authored-by: Copilot <223556219+Copilot@users.noreply.github.com>");
+            message + "\n\nCo-authored-by: copilot-swe-agent[bot] <198982749+Copilot@users.noreply.github.com>");
 
     private static async Task<string> Git(string directory, params string[] arguments)
     {
