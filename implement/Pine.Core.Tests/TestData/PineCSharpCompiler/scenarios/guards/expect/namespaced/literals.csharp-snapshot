@@ -1,0 +1,19 @@
+#nullable enable
+
+namespace Pine.Generated.Refinement1;
+
+using PineValue = global::Pine.Core.PineLanguage.PineValue;
+using PineValueInProcess = global::Pine.Core.Internal.PineValueInProcess;
+
+public static class PineLiterals
+{
+    public static readonly PineValue Materialized_Value_int_pos_4 = PineValue.Blob(new byte[] { 4, 4 });
+
+    public static PineValueInProcess Value_int_pos_4 => Literal_Value_int_pos_4.Value;
+
+    private static class Literal_Value_int_pos_4
+    {
+        internal static readonly PineValueInProcess Value =
+            PineValueInProcess.CreateFullyRepresented(Materialized_Value_int_pos_4);
+    }
+}

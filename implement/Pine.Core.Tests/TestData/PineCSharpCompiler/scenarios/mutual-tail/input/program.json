@@ -1,0 +1,51 @@
+{
+  "entry": "main",
+  "expressions": {
+    "main": {
+      "Eval": [
+        { "Literal": [{ "EncodedExpression": "first" }] },
+        { "List": [[{ "Literal": [{ "ValueRef": "functions" }] }, { "EnvPath": [0] }, { "EnvPath": [1] }]] }
+      ]
+    },
+    "first": {
+      "Conditional": [
+        { "Builtin": ["int_is_sorted_asc", { "List": [[{ "EnvPath": [1] }, { "Literal": [0] }]] }] },
+        {
+          "Eval": [
+            { "EnvPath": [0, 1] },
+            {
+              "List": [[
+                { "EnvPath": [0] },
+                { "Builtin": ["int_add", { "List": [[{ "EnvPath": [1] }, { "Literal": [-1] }]] }] },
+                { "Builtin": ["int_add", { "List": [[{ "EnvPath": [2] }, { "Literal": [1] }]] }] }
+              ]]
+            }
+          ]
+        },
+        { "EnvPath": [2] }
+      ]
+    },
+    "second": {
+      "Conditional": [
+        { "Builtin": ["int_is_sorted_asc", { "List": [[{ "EnvPath": [1] }, { "Literal": [0] }]] }] },
+        {
+          "Eval": [
+            { "EnvPath": [0, 0] },
+            {
+              "List": [[
+                { "EnvPath": [0] },
+                { "Builtin": ["int_add", { "List": [[{ "EnvPath": [1] }, { "Literal": [-1] }]] }] },
+                { "Builtin": ["int_add", { "List": [[{ "EnvPath": [2] }, { "Literal": [2] }]] }] }
+              ]]
+            }
+          ]
+        },
+        { "EnvPath": [2] }
+      ]
+    }
+  },
+  "values": {
+    "functions": [{ "EncodedExpression": "first" }, { "EncodedExpression": "second" }],
+    "cancellation-environment": [1000000000, 10]
+  }
+}

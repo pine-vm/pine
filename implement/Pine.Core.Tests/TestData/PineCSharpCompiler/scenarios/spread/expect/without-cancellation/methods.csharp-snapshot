@@ -1,0 +1,22 @@
+#nullable enable
+using PineValueInProcess = global::Pine.Core.Internal.PineValueInProcess;
+using Return_2 = (global::Pine.Core.Internal.PineValueInProcess item0, global::Pine.Core.Internal.PineValueInProcess item1);
+
+public static class CompiledPine
+{
+    public static PineValueInProcess Expr_bf7f52b347_dispatch(PineValueInProcess environment)
+    {
+        Return_2 result_0 =
+            Expr_bf7f52b347_constraint_generic(environment.GetElementAt(0), environment.GetElementAt(1));
+
+        return PineValueInProcess.CreateList(new PineValueInProcess[] { result_0.item0, result_0.item1 });
+    }
+
+    /// <summary>Function 0; unconstrained environment. Arguments: 0 = [0]; 1 = [1].</summary>
+    public static Return_2 Expr_bf7f52b347_constraint_generic(
+        PineValueInProcess argument_0,
+        PineValueInProcess argument_1)
+    {
+        return (argument_0, argument_1);
+    }
+}

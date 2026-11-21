@@ -1,0 +1,17 @@
+#nullable enable
+using PineValueInProcess = global::Pine.Core.Internal.PineValueInProcess;
+using PineLiteralsModule = global::PineLiterals;
+
+public static class CompiledPine
+{
+    public static PineValueInProcess Expr_2adbe0690f_dispatch(PineValueInProcess environment)
+    {
+        return PineLiteralsModule.Value_baf5916f38;
+    }
+
+    /// <summary>Function 0; unconstrained environment. Arguments: .</summary>
+    public static global::System.ValueTuple Expr_2adbe0690f_constraint_generic()
+    {
+        return new global::System.ValueTuple();
+    }
+}

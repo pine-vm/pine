@@ -1,0 +1,12 @@
+{
+  "entry": "main",
+  "expressions": {
+    "main": {
+      "Builtin": [
+        "int_add",
+        { "List": [[{ "EnvPath": [0] }, { "EnvPath": [1] }]] }
+      ]
+    }
+  },
+  "values": {}
+}

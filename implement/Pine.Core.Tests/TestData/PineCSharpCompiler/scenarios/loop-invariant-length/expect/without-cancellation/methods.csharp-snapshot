@@ -1,0 +1,79 @@
+#nullable enable
+using PineValueInProcess = global::Pine.Core.Internal.PineValueInProcess;
+using NativeValue = global::Pine.Core.DotNet.PineCSharpValue;
+using PineLiteralsModule = global::PineLiterals;
+
+public static class CompiledPine
+{
+    public static PineValueInProcess Expr_c19693f67c_dispatch(PineValueInProcess environment)
+    {
+        PineValueInProcess result_0 =
+            Expr_e97e990551_constraint_a115150f97(
+                environment.GetElementAt(0),
+                environment.GetElementAt(1),
+                environment.GetElementAt(2));
+
+        return result_0;
+    }
+
+    /// <summary>Function 0; unconstrained environment. Arguments: 0 = [0]; 1 = [1]; 2 = [2].</summary>
+    public static PineValueInProcess Expr_c19693f67c_constraint_generic(
+        PineValueInProcess argument_0,
+        PineValueInProcess argument_1,
+        PineValueInProcess argument_2)
+    {
+        PineValueInProcess state_0 = argument_0;
+        PineValueInProcess state_1 = argument_1;
+        PineValueInProcess state_2 = argument_2;
+        return Expr_e97e990551_constraint_a115150f97(argument_0, argument_1, argument_2);
+    }
+
+    /// <summary>Function 1; specialized environment. Arguments: 0 = [1]; 1 = [2]; 2 = [3].</summary>
+    public static PineValueInProcess Expr_e97e990551_constraint_a115150f97(
+        PineValueInProcess argument_0,
+        PineValueInProcess argument_1,
+        PineValueInProcess argument_2)
+    {
+        NativeValue state_0 = NativeValue.FromValue(argument_0);
+        PineValueInProcess state_1 = argument_1;
+        NativeValue state_2 = NativeValue.FromValue(argument_2);
+        NativeValue local_1_3 = default;
+        NativeValue value_1_15 = default;
+        long value_1_1 = state_1.GetLength();
+        local_1_3 = NativeValue.FromInt64(value_1_1);
+        value_1_15 = local_1_3;
+
+        while (true)
+        {
+            NativeValue value_1_2 =
+                NativeValue.FromBoolean(NativeValue.LessThanOrEqual(value_1_15, NativeValue.FromInt64(0L)));
+
+            if (value_1_2.IsTrue())
+            {
+                goto function_1_block_6;
+            }
+
+            NativeValue value_1_4 =
+                NativeValue.FromBoolean(NativeValue.LessThanOrEqual(state_0, NativeValue.FromInt64(0L)));
+
+            if (value_1_4.IsTrue())
+            {
+                return state_2.ToPineValue();
+            }
+
+            NativeValue value_1_6 = NativeValue.Add(state_0, NativeValue.FromInt64(-1L));
+            NativeValue value_1_10 = NativeValue.Add(state_2, local_1_3);
+            state_2 = value_1_10;
+            state_1 = state_1;
+            state_0 = value_1_6;
+            value_1_15 = local_1_3;
+            continue;
+        }
+
+function_1_block_6:
+        {
+            PineValueInProcess value_1_13 = PineLiteralsModule.Value_int_pos_0;
+            return value_1_13;
+        }
+    }
+}

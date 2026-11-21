@@ -1,0 +1,16 @@
+{
+  "entry": "main",
+  "expressions": {
+    "main": {
+      "Conditional": [
+        { "EnvPath": [2] },
+        { "List": [[{ "Literal": [0] }]] },
+        { "List": [[{ "Literal": [1] }, { "List": [[{ "EnvPath": [0] }, { "EnvPath": [1] }]] }]] }
+      ]
+    }
+  },
+  "values": {
+    "true": { "AsBase64": "BA==" },
+    "false": { "AsBase64": "Ag==" }
+  }
+}

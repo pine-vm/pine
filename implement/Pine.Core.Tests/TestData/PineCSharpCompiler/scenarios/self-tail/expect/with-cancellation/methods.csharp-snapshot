@@ -1,0 +1,57 @@
+#nullable enable
+using PineValueInProcess = global::Pine.Core.Internal.PineValueInProcess;
+using NativeValue = global::Pine.Core.DotNet.PineCSharpValue;
+
+public static class CompiledPine
+{
+    public static PineValueInProcess Expr_44a20a026b_dispatch(
+        PineValueInProcess environment,
+        global::System.Threading.CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+
+        PineValueInProcess result_0 =
+            Expr_da2d7c14b7_constraint_61f0e0538f(environment.GetElementAt(0), environment.GetElementAt(1), cancellationToken);
+
+        return result_0;
+    }
+
+    /// <summary>Function 0; unconstrained environment. Arguments: 0 = [0]; 1 = [1].</summary>
+    public static PineValueInProcess Expr_44a20a026b_constraint_generic(
+        PineValueInProcess argument_0,
+        PineValueInProcess argument_1,
+        global::System.Threading.CancellationToken cancellationToken)
+    {
+        PineValueInProcess state_0 = argument_0;
+        PineValueInProcess state_1 = argument_1;
+        cancellationToken.ThrowIfCancellationRequested();
+        return Expr_da2d7c14b7_constraint_61f0e0538f(state_0, state_1, cancellationToken);
+    }
+
+    /// <summary>Function 1; specialized environment. Arguments: 0 = [1]; 1 = [2].</summary>
+    public static PineValueInProcess Expr_da2d7c14b7_constraint_61f0e0538f(
+        PineValueInProcess argument_0,
+        PineValueInProcess argument_1,
+        global::System.Threading.CancellationToken cancellationToken)
+    {
+        NativeValue state_0 = NativeValue.FromValue(argument_0);
+        NativeValue state_1 = NativeValue.FromValue(argument_1);
+
+        while (true)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+
+            NativeValue value_1_1 =
+                NativeValue.FromBoolean(NativeValue.LessThanOrEqual(state_0, NativeValue.FromInt64(0L)));
+
+            if (value_1_1.IsTrue())
+            {
+                return state_1.ToPineValue();
+            }
+
+            state_0 = NativeValue.Add(state_0, NativeValue.FromInt64(-1L));
+            state_1 = NativeValue.Add(state_1, NativeValue.FromInt64(1L));
+            continue;
+        }
+    }
+}

@@ -1,0 +1,28 @@
+entry b0
+loop b1 preheader b0
+  blocks: b1, b2
+  backedges: b2 -> b1
+  exits: b1 -> b3
+
+block b0():
+  v0 = Local_Get ([ 1 ])
+  v1 = Local_Get ([ 1 ])
+  v2 = Build_List (2) <- v0, v1
+  Local_Set ([ 2 ]), Pop(1) <- v2
+  jump b1()
+
+block b1() [loop b1]:
+  v3 = Local_Get ([ 0 ])
+  v4 = Int_Less_Than_Or_Equal_Const (0) <- v3
+  if v4 == BlobValue { BytesCount = 1 } then b3() else b2()
+
+block b2() [loop b1]:
+  Local_Int_Add_Const ([ 0 ], -1)
+  jump b1()
+
+block b3():
+  v5 = Local_Get ([ 2 ])
+  jump b4(v5)
+
+block b4(v6):
+  return v6

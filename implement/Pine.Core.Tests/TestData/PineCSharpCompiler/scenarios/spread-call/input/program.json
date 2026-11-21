@@ -1,0 +1,37 @@
+{
+  "entry": "main",
+  "expressions": {
+    "main": {
+      "Builtin": ["int_add", { "List": [[
+        { "Builtin": ["head", { "ExpressionRef": "call" }] },
+        { "Builtin": ["head", { "Builtin": ["skip", { "List": [[{ "Literal": [1] }, { "ExpressionRef": "call" }]] }] }] }
+      ]] }]
+    },
+    "call": {
+      "Eval": [
+        { "Literal": [{ "EncodedExpression": "producer" }] },
+        { "List": [[{ "Literal": [{ "ValueRef": "functions" }] }, { "EnvPath": [0] }, { "EnvPath": [1] }, { "EnvPath": [2] }]] }
+      ]
+    },
+    "producer": {
+      "Conditional": [
+        { "Builtin": ["int_is_sorted_asc", { "List": [[{ "EnvPath": [1] }, { "Literal": [0] }]] }] },
+        {
+          "Eval": [
+            { "EnvPath": [0, 0] },
+            { "List": [[
+              { "EnvPath": [0] },
+              { "Builtin": ["int_add", { "List": [[{ "EnvPath": [1] }, { "Literal": [-1] }]] }] },
+              { "EnvPath": [2] },
+              { "EnvPath": [3] }
+            ]] }
+          ]
+        },
+        { "List": [[{ "EnvPath": [2] }, { "EnvPath": [3] }]] }
+      ]
+    }
+  },
+  "values": {
+    "functions": [{ "EncodedExpression": "producer" }]
+  }
+}

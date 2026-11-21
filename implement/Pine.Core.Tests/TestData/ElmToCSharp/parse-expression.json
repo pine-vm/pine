@@ -1,0 +1,10 @@
+[
+  ["123", "Ok (IntegerLiteral \"123\")"],
+  ["[]", "Ok (ListExpr Empty)"],
+  ["[1]", "Ok (ListExpr (NonEmpty (Node { end = { column = 3, row = 1 }, start = { column = 2, row = 1 } } (IntegerLiteral \"1\")) []))"],
+  ["alfa", "Ok (Identifier [] \"alfa\")"],
+  ["\"hello\"", "Ok (StringLiteral \"hello\" (Just \"hello\"))"],
+  ["1 + 2", "Ok (OperatorApplication (Node { end = { column = 4, row = 1 }, start = { column = 3, row = 1 } } \"+\") Left (Node { end = { column = 2, row = 1 }, start = { column = 1, row = 1 } } (IntegerLiteral \"1\")) (Node { end = { column = 6, row = 1 }, start = { column = 5, row = 1 } } (IntegerLiteral \"2\")))"],
+  ["1 ]", "Err \"Unexpected token ']' after parsing expression.\""],
+  ["", "Err \"Failed to parse expression: Unexpected token '<end of input>'.\""]
+]

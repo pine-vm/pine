@@ -1,0 +1,36 @@
+before
+InvocationCount: 0
+BuildListCount: 21
+BuildListItemCount: 42
+LoopIterationCount: 20
+InstructionCount: 168
+DeferredTemplateValueAllocationCount: 0
+TemplateDirectInvocationCount: 0
+DeferredTemplateValueMaterializationCount: 0
+TemplateConsolidatedEvalCount: 0
+DirectInterpreterInvocationCount: 0
+DirectInterpreterExpressionCount: 0
+DirectInterpreterLiteralCount: 0
+DirectInterpreterListCount: 0
+DirectInterpreterEvalCount: 0
+DirectInterpreterBuiltinCount: 0
+DirectInterpreterConditionalCount: 0
+DirectInterpreterEnvironmentCount: 0
+after
+InvocationCount: 0
+BuildListCount: 1
+BuildListItemCount: 2
+LoopIterationCount: 20
+InstructionCount: 108
+DeferredTemplateValueAllocationCount: 0
+TemplateDirectInvocationCount: 0
+DeferredTemplateValueMaterializationCount: 0
+TemplateConsolidatedEvalCount: 0
+DirectInterpreterInvocationCount: 0
+DirectInterpreterExpressionCount: 0
+DirectInterpreterLiteralCount: 0
+DirectInterpreterListCount: 0
+DirectInterpreterEvalCount: 0
+DirectInterpreterBuiltinCount: 0
+DirectInterpreterConditionalCount: 0
+DirectInterpreterEnvironmentCount: 0

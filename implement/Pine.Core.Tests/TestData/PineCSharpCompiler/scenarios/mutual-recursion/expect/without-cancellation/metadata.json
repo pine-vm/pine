@@ -1,0 +1,46 @@
+{
+  "complexity": {
+    "hasLoops": false,
+    "hasRecursion": true,
+    "hasMutualRecursion": true
+  },
+  "dispatchMethodName": "Expr_db88847ce4_dispatch",
+  "methods": [
+    {
+      "name": "Expr_db88847ce4_constraint_generic",
+      "parameterPaths": [
+        [
+          0
+        ],
+        [
+          1
+        ]
+      ],
+      "returnSlotCount": 1
+    },
+    {
+      "name": "Expr_a0c121d063_constraint_fdf930c12f",
+      "parameterPaths": [
+        [
+          1
+        ],
+        [
+          2
+        ]
+      ],
+      "returnSlotCount": 1
+    },
+    {
+      "name": "Expr_e808cf0dee_constraint_fdf930c12f",
+      "parameterPaths": [
+        [
+          1
+        ],
+        [
+          2
+        ]
+      ],
+      "returnSlotCount": 1
+    }
+  ]
+}

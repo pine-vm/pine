@@ -1099,6 +1099,187 @@ public sealed partial record PineControlFlowGraph(
                 terminator.GetType().Name)
         };
 
+    // Count the instructions lowering would emit for an already validated graph.
+    // A null result means the count exceeded the budget; the remaining blocks need not be scanned.
+    internal int? CountStackInstructionsUpTo(int budget)
+    {
+        var count = 0;
+
+        foreach (var block in Blocks)
+        {
+            var terminatorCount = TerminatorInstructionCount(block.Terminator);
+
+            if (terminatorCount > budget - count)
+            {
+                return null;
+            }
+
+            count += terminatorCount;
+
+            var operations = block.Operations.AsSpan();
+
+            if (FusedLengthComparison(block) is not null)
+            {
+                operations = operations[..^1];
+            }
+
+            for (var index = 0; index < operations.Length;)
+            {
+                if (count == budget)
+                {
+                    return null;
+                }
+
+                index = FusedOperationEnd(operations, index, out _);
+                count++;
+            }
+        }
+
+        return count;
+    }
+
+    private static BigInteger? FusedLengthComparison(PineBasicBlock block)
+    {
+        if (block.Terminator is not PineControlFlowTerminator.ConditionalJump conditional ||
+            block.Operations is not { Length: > 0 } operations ||
+            operations[^1] is not
+            {
+                Instruction.Kind: StackInstructionKind.Length,
+                Inputs.Length: 1,
+                Results.Length: 1
+            } lengthOperation ||
+            conditional.FallThroughArguments.Contains(lengthOperation.Results[0]) ||
+            conditional.BranchArguments.Contains(lengthOperation.Results[0]) ||
+            IntegerEncoding.ParseSignedIntegerRelaxed(conditional.Literal).IsOkOrNullable() is not { } length ||
+            IntegerEncoding.EncodeSignedInteger(length) != conditional.Literal)
+        {
+            return null;
+        }
+
+        return length;
+    }
+
+    // Find one fused instruction's input range without constructing its operands.
+    private static int FusedOperationEnd(
+        ReadOnlySpan<PineControlFlowOperation> operations,
+        int start,
+        out int? popCount)
+    {
+        var first = operations[start].Instruction;
+        var next = start + 1;
+        popCount = first.PopCount;
+
+        switch (first.Kind)
+        {
+            case StackInstructionKind.Local_Get:
+                while (next < operations.Length &&
+                    operations[next].Instruction.Kind is StackInstructionKind.Local_Get)
+                {
+                    next++;
+                }
+
+                break;
+
+            case StackInstructionKind.Local_Get_Skip_Head_Const:
+                while (next < operations.Length &&
+                    operations[next].Instruction is { Kind: StackInstructionKind.Local_Get_Skip_Head_Const } load &&
+                    first.SkipCount == load.SkipCount)
+                {
+                    next++;
+                }
+
+                break;
+
+            case StackInstructionKind.Local_Int_Add_Const:
+                while (next < operations.Length &&
+                    operations[next].Instruction is { Kind: StackInstructionKind.Local_Int_Add_Const } add &&
+                    first.IntegerLiteral == add.IntegerLiteral)
+                {
+                    next++;
+                }
+
+                break;
+
+            case StackInstructionKind.Local_Set:
+                var localCount = first.LocalIndices.Length;
+
+                while (next < operations.Length)
+                {
+                    var instruction = operations[next].Instruction;
+
+                    if (instruction.Kind is StackInstructionKind.Pop)
+                    {
+                        popCount = checked((popCount ?? 0) + (instruction.PopCount ?? 0));
+                    }
+                    else if (instruction.Kind is StackInstructionKind.Local_Set && popCount == localCount)
+                    {
+                        localCount += instruction.LocalIndices.Length;
+                        popCount = checked(popCount.Value + (instruction.PopCount ?? 0));
+                    }
+                    else
+                    {
+                        break;
+                    }
+
+                    next++;
+                }
+
+                break;
+        }
+
+        return next;
+    }
+
+    private static StackInstruction EmitFusedOperation(
+        ReadOnlySpan<PineControlFlowOperation> operations,
+        int? popCount)
+    {
+        var first = operations[0].Instruction;
+
+        if (first.Kind is StackInstructionKind.Local_Get && first.LocalIndices.IsDefaultOrEmpty)
+        {
+            throw new InvalidOperationException("Local get without indices.");
+        }
+
+        ImmutableArray<int>.Builder? indices = null;
+
+        foreach (var operation in operations[1..])
+        {
+            var instruction = operation.Instruction;
+
+            if (instruction.Kind is StackInstructionKind.Pop)
+            {
+                continue;
+            }
+
+            if (instruction.Kind is StackInstructionKind.Local_Get && instruction.LocalIndices.IsDefaultOrEmpty)
+            {
+                throw new InvalidOperationException("Local get without indices.");
+            }
+
+            indices ??= first.LocalIndices.ToBuilder();
+            indices.AddRange(instruction.LocalIndices);
+        }
+
+        return first.Kind switch
+        {
+            StackInstructionKind.Local_Get =>
+            StackInstruction.Local_Get(indices?.ToImmutable() ?? first.LocalIndices),
+
+            StackInstructionKind.Local_Set when indices is not null =>
+            StackInstruction.Local_Set(indices.ToImmutable(), popCount ?? 0),
+
+            StackInstructionKind.Local_Set when popCount != first.PopCount =>
+            first with { PopCount = popCount },
+
+            _ when indices is not null =>
+            first with { LocalIndices = indices.ToImmutable() },
+
+            _ =>
+            first
+        };
+    }
+
     /// <summary>
     /// Assigns physical instruction offsets after the graph has been validated.
     /// This is the only place where sequential stack instructions are created from the graph.
@@ -1107,156 +1288,44 @@ public sealed partial record PineControlFlowGraph(
     {
         Validate();
 
-        static BigInteger? FusedLengthComparison(PineBasicBlock block)
-        {
-            if (block.Terminator is not PineControlFlowTerminator.ConditionalJump conditional ||
-                block.Operations is not { Length: > 0 } operations ||
-                operations[^1] is not
-                {
-                    Instruction.Kind: StackInstructionKind.Length,
-                    Inputs.Length: 1,
-                    Results.Length: 1
-                } lengthOperation ||
-                conditional.FallThroughArguments.Contains(lengthOperation.Results[0]) ||
-                conditional.BranchArguments.Contains(lengthOperation.Results[0]) ||
-                IntegerEncoding.ParseSignedIntegerRelaxed(conditional.Literal).IsOkOrNullable() is not { } length ||
-                IntegerEncoding.EncodeSignedInteger(length) != conditional.Literal)
-            {
-                return null;
-            }
-
-            return length;
-        }
-
-        static ImmutableArray<StackInstruction> FuseLocalGets(
-            IEnumerable<StackInstruction> instructions)
-        {
-            var result = ImmutableArray.CreateBuilder<StackInstruction>();
-            var indices = ImmutableArray.CreateBuilder<int>();
-
-            void Flush()
-            {
-                if (indices.Count > 0)
-                {
-                    result.Add(StackInstruction.Local_Get(indices.ToImmutable()));
-                    indices = ImmutableArray.CreateBuilder<int>();
-                }
-            }
-
-            foreach (var instruction in instructions)
-            {
-                if (instruction.Kind is StackInstructionKind.Local_Get)
-                {
-                    if (instruction.LocalIndices.IsDefaultOrEmpty)
-                        throw new InvalidOperationException("Local get without indices.");
-
-                    indices.AddRange(instruction.LocalIndices);
-                }
-                else
-                {
-                    Flush();
-                    result.Add(instruction);
-                }
-            }
-
-            Flush();
-            return result.ToImmutable();
-        }
-
-        static ImmutableArray<StackInstruction> FuseLocalStoresAndUpdates(
-            IEnumerable<StackInstruction> instructions)
-        {
-            var result = ImmutableArray.CreateBuilder<StackInstruction>();
-
-            foreach (var instruction in instructions)
-            {
-                if (result.Count > 0)
-                {
-                    var previous = result[^1];
-
-                    if (previous.Kind is StackInstructionKind.Local_Set &&
-                        instruction.Kind is StackInstructionKind.Pop)
-                    {
-                        result[^1] =
-                            previous with
-                            {
-                                PopCount = checked((previous.PopCount ?? 0) + (instruction.PopCount ?? 0))
-                            };
-
-                        continue;
-                    }
-
-                    if (previous.Kind is StackInstructionKind.Local_Set &&
-                        instruction.Kind is StackInstructionKind.Local_Set &&
-                        previous.PopCount == previous.LocalIndices.Length)
-                    {
-                        result[^1] =
-                            StackInstruction.Local_Set(
-                                [.. previous.LocalIndices, .. instruction.LocalIndices],
-                                previous.PopCount.Value + (instruction.PopCount ?? 0));
-
-                        continue;
-                    }
-
-                    if (previous.Kind is StackInstructionKind.Local_Get_Skip_Head_Const &&
-                        instruction.Kind is StackInstructionKind.Local_Get_Skip_Head_Const &&
-                        previous.SkipCount == instruction.SkipCount)
-                    {
-                        result[^1] =
-                            previous with
-                            {
-                                LocalIndices = [.. previous.LocalIndices, .. instruction.LocalIndices]
-                            };
-
-                        continue;
-                    }
-
-                    if (previous.Kind is StackInstructionKind.Local_Int_Add_Const &&
-                        instruction.Kind is StackInstructionKind.Local_Int_Add_Const &&
-                        previous.IntegerLiteral == instruction.IntegerLiteral)
-                    {
-                        result[^1] =
-                            previous with
-                            {
-                                LocalIndices = [.. previous.LocalIndices, .. instruction.LocalIndices]
-                            };
-
-                        continue;
-                    }
-                }
-
-                result.Add(instruction);
-            }
-
-            return result.ToImmutable();
-        }
-
         var loweredOperationsByBlock =
-            Blocks.ToDictionary(
-                block => block.Id,
-                block => FuseLocalStoresAndUpdates(
-                    FuseLocalGets(
-                        (FusedLengthComparison(block) is null ? block.Operations : block.Operations[..^1])
-                        .Select(operation => operation.Instruction))));
+            new Dictionary<PineBlockId, (ImmutableArray<StackInstruction> Operations, BigInteger? FusedLength)>();
 
         var firstInstructionIndexByBlock = new Dictionary<PineBlockId, int>();
+        var loweredOperations = ImmutableArray.CreateBuilder<StackInstruction>();
         var instructionCount = 0;
 
         foreach (var block in Blocks)
         {
+            var fusedLength = FusedLengthComparison(block);
+            var operations = block.Operations.AsSpan();
+
+            if (fusedLength is not null)
+            {
+                operations = operations[..^1];
+            }
+
+            for (var index = 0; index < operations.Length;)
+            {
+                var next = FusedOperationEnd(operations, index, out var popCount);
+                loweredOperations.Add(EmitFusedOperation(operations[index..next], popCount));
+                index = next;
+            }
+
+            loweredOperationsByBlock.Add(block.Id, (loweredOperations.ToImmutable(), fusedLength));
             firstInstructionIndexByBlock.Add(block.Id, instructionCount);
 
-            instructionCount +=
-                loweredOperationsByBlock[block.Id].Length + TerminatorInstructionCount(block.Terminator);
+            instructionCount += loweredOperations.Count + TerminatorInstructionCount(block.Terminator);
+            loweredOperations.Clear();
         }
 
         var result = ImmutableArray.CreateBuilder<StackInstruction>(instructionCount);
 
         foreach (var block in Blocks)
         {
-            var fusedLength = FusedLengthComparison(block);
+            var (operations, fusedLength) = loweredOperationsByBlock[block.Id];
 
-            foreach (var operation in loweredOperationsByBlock[block.Id])
+            foreach (var operation in operations)
             {
                 result.Add(operation);
             }

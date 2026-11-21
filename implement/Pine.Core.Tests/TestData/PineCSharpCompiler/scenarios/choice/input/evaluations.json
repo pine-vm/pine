@@ -1,0 +1,4 @@
+[
+  { "name": "populated", "environment": [4, 10, { "ValueRef": "true" }] },
+  { "name": "empty", "environment": [4, 10, { "ValueRef": "false" }] }
+]

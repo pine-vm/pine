@@ -1,0 +1,43 @@
+{
+  "entry": "main",
+  "expressions": {
+    "main": {
+      "Eval": [
+        { "Literal": [{ "EncodedExpression": "body" }] },
+        { "List": [[
+          { "Literal": [{ "ValueRef": "functions" }] },
+          { "EnvPath": [0] },
+          { "EnvPath": [1] },
+          { "EnvPath": [2] }
+        ]] }
+      ]
+    },
+    "length": { "Builtin": ["length", { "EnvPath": [2] }] },
+    "body": {
+      "Conditional": [
+        { "Builtin": ["int_is_sorted_asc", { "List": [[{ "ExpressionRef": "length" }, { "Literal": [0] }]] }] },
+        {
+          "Conditional": [
+            { "Builtin": ["int_is_sorted_asc", { "List": [[{ "EnvPath": [1] }, { "Literal": [0] }]] }] },
+            {
+              "Eval": [
+                { "EnvPath": [0, 0] },
+                { "List": [[
+                  { "EnvPath": [0] },
+                  { "Builtin": ["int_add", { "List": [[{ "EnvPath": [1] }, { "Literal": [-1] }]] }] },
+                  { "EnvPath": [2] },
+                  { "Builtin": ["int_add", { "List": [[{ "EnvPath": [3] }, { "ExpressionRef": "length" }]] }] }
+                ]] }
+              ]
+            },
+            { "EnvPath": [3] }
+          ]
+        },
+        { "Literal": [0] }
+      ]
+    }
+  },
+  "values": {
+    "functions": [{ "EncodedExpression": "body" }]
+  }
+}

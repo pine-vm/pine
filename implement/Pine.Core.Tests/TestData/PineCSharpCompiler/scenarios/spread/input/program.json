@@ -1,0 +1,7 @@
+{
+  "entry": "main",
+  "expressions": {
+    "main": { "List": [[{ "EnvPath": [0] }, { "EnvPath": [1] }]] }
+  },
+  "values": {}
+}

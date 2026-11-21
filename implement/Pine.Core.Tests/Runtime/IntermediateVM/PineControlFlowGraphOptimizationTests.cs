@@ -53,7 +53,8 @@ public class PineControlFlowGraphOptimizationTests
         .FuseLiteralLocalStores()
         .EliminateDeadLocalStores()
         .EliminateRedundantLocalWrites(parameters)
-        .EliminateDiscardedStackValues(parameters);
+        .EliminateDiscardedStackValues(parameters)
+        .HoistLoopInvariantStores(parameters);
 
     [Fact]
     public void Compact_local_sets_match_sparse_set_operations_without_aliasing_clones()
@@ -224,6 +225,54 @@ public class PineControlFlowGraphOptimizationTests
         Call(context, "GetPredecessors", changedEdges).Should().NotBeSameAs(predecessors);
         Count(context, "InitializationHits").Should().Be(2);
         Count(context, "LivenessHits").Should().Be(1);
+    }
+
+    [Fact]
+    public void Loop_analysis_reuses_immutable_topology_but_invalidates_changed_edges()
+    {
+        var graph =
+            PineControlFlowGraph.FromFragment(
+                Ops(StackInstruction.Local_Get(0))
+                .Append(
+                    new PineControlFlowNode.Conditional(
+                        PineKernelValues.TrueValue,
+                        Ops().Append(PineControlFlowNode.JumpToEntry.Instance),
+                        Ops(StackInstruction.Local_Get(1)))));
+
+        var context = CreatePrivate("OptimizationContext");
+        var loops = Call(context, "GetLoops", graph);
+        Call(context, "GetLoops", graph).Should().BeSameAs(loops);
+        var entry = graph.Blocks[graph.Entry.Value];
+
+        var changedOperation =
+            graph with
+            {
+                Blocks =
+                graph.Blocks.SetItem(
+                    entry.Id.Value,
+                    entry with
+                    {
+                        Operations =
+                        entry.Operations.SetItem(
+                            0,
+                            entry.Operations[0] with { Instruction = StackInstruction.Local_Get(1) })
+                    })
+            };
+
+        Call(context, "GetLoops", changedOperation).Should().BeSameAs(loops);
+        var branch = (PineControlFlowTerminator.ConditionalJump)entry.Terminator;
+
+        var changedEdge =
+            graph with
+            {
+                Blocks =
+                graph.Blocks.SetItem(
+                    entry.Id.Value,
+                    entry with { Terminator = branch with { FallThrough = branch.Branch } })
+            };
+
+        Call(context, "GetLoops", changedEdge).Should().NotBeSameAs(loops);
+        ((PineControlFlowLoopAnalysis)Call(context, "GetLoops", changedEdge)!).HasCycles.Should().BeFalse();
     }
 
     [Fact]

@@ -1,0 +1,61 @@
+#nullable enable
+using PineValueInProcess = global::Pine.Core.Internal.PineValueInProcess;
+using NativeValue = global::Pine.Core.DotNet.PineCSharpValue;
+using Return_2 = (global::Pine.Core.Internal.PineValueInProcess item0, global::Pine.Core.Internal.PineValueInProcess item1);
+
+public static class CompiledPine
+{
+    public static PineValueInProcess Expr_0671efbf6c_dispatch(PineValueInProcess environment)
+    {
+        PineValueInProcess result_0 =
+            Expr_0671efbf6c_constraint_generic(
+                environment.GetElementAt(0),
+                environment.GetElementAt(1),
+                environment.GetElementAt(2));
+
+        return result_0;
+    }
+
+    /// <summary>Function 0; unconstrained environment. Arguments: 0 = [0]; 1 = [1]; 2 = [2].</summary>
+    public static PineValueInProcess Expr_0671efbf6c_constraint_generic(
+        PineValueInProcess argument_0,
+        PineValueInProcess argument_1,
+        PineValueInProcess argument_2)
+    {
+        PineValueInProcess state_0 = argument_0;
+        PineValueInProcess value_0_5 = PineValueInProcess.EmptyList;
+        PineValueInProcess value_0_6 = PineValueInProcess.EmptyList;
+        PineValueInProcess state_1 = argument_1;
+        PineValueInProcess state_2 = argument_2;
+        Return_2 call_0_0 = Expr_5a24b10275_constraint_424840098c(state_0, state_1, state_2);
+        value_0_5 = call_0_0.item0;
+        value_0_6 = call_0_0.item1;
+        NativeValue value_0_9 = NativeValue.Add(NativeValue.FromValue(value_0_5), NativeValue.FromValue(value_0_6));
+        return value_0_9.ToPineValue();
+    }
+
+    /// <summary>Function 1; specialized environment. Arguments: 0 = [1]; 1 = [2]; 2 = [3].</summary>
+    public static Return_2 Expr_5a24b10275_constraint_424840098c(
+        PineValueInProcess argument_0,
+        PineValueInProcess argument_1,
+        PineValueInProcess argument_2)
+    {
+        NativeValue state_0 = NativeValue.FromValue(argument_0);
+
+        while (true)
+        {
+            NativeValue value_1_1 =
+                NativeValue.FromBoolean(NativeValue.LessThanOrEqual(state_0, NativeValue.FromInt64(0L)));
+
+            if (value_1_1.IsTrue())
+            {
+                PineValueInProcess state_1 = argument_1;
+                PineValueInProcess state_2 = argument_2;
+                return (state_1, state_2);
+            }
+
+            state_0 = NativeValue.Add(state_0, NativeValue.FromInt64(-1L));
+            continue;
+        }
+    }
+}

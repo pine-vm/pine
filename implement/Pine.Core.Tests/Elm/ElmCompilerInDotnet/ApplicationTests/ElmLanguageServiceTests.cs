@@ -1894,7 +1894,7 @@ public class ElmLanguageServiceTests
             BuildListCount: 4_530
             BuildListItemCount: 22_100
             LoopIterationCount: 1_939
-            InstructionCount: 104_842
+            InstructionCount: 104_841
             DeferredTemplateValueAllocationCount: 0
             TemplateDirectInvocationCount: 41
             DeferredTemplateValueMaterializationCount: 0

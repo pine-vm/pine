@@ -1,0 +1,16 @@
+{
+  "generic-and-specialized": {
+    "enableCancellation": false,
+    "specializations": [[{ "path": [0], "value": 4 }]]
+  },
+  "specialized-only": {
+    "enableCancellation": false,
+    "includeGenericEntry": false,
+    "specializations": [[{ "path": [0], "value": 4 }]]
+  },
+  "namespaced": {
+    "enableCancellation": true,
+    "containerNamespace": "Pine.Generated.Refinement1",
+    "specializations": [[{ "path": [0], "value": 4 }]]
+  }
+}

@@ -1,10 +1,104 @@
 using System;
 using System.Collections.Immutable;
+using System.Linq;
 
 namespace Pine.Core.Runtime.IntermediateVM;
 
 public sealed partial record PineControlFlowGraph
 {
+    private int MaximumVirtualValueId()
+    {
+        var maximum = -1;
+
+        void Include(ImmutableArray<PineVirtualValueId> values)
+        {
+            foreach (var value in values)
+                maximum = Math.Max(maximum, value.Value);
+        }
+
+        foreach (var block in Blocks)
+        {
+            Include(block.Parameters);
+
+            foreach (var operation in block.Operations)
+            {
+                Include(operation.Inputs);
+                Include(operation.Results);
+            }
+
+            foreach (var (_, arguments) in Successors(block.Terminator))
+                Include(arguments);
+
+            switch (block.Terminator)
+            {
+                case PineControlFlowTerminator.ValueMap map:
+                    Include([map.Input, map.Result]);
+                    break;
+
+                case PineControlFlowTerminator.Invoke invoke:
+                    Include(invoke.Inputs);
+                    break;
+
+                case PineControlFlowTerminator.Return:
+                case PineControlFlowTerminator.Jump:
+                case PineControlFlowTerminator.ConditionalJump:
+                case PineControlFlowTerminator.Switch:
+                case PineControlFlowTerminator.TailInvoke:
+                    break;
+
+                default:
+                    throw new NotImplementedException(
+                        "MaximumVirtualValueId does not handle terminator variant: " + block.Terminator.GetType().Name);
+            }
+        }
+
+        return maximum;
+    }
+
+    private static PineControlFlowTerminator RewriteTerminatorInputs(
+        PineControlFlowTerminator terminator, Func<PineVirtualValueId, PineVirtualValueId> rewrite)
+    {
+        ImmutableArray<PineVirtualValueId> Map(ImmutableArray<PineVirtualValueId> values) =>
+            [
+            .. values.Select(rewrite)
+            ];
+
+        return terminator switch
+        {
+            PineControlFlowTerminator.Return returned => returned,
+            PineControlFlowTerminator.Jump jump => jump with { Arguments = Map(jump.Arguments) },
+
+            PineControlFlowTerminator.ConditionalJump branch =>
+            branch with
+            {
+                BranchArguments = Map(branch.BranchArguments),
+                FallThroughArguments = Map(branch.FallThroughArguments)
+            },
+
+            PineControlFlowTerminator.Switch choice => choice with { Arguments = Map(choice.Arguments) },
+
+            PineControlFlowTerminator.Invoke invoke =>
+            invoke with
+            {
+                Inputs = Map(invoke.Inputs),
+                Arguments = Map(invoke.Arguments)
+            },
+
+            PineControlFlowTerminator.ValueMap map =>
+            map with
+            {
+                Input = rewrite(map.Input),
+                Arguments = Map(map.Arguments)
+            },
+
+            PineControlFlowTerminator.TailInvoke tail => tail,
+
+            _ =>
+            throw new NotImplementedException(
+                "RewriteTerminatorInputs does not handle terminator variant: " + terminator.GetType().Name)
+        };
+    }
+
     private ImmutableArray<PineBasicBlock> RewriteBlocks(Func<PineBasicBlock, PineBasicBlock> rewrite)
     {
         ImmutableArray<PineBasicBlock>.Builder? changed = null;

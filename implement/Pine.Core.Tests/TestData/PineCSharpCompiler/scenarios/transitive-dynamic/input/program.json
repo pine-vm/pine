@@ -1,0 +1,21 @@
+{
+  "entry": "main",
+  "expressions": {
+    "main": {
+      "Builtin": ["int_add", { "List": [[
+        { "Builtin": ["head", { "Builtin": ["skip", { "List": [[
+          { "Literal": [1] },
+          { "Eval": [{ "Literal": [{ "EncodedExpression": "dynamic-body" }] }, { "Environment": [] }] }
+        ]] }] }] },
+        { "Literal": [2] }
+      ]] }]
+    },
+    "dynamic-body": {
+      "List": [[
+        { "Eval": [{ "EnvPath": [0] }, { "EnvPath": [1] }] },
+        { "Literal": [5] }
+      ]]
+    }
+  },
+  "values": {}
+}

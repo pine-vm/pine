@@ -1,0 +1,39 @@
+entry b0
+loop b1 preheader b0
+  blocks: b1, b2, b3
+  backedges: b3 -> b1
+  exits: b1 -> b6, b2 -> b4
+
+block b0():
+  v0 = Local_Get ([ 1 ])
+  v1 = Length <- v0
+  Local_Set ([ 2 ])
+  jump b1(v1)
+
+block b1(v9) [loop b1]:
+  v2 = Int_Less_Than_Or_Equal_Const (0) <- v9
+  if v2 == Blob [1] (0x04 | hash 0x06db1cc6) then b6() else b2()
+
+block b2() [loop b1]:
+  v3 = Local_Get ([ 0 ])
+  v4 = Int_Less_Than_Or_Equal_Const (0) <- v3
+  if v4 == Blob [1] (0x04 | hash 0x06db1cc6) then b4() else b3()
+
+block b3() [loop b1]:
+  Local_Int_Add_Const ([ 0 ], -1)
+  v10 = Local_Get ([ 2 ])
+  jump b1(v10)
+
+block b4():
+  v5 = Local_Get ([ 2 ])
+  jump b5(v5)
+
+block b5(v6):
+  jump b7(v6)
+
+block b6():
+  v7 = Local_Get ([ 2 ])
+  jump b7(v7)
+
+block b7(v8):
+  return v8

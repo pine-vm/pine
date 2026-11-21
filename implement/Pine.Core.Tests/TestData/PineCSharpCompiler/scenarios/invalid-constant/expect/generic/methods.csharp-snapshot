@@ -1,0 +1,17 @@
+#nullable enable
+using PineValueInProcess = global::Pine.Core.Internal.PineValueInProcess;
+
+public static class CompiledPine
+{
+    public static PineValueInProcess Expr_e331d812cd_dispatch(PineValueInProcess environment)
+    {
+        PineValueInProcess result_0 = Expr_e331d812cd_constraint_generic(environment);
+        return result_0;
+    }
+
+    /// <summary>Function 0; unconstrained environment. Arguments: 0 = [].</summary>
+    public static PineValueInProcess Expr_e331d812cd_constraint_generic(PineValueInProcess argument_0)
+    {
+        throw new global::Pine.Core.CodeAnalysis.ParseExpressionException("Expected a nonempty expression list.");
+    }
+}

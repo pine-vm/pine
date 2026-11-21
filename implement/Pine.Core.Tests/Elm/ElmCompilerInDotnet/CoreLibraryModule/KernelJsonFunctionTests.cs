@@ -1866,7 +1866,7 @@ public partial class KernelJsonFunctionTests
             BuildListCount: 52
             BuildListItemCount: 143
             LoopIterationCount: 16
-            InstructionCount: 1_298
+            InstructionCount: 1_296
             DeferredTemplateValueAllocationCount: 0
             TemplateDirectInvocationCount: 3
             DeferredTemplateValueMaterializationCount: 0

@@ -1,0 +1,5 @@
+[
+  { "name": "matching", "environment": [4, 10] },
+  { "name": "mismatching", "environment": [8, 2] },
+  { "name": "missing-path", "environment": [] }
+]

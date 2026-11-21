@@ -1,0 +1,17 @@
+{
+  "complexity": {
+    "hasLoops": false,
+    "hasRecursion": false,
+    "hasMutualRecursion": false
+  },
+  "dispatchMethodName": "Expr_fb50be7b95_dispatch",
+  "methods": [
+    {
+      "name": "Expr_fb50be7b95_constraint_generic",
+      "parameterPaths": [
+        []
+      ],
+      "returnSlotCount": 1
+    }
+  ]
+}

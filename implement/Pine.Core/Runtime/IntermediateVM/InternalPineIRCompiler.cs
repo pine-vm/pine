@@ -96,7 +96,8 @@ internal class InternalPineIRCompiler
         bool EnableDirectInvocation,
         Func<PineValue, bool>? SkipDirectInvocation,
         Func<Expression, PineValue, Expression, DirectInvocation?>? ResolveStaticInvocation = null,
-        bool BindReturnOnly = false)
+        bool BindReturnOnly = false,
+        bool RequireStaticClosure = false)
     {
         /// <summary>
         /// Creates the initial compilation context for a function with the given parameters.
@@ -166,7 +167,8 @@ internal class InternalPineIRCompiler
         bool enableDirectInvocation = true,
         Func<PineValue, bool>? skipDirectInvocation = null,
         Func<Expression, PineValue, Expression, DirectInvocation?>? resolveStaticInvocation = null,
-        ReturnValueLayout? returnLayout = null)
+        ReturnValueLayout? returnLayout = null,
+        bool requireStaticClosure = false)
     {
         var prior =
             new NodeCompilationResult(
@@ -192,6 +194,7 @@ internal class InternalPineIRCompiler
                     skipDirectInvocation) with
                 {
                     ResolveStaticInvocation = resolveStaticInvocation,
+                    RequireStaticClosure = requireStaticClosure,
                     TailLoop =
                     enableTailRecursionOptimization
                     ?
@@ -1322,6 +1325,33 @@ internal class InternalPineIRCompiler
                 prior with { Fragment = prior.Fragment.Append(binding.Layout.Reconstruct(binding.FirstLocal)) };
         }
 
+        if (context.RequireStaticClosure && evalExpr.Encoded is Expression.List && evalExpr.Encoded.EvalCount == 0 &&
+            ExpressionReduction.TryDecodeApplicationOfConstructedEncoding(
+                evalExpr.Encoded, evalExpr.Environment, parseCache) is
+            Expression.Eval { Encoded: Expression.Literal } decodedCall)
+        {
+            var (bound, _) =
+                CompileExpressionTransitiveAsLocal(
+                    evalExpr.Environment,
+                    context with { IsTailPosition = false },
+                    prior,
+                    parseCache);
+
+            var compiled =
+                CompileEval(
+                    decodedCall,
+                    context with { BindReturnOnly = bindReturnOnly },
+                    bound.AppendInstruction(StackInstruction.Pop),
+                    parseCache);
+
+            return
+                compiled.ReturnValues.TryGetValue(decodedCall, out var decodedBinding)
+                ?
+                compiled with { ReturnValues = compiled.ReturnValues.SetItem(evalExpr, decodedBinding) }
+                :
+                compiled;
+        }
+
         if (context.IsTailPosition &&
             context.TailLoop is { } tailLoop)
         {
@@ -1434,7 +1464,8 @@ internal class InternalPineIRCompiler
                 !(context.SkipDirectInvocation?.Invoke(encodedValue) ?? false) &&
                 ExpressionTemplatePlan.TryParseTemplate(
                     encodedValue,
-                    parseCache) is { } templatePlan)
+                    parseCache) is { } templatePlan &&
+                (!context.RequireStaticClosure || templatePlan.EnvironmentCount > 1))
             {
                 return
                     prior

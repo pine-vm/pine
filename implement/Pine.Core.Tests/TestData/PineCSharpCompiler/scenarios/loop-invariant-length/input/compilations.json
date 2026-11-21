@@ -1,0 +1,4 @@
+{
+  "without-cancellation": { "enableCancellation": false },
+  "with-cancellation": { "enableCancellation": true }
+}

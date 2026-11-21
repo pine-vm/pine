@@ -1,0 +1,82 @@
+#nullable enable
+using PineValueInProcess = global::Pine.Core.Internal.PineValueInProcess;
+using NativeValue = global::Pine.Core.DotNet.PineCSharpValue;
+
+public static class CompiledPine
+{
+    public static PineValueInProcess Expr_db88847ce4_dispatch(PineValueInProcess environment)
+    {
+        PineValueInProcess result_0 =
+            Expr_a0c121d063_constraint_fdf930c12f(environment.GetElementAt(0), environment.GetElementAt(1));
+
+        return result_0;
+    }
+
+    /// <summary>Function 0; unconstrained environment. Arguments: 0 = [0]; 1 = [1].</summary>
+    public static PineValueInProcess Expr_db88847ce4_constraint_generic(
+        PineValueInProcess argument_0,
+        PineValueInProcess argument_1)
+    {
+        return Expr_a0c121d063_constraint_fdf930c12f(argument_0, argument_1);
+    }
+
+    /// <summary>Function 1; specialized environment. Arguments: 0 = [1]; 1 = [2].</summary>
+    public static PineValueInProcess Expr_a0c121d063_constraint_fdf930c12f(
+        PineValueInProcess argument_0,
+        PineValueInProcess argument_1)
+    {
+        PineValueInProcess state_0 = argument_0;
+        PineValueInProcess state_1 = argument_1;
+        PineValueInProcess value_1_7 = PineValueInProcess.EmptyList;
+
+        NativeValue value_1_1 =
+            NativeValue.FromBoolean(
+                NativeValue.LessThanOrEqual(NativeValue.FromValue(state_0), NativeValue.FromInt64(0L)));
+
+        if (value_1_1.IsTrue())
+        {
+            return state_1;
+        }
+
+        PineValueInProcess value_1_3 =
+            (NativeValue.Add(NativeValue.FromValue(state_0), NativeValue.FromInt64(-1L))).ToPineValue();
+
+        PineValueInProcess value_1_5 =
+            (NativeValue.Add(NativeValue.FromValue(state_1), NativeValue.FromInt64(1L))).ToPineValue();
+
+        PineValueInProcess call_1_1 = Expr_e808cf0dee_constraint_fdf930c12f(value_1_3, value_1_5);
+        value_1_7 = call_1_1;
+        NativeValue value_1_8 = NativeValue.Add(NativeValue.FromValue(value_1_7), NativeValue.FromInt64(3L));
+        return value_1_8.ToPineValue();
+    }
+
+    /// <summary>Function 2; specialized environment. Arguments: 0 = [1]; 1 = [2].</summary>
+    public static PineValueInProcess Expr_e808cf0dee_constraint_fdf930c12f(
+        PineValueInProcess argument_0,
+        PineValueInProcess argument_1)
+    {
+        PineValueInProcess state_0 = argument_0;
+        PineValueInProcess state_1 = argument_1;
+        PineValueInProcess value_2_7 = PineValueInProcess.EmptyList;
+
+        NativeValue value_2_1 =
+            NativeValue.FromBoolean(
+                NativeValue.LessThanOrEqual(NativeValue.FromValue(state_0), NativeValue.FromInt64(0L)));
+
+        if (value_2_1.IsTrue())
+        {
+            return state_1;
+        }
+
+        PineValueInProcess value_2_3 =
+            (NativeValue.Add(NativeValue.FromValue(state_0), NativeValue.FromInt64(-1L))).ToPineValue();
+
+        PineValueInProcess value_2_5 =
+            (NativeValue.Add(NativeValue.FromValue(state_1), NativeValue.FromInt64(2L))).ToPineValue();
+
+        PineValueInProcess call_2_1 = Expr_a0c121d063_constraint_fdf930c12f(value_2_3, value_2_5);
+        value_2_7 = call_2_1;
+        NativeValue value_2_8 = NativeValue.Add(NativeValue.FromValue(value_2_7), NativeValue.FromInt64(3L));
+        return value_2_8.ToPineValue();
+    }
+}

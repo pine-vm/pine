@@ -1,0 +1,43 @@
+{
+  "complexity": {
+    "hasLoops": false,
+    "hasRecursion": false,
+    "hasMutualRecursion": false
+  },
+  "dispatchMethodName": "Expr_13779c60de_dispatch",
+  "methods": [
+    {
+      "name": "Expr_13779c60de_constraint_generic",
+      "parameterPaths": [
+        [
+          0
+        ],
+        [
+          1
+        ],
+        [
+          2
+        ],
+        [
+          3
+        ],
+        [
+          4
+        ],
+        [
+          5
+        ],
+        [
+          6
+        ],
+        [
+          7
+        ],
+        [
+          8
+        ]
+      ],
+      "returnSlotCount": 9
+    }
+  ]
+}

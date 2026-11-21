@@ -1,0 +1,40 @@
+#nullable enable
+using PineValueInProcess = global::Pine.Core.Internal.PineValueInProcess;
+using Return_9 = (global::Pine.Core.Internal.PineValueInProcess item0, global::Pine.Core.Internal.PineValueInProcess item1, global::Pine.Core.Internal.PineValueInProcess item2, global::Pine.Core.Internal.PineValueInProcess item3, global::Pine.Core.Internal.PineValueInProcess item4, global::Pine.Core.Internal.PineValueInProcess item5, global::Pine.Core.Internal.PineValueInProcess item6, global::Pine.Core.Internal.PineValueInProcess item7, global::Pine.Core.Internal.PineValueInProcess item8);
+
+public static class CompiledPine
+{
+    public static PineValueInProcess Expr_13779c60de_dispatch(PineValueInProcess environment)
+    {
+        Return_9 result_0 =
+            Expr_13779c60de_constraint_generic(
+                environment.GetElementAt(0),
+                environment.GetElementAt(1),
+                environment.GetElementAt(2),
+                environment.GetElementAt(3),
+                environment.GetElementAt(4),
+                environment.GetElementAt(5),
+                environment.GetElementAt(6),
+                environment.GetElementAt(7),
+                environment.GetElementAt(8));
+
+        return
+            PineValueInProcess.CreateList(
+                new PineValueInProcess[] { result_0.item0, result_0.item1, result_0.item2, result_0.item3, result_0.item4, result_0.item5, result_0.item6, result_0.item7, result_0.item8 });
+    }
+
+    /// <summary>Function 0; unconstrained environment. Arguments: 0 = [0]; 1 = [1]; 2 = [2]; 3 = [3]; 4 = [4]; 5 = [5]; 6 = [6]; 7 = [7]; 8 = [8].</summary>
+    public static Return_9 Expr_13779c60de_constraint_generic(
+        PineValueInProcess argument_0,
+        PineValueInProcess argument_1,
+        PineValueInProcess argument_2,
+        PineValueInProcess argument_3,
+        PineValueInProcess argument_4,
+        PineValueInProcess argument_5,
+        PineValueInProcess argument_6,
+        PineValueInProcess argument_7,
+        PineValueInProcess argument_8)
+    {
+        return (argument_0, argument_1, argument_2, argument_3, argument_4, argument_5, argument_6, argument_7, argument_8);
+    }
+}

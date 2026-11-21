@@ -1,0 +1,9 @@
+{
+  "entry": "main",
+  "expressions": {
+    "main": { "Literal": [{ "ValueRef": "literal" }] }
+  },
+  "values": {
+    "literal": [12345, { "AsBase64": "CAkK" }]
+  }
+}

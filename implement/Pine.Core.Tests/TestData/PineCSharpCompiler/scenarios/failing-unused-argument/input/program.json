@@ -1,0 +1,16 @@
+{
+  "entry": "main",
+  "expressions": {
+    "main": {
+      "Eval": [
+        { "Literal": [{ "EncodedExpression": "callee" }] },
+        { "List": [[
+          { "Literal": [42] },
+          { "Eval": [{ "Literal": [[]] }, { "Environment": [] }] }
+        ]] }
+      ]
+    },
+    "callee": { "EnvPath": [0] }
+  },
+  "values": {}
+}

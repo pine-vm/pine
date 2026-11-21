@@ -1,0 +1,13 @@
+{
+  "kind": "FunctionLimit",
+  "instruction": "Invoke_StackFrame_Const",
+  "block": 0,
+  "operationIndex": null,
+  "path": [
+    {
+      "function": 0,
+      "callerBlock": null,
+      "rootIndex": 0
+    }
+  ]
+}

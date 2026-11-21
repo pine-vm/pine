@@ -1,0 +1,13 @@
+{
+  "kind": "DynamicEvaluation",
+  "instruction": "Eval_Binary",
+  "block": 1,
+  "operationIndex": null,
+  "path": [
+    {
+      "function": 0,
+      "callerBlock": null,
+      "rootIndex": 0
+    }
+  ]
+}

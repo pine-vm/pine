@@ -18,12 +18,17 @@ internal static partial class InternalExpressionCompilation
         Expression PreparedExpression,
         StaticFunctionInterface Parameters,
         ReturnValueLayout Returns,
+        Func<PineControlFlowGraph> CreateGraph,
         Lazy<StackFrameInstructions> Instructions);
+
+    internal sealed record StaticCodePaths(
+        IReadOnlyList<IReadOnlyList<int>> Direct,
+        IReadOnlyList<IReadOnlyList<int>> Construction);
 
     internal sealed class StaticDispatchCache
     {
         public readonly ConditionalWeakTable<ExpressionTemplatePlan, Lazy<StackFrameInstructions?>>
-            Templates = new();
+            Templates = [];
 
         public readonly ConcurrentDictionary<
             (Expression, PineValueClass?), Lazy<StaticFunction>>
@@ -31,7 +36,7 @@ internal static partial class InternalExpressionCompilation
 
         public readonly ConcurrentDictionary<PineValue, bool> ContainsCode = new();
 
-        public readonly ConcurrentDictionary<Expression, IReadOnlyList<IReadOnlyList<int>>> CodePaths = new();
+        public readonly ConcurrentDictionary<Expression, StaticCodePaths> CodePaths = new();
 
         public readonly ConcurrentDictionary<(Expression, PineValueClass?), Expression> Prepared = new();
 
@@ -52,7 +57,8 @@ internal static partial class InternalExpressionCompilation
         bool enableDirectInvocation,
         Func<PineValue, bool>? skipDirectInvocation,
         IReadOnlyDictionary<Expression, IReadOnlyList<PineValueClass>>? compilationEnvClasses,
-        StaticDispatchCache? sharedCache = null)
+        StaticDispatchCache? sharedCache = null,
+        bool requireStaticClosure = false)
     {
         private readonly ConcurrentDictionary<
             (Expression, PineValueClass?), Lazy<StaticFunction>>
@@ -60,7 +66,7 @@ internal static partial class InternalExpressionCompilation
 
         private readonly ConcurrentDictionary<PineValue, bool> _containsCode = sharedCache?.ContainsCode ?? new();
 
-        private readonly ConcurrentDictionary<Expression, IReadOnlyList<IReadOnlyList<int>>> _codePaths =
+        private readonly ConcurrentDictionary<Expression, StaticCodePaths> _codePaths =
             sharedCache?.CodePaths ?? new();
 
         private readonly ConcurrentDictionary<(Expression, PineValueClass), byte> _inferredFunctions = new();
@@ -165,34 +171,40 @@ internal static partial class InternalExpressionCompilation
                         ?
                         null
                         :
-                        PrepareBody(callee, InferConstraint(callee, path => KnownValue(path, environment)))));
+                        PrepareBody(
+                            callee,
+                            InferConstraint(callee, path => KnownValue(path, environment, constraint)))));
+
+            PineControlFlowGraph CreateGraph() =>
+                OptimizedControlFlowGraphFromExpression(
+                    expression,
+                    constraint,
+                    parameters,
+                    parseCache,
+                    disableReduction,
+                    enableTailRecursionOptimization,
+                    skipInlining,
+                    reducedExpressionCache,
+                    pathMaxLowExclusive,
+                    pathMaxHighInclusive,
+                    disableGenericApplicationChainConsolidation,
+                    enableDirectInvocation,
+                    skipDirectInvocation,
+                    (callee, encoded, environment) => ResolveInvocation(callee, encoded, environment, constraint),
+                    prepared,
+                    returns,
+                    requireStaticClosure);
 
             return
                 new(
                     prepared,
                     parameters,
                     returns,
+                    CreateGraph,
                     new Lazy<StackFrameInstructions>(
-                        () =>
-                        new StackFrameInstructions(
+                        () => new StackFrameInstructions(
                             parameters,
-                            InstructionsFromExpressionTransitive(
-                                expression,
-                                constraint,
-                                parameters,
-                                parseCache,
-                                disableReduction,
-                                enableTailRecursionOptimization,
-                                skipInlining,
-                                reducedExpressionCache,
-                                pathMaxLowExclusive,
-                                pathMaxHighInclusive,
-                                disableGenericApplicationChainConsolidation,
-                                enableDirectInvocation,
-                                skipDirectInvocation,
-                                ResolveInvocation,
-                                prepared,
-                                returns),
+                            CreateGraph().LowerToStackInstructions(),
                             constraint,
                             returns)));
         }
@@ -200,11 +212,11 @@ internal static partial class InternalExpressionCompilation
         private DirectInvocation? ResolveInvocation(
             Expression expression,
             PineValue encoded,
-            Expression environment)
+            Expression environment,
+            PineValueClass? callerConstraint)
         {
-            var constraint = InferConstraint(expression, path => KnownValue(path, environment));
-
-            // Only code-bearing constants are inferred, not changing counters or captures.
+            var constraint = InferConstraint(expression, path => KnownValue(path, environment, callerConstraint));
+            // Constants are retained only when needed for code identity or construction.
             // Bound unusual programs that construct an unending sequence of different code values.
             if (constraint is not null && !_functions.ContainsKey((expression, constraint)))
             {
@@ -252,29 +264,42 @@ internal static partial class InternalExpressionCompilation
             var codePaths =
                 _codePaths.GetOrAdd(
                     expression,
-                    static body =>
-                    {
-                        var seen = new HashSet<Expression>();
+                    AnalyzeStaticCodePaths);
 
-                        return
-                            [
-                            .. Expression.EnumerateSelfAndDescendants(body, skipDescendants: item => !seen.Add(item))
-                            .OfType<Expression.Eval>()
-                            .Select(eval => ExpressionAnalysis.TryParseExprAsPathInEnv(eval.Encoded))
-                            .OfType<IReadOnlyList<int>>()
-                            ];
-                    });
-
-            foreach (var path in StaticFunctionInterface.FromExpression(expression).ParamsPaths)
+            if (!requireStaticClosure)
             {
-                // A whole-environment fact would also freeze unrelated data and recursive counters.
-                if (path.Count > 0 &&
-                    codePaths.Any(
-                        codePath =>
-                        codePath.Count >= path.Count && codePath.Take(path.Count).SequenceEqual(path)) &&
-                    knownValue(path) is { } value && ContainsCode(value))
+                foreach (var path in StaticFunctionInterface.FromExpression(expression).ParamsPaths)
                 {
-                    knownItems[path] = value;
+                    if (path.Count > 0 &&
+                        codePaths.Direct.Any(
+                            codePath => codePath.Count >= path.Count && codePath.Take(path.Count).SequenceEqual(path)) &&
+                        knownValue(path) is { } value && ContainsCode(value))
+                    {
+                        knownItems[path] = value;
+                    }
+                }
+            }
+            else
+            {
+                foreach (var codePath in codePaths.Direct.Concat(codePaths.Construction))
+                {
+                    for (var length = 1; length <= codePath.Count; length++)
+                    {
+                        IReadOnlyList<int> path = [.. codePath.Take(length)];
+
+                        if (knownItems.ContainsKey(path))
+                            break;
+
+                        if (knownValue(path) is not { } value ||
+                            !ContainsCode(value) &&
+                            !codePaths.Construction.Any(dependency => dependency.SequenceEqual(path)))
+                        {
+                            continue;
+                        }
+
+                        knownItems[path] = value;
+                        break;
+                    }
                 }
             }
 
@@ -284,9 +309,109 @@ internal static partial class InternalExpressionCompilation
             return PineValueClass.Create([.. knownItems]);
         }
 
-        private PineValue? KnownValue(IReadOnlyList<int> path, Expression environment)
+        private StaticCodePaths AnalyzeStaticCodePaths(Expression root)
+        {
+            var paths =
+                new Dictionary<Expression, (HashSet<IReadOnlyList<int>> Direct, HashSet<IReadOnlyList<int>> Construction)>();
+
+            var calls = new Dictionary<Expression, List<(Expression Target, Expression Environment)>>();
+            var pending = new Queue<Expression>();
+            pending.Enqueue(root);
+
+            while (pending.TryDequeue(out var body))
+            {
+                if (paths.ContainsKey(body))
+                    continue;
+
+                var direct = new HashSet<IReadOnlyList<int>>(IntPathEqualityComparer.Instance);
+                var construction = new HashSet<IReadOnlyList<int>>(IntPathEqualityComparer.Instance);
+                paths.Add(body, (direct, construction));
+                var staticCalls = new List<(Expression Target, Expression Environment)>();
+                calls.Add(body, staticCalls);
+                var seen = new HashSet<Expression>();
+
+                foreach (var eval in Expression.EnumerateSelfAndDescendants(body, skipDescendants: item => !seen.Add(item))
+                    .OfType<Expression.Eval>())
+                {
+                    if (ExpressionAnalysis.TryParseExprAsPathInEnv(eval.Encoded) is { } path)
+                        direct.Add(path);
+
+                    else if (eval.Encoded.EvalCount == 0)
+                    {
+                        foreach (var dependency in Expression.EnumerateSelfAndDescendants(eval.Encoded)
+                            .Select(ExpressionAnalysis.TryParseExprAsPathInEnv).OfType<IReadOnlyList<int>>())
+                        {
+                            construction.Add(dependency);
+                        }
+                    }
+
+                    if (requireStaticClosure && eval.Encoded.EvalCount == 0 && !eval.Encoded.ReferencesEnvironment &&
+                        ExpressionReduction.TryEvalIndependent(eval.Encoded, parseCache).Value is { } encoded &&
+                        parseCache.ParseInternalExpression(encoded).IsOkOrNull() is { } target)
+                    {
+                        staticCalls.Add((target, eval.Environment));
+
+                        if (!paths.ContainsKey(target) && paths.Count + pending.Count < 256)
+                            pending.Enqueue(target);
+                    }
+                }
+            }
+
+            bool changed;
+
+            do
+            {
+                changed = false;
+
+                foreach (var (body, staticCalls) in calls)
+                {
+                    foreach (var (target, environment) in staticCalls)
+                    {
+                        if (!paths.TryGetValue(target, out var required))
+                            continue;
+
+                        foreach (var (dependencies, destination) in new[]
+                        {
+                            (required.Direct, paths[body].Direct),
+                            (required.Construction, paths[body].Construction)
+                        })
+                        {
+                            foreach (var dependency in dependencies.ToArray())
+                            {
+                                if (destination.Count >= 1024 || dependency.Count >= 64)
+                                    continue;
+
+                                var argument = InternalPineIRCompiler.BuildArgument(dependency, environment);
+
+                                if (ExpressionAnalysis.TryParseExprAsPathInEnv(argument) is { } mapped &&
+                                    mapped.Count < 64)
+                                {
+                                    changed |= destination.Add(mapped);
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            while (changed);
+
+            return
+                new(
+                    [.. paths[root].Direct.Order(IntPathComparer.Instance)],
+                    [.. paths[root].Construction.Order(IntPathComparer.Instance)]);
+        }
+
+        private PineValue? KnownValue(
+            IReadOnlyList<int> path, Expression environment, PineValueClass? callerConstraint = null)
         {
             var argument = InternalPineIRCompiler.BuildArgument(path, environment);
+
+            if (callerConstraint is not null &&
+                ExpressionAnalysis.TryParseExprAsPathInEnv(argument) is { } mapped &&
+                callerConstraint.TryGetValue(mapped) is { } constrained)
+            {
+                return constrained;
+            }
 
             if (argument.ReferencesEnvironment || argument.EvalCount > 0)
                 return null;

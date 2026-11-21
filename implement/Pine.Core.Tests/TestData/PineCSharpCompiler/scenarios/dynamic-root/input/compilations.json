@@ -1,0 +1,7 @@
+{
+  "generic": { "enableCancellation": false },
+  "specialized-only": {
+    "includeGenericEntry": false,
+    "specializations": [[{ "path": [0], "value": { "ValueRef": "target-code" } }]]
+  }
+}

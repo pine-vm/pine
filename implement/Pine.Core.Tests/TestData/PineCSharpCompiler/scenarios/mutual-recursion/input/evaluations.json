@@ -1,0 +1,4 @@
+[
+  { "name": "small", "environment": [4, 10] },
+  { "name": "base-case", "environment": [0, 10] }
+]

@@ -1,0 +1,5 @@
+[
+  { "name": "small", "environment": [8, [10, 20], 1] },
+  { "name": "zero-trips", "environment": [0, [10, 20], 1] },
+  { "name": "empty-data", "environment": [8, [], 1] }
+]

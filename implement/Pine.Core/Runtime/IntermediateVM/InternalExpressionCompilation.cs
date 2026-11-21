@@ -82,6 +82,7 @@ internal static partial class InternalExpressionCompilation
     /// <param name="resolveStaticInvocation">Resolves constrained callees without compiling their bodies recursively.</param>
     /// <param name="preparedExpression">An already reduced expression for this environment constraint.</param>
     /// <param name="returnLayout">The proven canonical reconstruction recipe for returned stack slots.</param>
+    /// <param name="requireStaticClosure">Uses static template and constructor instantiation instead of VM template shortcuts.</param>
     public static IReadOnlyList<StackInstruction> InstructionsFromExpressionTransitive(
         Expression rootExpression,
         PineValueClass? envConstraintId,
@@ -98,7 +99,47 @@ internal static partial class InternalExpressionCompilation
         Func<PineValue, bool>? skipDirectInvocation = null,
         Func<Expression, PineValue, Expression, DirectInvocation?>? resolveStaticInvocation = null,
         Expression? preparedExpression = null,
-        ReturnValueLayout? returnLayout = null)
+        ReturnValueLayout? returnLayout = null,
+        bool requireStaticClosure = false)
+        =>
+        OptimizedControlFlowGraphFromExpression(
+            rootExpression,
+            envConstraintId,
+            parametersAsLocals,
+            parseCache,
+            disableReduction,
+            enableTailRecursionOptimization,
+            skipInlining,
+            reducedExpressionCache,
+            pathMaxLowExclusive,
+            pathMaxHighInclusive,
+            disableGenericApplicationChainConsolidation,
+            enableDirectInvocation,
+            skipDirectInvocation,
+            resolveStaticInvocation,
+            preparedExpression,
+            returnLayout,
+            requireStaticClosure)
+        .LowerToStackInstructions();
+
+    internal static PineControlFlowGraph OptimizedControlFlowGraphFromExpression(
+        Expression rootExpression,
+        PineValueClass? envConstraintId,
+        StaticFunctionInterface parametersAsLocals,
+        PineVMParseCache parseCache,
+        bool disableReduction,
+        bool enableTailRecursionOptimization,
+        Func<Expression, PineValueClass?, bool> skipInlining,
+        IDictionary<(Expression, ReductionConfig), Expression>? reducedExpressionCache = null,
+        int pathMaxLowExclusive = DefaultPathMaxLowExclusive,
+        int pathMaxHighInclusive = DefaultPathMaxHighInclusive,
+        bool disableGenericApplicationChainConsolidation = false,
+        bool enableDirectInvocation = true,
+        Func<PineValue, bool>? skipDirectInvocation = null,
+        Func<Expression, PineValue, Expression, DirectInvocation?>? resolveStaticInvocation = null,
+        Expression? preparedExpression = null,
+        ReturnValueLayout? returnLayout = null,
+        bool requireStaticClosure = false)
     {
         var reducedExpression =
             preparedExpression ??
@@ -124,7 +165,8 @@ internal static partial class InternalExpressionCompilation
                 enableDirectInvocation,
                 skipDirectInvocation,
                 resolveStaticInvocation,
-                returnLayout);
+                returnLayout,
+                requireStaticClosure);
 
         var optimizedGraph =
             enableTailRecursionOptimization
@@ -144,8 +186,7 @@ internal static partial class InternalExpressionCompilation
 
         return
             optimizedGraph
-            .OptimizeForExecution(parametersAsLocals.ParamsPaths.Count)
-            .LowerToStackInstructions();
+            .OptimizeForExecution(parametersAsLocals.ParamsPaths.Count);
     }
 
     private static Expression PrepareExpression(
@@ -223,13 +264,15 @@ internal static partial class InternalExpressionCompilation
         ImmutableHashSet<Expression> activeExpressions,
         int remainingDepth)
     {
-        const int maxCalleeInstructions = 256;
-        const int maxFrameInstructions = 2_048;
+        const int MaxCalleeInstructions = 256;
+        const int MaxFrameInstructions = 2_048;
 
         if (remainingDepth is 0)
         {
             return graph;
         }
+
+        int? callerInstructionCount = null;
 
         for (var blockIndex = 0; blockIndex < graph.Blocks.Length; blockIndex++)
         {
@@ -310,12 +353,16 @@ internal static partial class InternalExpressionCompilation
                     remainingDepth - 1)
                 .ForwardConstantBooleanBranches();
 
-            var calleeInstructionCount = callee.LowerToStackInstructions().Length;
+            if (callee.CountStackInstructionsUpTo(MaxCalleeInstructions) is not { } calleeInstructionCount ||
+                calleeInstructionCount <= 2)
+            {
+                continue;
+            }
 
-            if (calleeInstructionCount <= 2 ||
-                calleeInstructionCount > maxCalleeInstructions ||
-                graph.LowerToStackInstructions().Length + calleeInstructionCount >
-                maxFrameInstructions)
+            callerInstructionCount ??=
+                graph.CountStackInstructionsUpTo(MaxFrameInstructions) ?? MaxFrameInstructions + 1;
+
+            if (callerInstructionCount > MaxFrameInstructions - calleeInstructionCount)
             {
                 continue;
             }
@@ -326,6 +373,8 @@ internal static partial class InternalExpressionCompilation
                     callee,
                     parameterCount,
                     parameters.ParamsPaths.Count);
+
+            callerInstructionCount = null;
 
             // Blocks inserted at this site have already been processed transitively.
             blockIndex += callee.Blocks.Length;
@@ -1261,7 +1310,8 @@ internal static partial class InternalExpressionCompilation
         bool enableDirectInvocation = true,
         Func<PineValue, bool>? skipDirectInvocation = null,
         Func<Expression, PineValue, Expression, DirectInvocation?>? resolveStaticInvocation = null,
-        ReturnValueLayout? returnLayout = null)
+        ReturnValueLayout? returnLayout = null,
+        bool requireStaticClosure = false)
     {
         var compiled =
             InternalPineIRCompiler.CompileExpression(
@@ -1274,7 +1324,8 @@ internal static partial class InternalExpressionCompilation
                 enableDirectInvocation,
                 skipDirectInvocation,
                 resolveStaticInvocation,
-                returnLayout);
+                returnLayout,
+                requireStaticClosure);
 
         return PineControlFlowGraph.FromFragment(compiled.Fragment, returnLayout?.SlotCount ?? 1);
     }

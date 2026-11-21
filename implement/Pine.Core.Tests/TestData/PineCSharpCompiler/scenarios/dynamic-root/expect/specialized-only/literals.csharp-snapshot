@@ -1,0 +1,183 @@
+#nullable enable
+using PineValue = global::Pine.Core.PineLanguage.PineValue;
+using PineValueInProcess = global::Pine.Core.Internal.PineValueInProcess;
+
+public static class PineLiterals
+{
+    public static readonly PineValue Materialized_Value_string_Builtin_4e5c7c99ca =
+        PineValue.Blob(
+            new byte[] { 0, 0, 0, 66, 0, 0, 0, 117, 0, 0, 0, 105, 0, 0, 0, 108, 0, 0, 0, 116, 0, 0, 0, 105, 0, 0, 0, 110 });
+
+    public static PineValueInProcess Value_string_Builtin_4e5c7c99ca => Literal_Value_string_Builtin_4e5c7c99ca.Value;
+
+    private static class Literal_Value_string_Builtin_4e5c7c99ca
+    {
+        internal static readonly PineValueInProcess Value =
+            PineValueInProcess.CreateFullyRepresented(Materialized_Value_string_Builtin_4e5c7c99ca);
+    }
+
+    public static readonly PineValue Materialized_Value_string_int_add_5db289c132 =
+        PineValue.Blob(
+            new byte[] { 0, 0, 0, 105, 0, 0, 0, 110, 0, 0, 0, 116, 0, 0, 0, 95, 0, 0, 0, 97, 0, 0, 0, 100, 0, 0, 0, 100 });
+
+    public static PineValueInProcess Value_string_int_add_5db289c132 => Literal_Value_string_int_add_5db289c132.Value;
+
+    private static class Literal_Value_string_int_add_5db289c132
+    {
+        internal static readonly PineValueInProcess Value =
+            PineValueInProcess.CreateFullyRepresented(Materialized_Value_string_int_add_5db289c132);
+    }
+
+    public static readonly PineValue Materialized_Value_string_List_94ba7400e6 =
+        PineValue.Blob(new byte[] { 0, 0, 0, 76, 0, 0, 0, 105, 0, 0, 0, 115, 0, 0, 0, 116 });
+
+    public static PineValueInProcess Value_string_List_94ba7400e6 => Literal_Value_string_List_94ba7400e6.Value;
+
+    private static class Literal_Value_string_List_94ba7400e6
+    {
+        internal static readonly PineValueInProcess Value =
+            PineValueInProcess.CreateFullyRepresented(Materialized_Value_string_List_94ba7400e6);
+    }
+
+    public static readonly PineValue Materialized_Value_string_head_9b5af12fe0 =
+        PineValue.Blob(new byte[] { 0, 0, 0, 104, 0, 0, 0, 101, 0, 0, 0, 97, 0, 0, 0, 100 });
+
+    public static PineValueInProcess Value_string_head_9b5af12fe0 => Literal_Value_string_head_9b5af12fe0.Value;
+
+    private static class Literal_Value_string_head_9b5af12fe0
+    {
+        internal static readonly PineValueInProcess Value =
+            PineValueInProcess.CreateFullyRepresented(Materialized_Value_string_head_9b5af12fe0);
+    }
+
+    public static readonly PineValue Materialized_Value_string_Environment_50b3ab1bfd =
+        PineValue.Blob(
+            new byte[] { 0, 0, 0, 69, 0, 0, 0, 110, 0, 0, 0, 118, 0, 0, 0, 105, 0, 0, 0, 114, 0, 0, 0, 111, 0, 0, 0, 110, 0, 0, 0, 109, 0, 0, 0, 101, 0, 0, 0, 110, 0, 0, 0, 116 });
+
+    public static PineValueInProcess Value_string_Environment_50b3ab1bfd =>
+        Literal_Value_string_Environment_50b3ab1bfd.Value;
+
+    private static class Literal_Value_string_Environment_50b3ab1bfd
+    {
+        internal static readonly PineValueInProcess Value =
+            PineValueInProcess.CreateFullyRepresented(Materialized_Value_string_Environment_50b3ab1bfd);
+    }
+
+    public static readonly PineValue Materialized_Value_cb2c8951a9 =
+        PineValue.List([Materialized_Value_string_Environment_50b3ab1bfd]);
+
+    public static PineValueInProcess Value_cb2c8951a9 => Literal_Value_cb2c8951a9.Value;
+
+    private static class Literal_Value_cb2c8951a9
+    {
+        internal static readonly PineValueInProcess Value =
+            PineValueInProcess.CreateFullyRepresented(
+                Materialized_Value_cb2c8951a9,
+                [
+                Value_string_Environment_50b3ab1bfd
+                ]);
+    }
+
+    public static readonly PineValue Materialized_Value_65eb76d7b1 =
+        PineValue.List(
+            [
+            Materialized_Value_string_Builtin_4e5c7c99ca,
+            Materialized_Value_string_head_9b5af12fe0,
+            Materialized_Value_cb2c8951a9
+            ]);
+
+    public static PineValueInProcess Value_65eb76d7b1 => Literal_Value_65eb76d7b1.Value;
+
+    private static class Literal_Value_65eb76d7b1
+    {
+        internal static readonly PineValueInProcess Value =
+            PineValueInProcess.CreateFullyRepresented(
+                Materialized_Value_65eb76d7b1,
+                [
+                Value_string_Builtin_4e5c7c99ca,
+                Value_string_head_9b5af12fe0,
+                Value_cb2c8951a9
+                ]);
+    }
+
+    public static readonly PineValue Materialized_Value_string_Litral_f8cc3baa2e =
+        PineValue.Blob(new byte[] { 0, 0, 0, 76, 0, 0, 0, 105, 0, 0, 0, 116, 0, 0, 0, 114, 0, 0, 0, 97, 0, 0, 0, 108 });
+
+    public static PineValueInProcess Value_string_Litral_f8cc3baa2e => Literal_Value_string_Litral_f8cc3baa2e.Value;
+
+    private static class Literal_Value_string_Litral_f8cc3baa2e
+    {
+        internal static readonly PineValueInProcess Value =
+            PineValueInProcess.CreateFullyRepresented(Materialized_Value_string_Litral_f8cc3baa2e);
+    }
+
+    public static readonly PineValue Materialized_Value_int_pos_2 = PineValue.Blob(new byte[] { 4, 2 });
+
+    public static PineValueInProcess Value_int_pos_2 => Literal_Value_int_pos_2.Value;
+
+    private static class Literal_Value_int_pos_2
+    {
+        internal static readonly PineValueInProcess Value =
+            PineValueInProcess.CreateFullyRepresented(Materialized_Value_int_pos_2);
+    }
+
+    public static readonly PineValue Materialized_Value_9a4bf642f1 =
+        PineValue.List([Materialized_Value_string_Litral_f8cc3baa2e, Materialized_Value_int_pos_2]);
+
+    public static PineValueInProcess Value_9a4bf642f1 => Literal_Value_9a4bf642f1.Value;
+
+    private static class Literal_Value_9a4bf642f1
+    {
+        internal static readonly PineValueInProcess Value =
+            PineValueInProcess.CreateFullyRepresented(
+                Materialized_Value_9a4bf642f1,
+                [
+                Value_string_Litral_f8cc3baa2e,
+                Value_int_pos_2
+                ]);
+    }
+
+    public static readonly PineValue Materialized_Value_9c24dab78b =
+        PineValue.List(
+            [
+            Materialized_Value_string_List_94ba7400e6,
+            Materialized_Value_65eb76d7b1,
+            Materialized_Value_9a4bf642f1
+            ]);
+
+    public static PineValueInProcess Value_9c24dab78b => Literal_Value_9c24dab78b.Value;
+
+    private static class Literal_Value_9c24dab78b
+    {
+        internal static readonly PineValueInProcess Value =
+            PineValueInProcess.CreateFullyRepresented(
+                Materialized_Value_9c24dab78b,
+                [
+                Value_string_List_94ba7400e6,
+                Value_65eb76d7b1,
+                Value_9a4bf642f1
+                ]);
+    }
+
+    public static readonly PineValue Materialized_Value_cb1bc85a31 =
+        PineValue.List(
+            [
+            Materialized_Value_string_Builtin_4e5c7c99ca,
+            Materialized_Value_string_int_add_5db289c132,
+            Materialized_Value_9c24dab78b
+            ]);
+
+    public static PineValueInProcess Value_cb1bc85a31 => Literal_Value_cb1bc85a31.Value;
+
+    private static class Literal_Value_cb1bc85a31
+    {
+        internal static readonly PineValueInProcess Value =
+            PineValueInProcess.CreateFullyRepresented(
+                Materialized_Value_cb1bc85a31,
+                [
+                Value_string_Builtin_4e5c7c99ca,
+                Value_string_int_add_5db289c132,
+                Value_9c24dab78b
+                ]);
+    }
+}

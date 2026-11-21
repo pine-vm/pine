@@ -12,9 +12,9 @@ namespace Pine.Core.Runtime.InternalExpression;
 /// <summary>Explicit boundary conversions between public syntax and retained runtime syntax.</summary>
 public static class ExpressionConversion
 {
-    private static readonly ConditionalWeakTable<Canonical, Expression> s_internal = new();
+    private static readonly ConditionalWeakTable<Canonical, Expression> s_internal = [];
 
-    private static readonly ConditionalWeakTable<Expression, Canonical> s_canonical = new();
+    private static readonly ConditionalWeakTable<Expression, Canonical> s_canonical = [];
 
     internal static Expression FromCanonicalCached(Canonical expression) =>
         s_internal.GetValue(

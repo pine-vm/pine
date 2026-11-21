@@ -1,0 +1,36 @@
+#nullable enable
+using PineValueInProcess = global::Pine.Core.Internal.PineValueInProcess;
+using NativeValue = global::Pine.Core.DotNet.PineCSharpValue;
+using PineLiteralsModule = global::PineLiterals;
+
+public static class CompiledPine
+{
+    public static PineValueInProcess? Expr_4f71b47a5f_dispatch(
+        PineValueInProcess environment,
+        global::System.Threading.CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+
+        if (PineValueInProcess.ValueInProcessFromPathOrNull(environment, [0]) is { } guard_0_0 &&
+            PineValueInProcess.AreEqual(guard_0_0, PineLiteralsModule.Value_cb1bc85a31))
+        {
+            PineValueInProcess result_0 =
+                Expr_4f71b47a5f_constraint_d61dd8840d(environment.GetElementAt(1).GetElementAt(0), cancellationToken);
+
+            return result_0;
+        }
+
+        return null;
+    }
+
+    /// <summary>Function 0; specialized environment. Arguments: 0 = [1, 0].</summary>
+    public static PineValueInProcess Expr_4f71b47a5f_constraint_d61dd8840d(
+        PineValueInProcess argument_0,
+        global::System.Threading.CancellationToken cancellationToken)
+    {
+        PineValueInProcess state_0 = argument_0;
+        cancellationToken.ThrowIfCancellationRequested();
+        NativeValue value_0_1 = NativeValue.Add(NativeValue.FromValue(state_0), NativeValue.FromInt64(2L));
+        return value_0_1.ToPineValue();
+    }
+}

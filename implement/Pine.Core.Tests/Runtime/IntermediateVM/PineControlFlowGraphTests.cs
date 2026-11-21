@@ -186,6 +186,71 @@ public class PineControlFlowGraphTests
     }
 
     [Fact]
+    public void Instruction_count_matches_lowering_for_mixed_local_fusions()
+    {
+        var graph =
+            PineControlFlowGraph.FromFragment(
+                Ops(
+                    StackInstruction.Local_Get(0),
+                    StackInstruction.Local_Get([0, 0]),
+                    StackInstruction.Local_Set([1, 2], popCount: 1),
+                    StackInstruction.Local_Set(3),
+                    StackInstruction.Pop,
+                    StackInstruction.Local_Set([4], popCount: 1),
+                    StackInstruction.Local_Int_Add_Const(1, 1),
+                    StackInstruction.Local_Int_Add_Const(2, 1),
+                    StackInstruction.Local_Int_Add_Const(3, 2),
+                    StackInstruction.Local_Get_Skip_Head_Const(0, 0),
+                    StackInstruction.Local_Get_Skip_Head_Const(0, 0),
+                    StackInstruction.Local_Get_Skip_Head_Const(0, 1),
+                    StackInstruction.Build_List(3)));
+
+        var lowered = graph.LowerToStackInstructions();
+
+        lowered.Should().Equal(
+            StackInstruction.Local_Get([0, 0, 0]),
+            StackInstruction.Local_Set([1, 2], popCount: 1),
+            StackInstruction.Local_Set([3, 4], popCount: 2),
+            StackInstruction.Local_Int_Add_Const([1, 2], 1),
+            StackInstruction.Local_Int_Add_Const(3, 2),
+            StackInstruction.Local_Get_Skip_Head_Const([0, 0], 0),
+            StackInstruction.Local_Get_Skip_Head_Const(0, 1),
+            StackInstruction.Build_List(3),
+            StackInstruction.Return);
+
+        graph.CountStackInstructionsUpTo(lowered.Length).Should().Be(lowered.Length);
+        graph.CountStackInstructionsUpTo(lowered.Length - 1).Should().BeNull();
+    }
+
+    [Theory]
+    [InlineData(2)]
+    [InlineData(3)]
+    [InlineData(255)]
+    [InlineData(256)]
+    [InlineData(257)]
+    [InlineData(2_047)]
+    [InlineData(2_048)]
+    [InlineData(2_049)]
+    public void Instruction_count_respects_budgets_after_fusion(int expectedCount)
+    {
+        var graph =
+            PineControlFlowGraph.FromFragment(
+                Ops(
+                    [
+                    StackInstruction.Local_Get(0),
+                    StackInstruction.Local_Get(1),
+                    .. Enumerable.Repeat(StackInstruction.Length, expectedCount - 2)
+                    ]),
+                returnValueCount: 2);
+
+        var lowered = graph.LowerToStackInstructions();
+
+        lowered.Length.Should().Be(expectedCount);
+        graph.CountStackInstructionsUpTo(expectedCount).Should().Be(expectedCount);
+        graph.CountStackInstructionsUpTo(expectedCount - 1).Should().BeNull();
+    }
+
+    [Fact]
     public void Dead_fused_store_retains_its_stack_pop()
     {
         var graph =
@@ -408,6 +473,9 @@ public class PineControlFlowGraphTests
                         Ops(StackInstruction.Push_Literal(trueValue)))));
 
         var instructions = graph.LowerToStackInstructions();
+
+        graph.CountStackInstructionsUpTo(instructions.Length).Should().Be(instructions.Length);
+        graph.CountStackInstructionsUpTo(instructions.Length - 1).Should().BeNull();
 
         instructions.Should().ContainSingle(
             instruction =>
@@ -3497,6 +3565,11 @@ public class PineControlFlowGraphTests
             };
 
         var withTailInvoke = new PineControlFlowGraph(original.Entry, [.. blocks]);
+        var lowered = withTailInvoke.LowerToStackInstructions();
+
+        withTailInvoke.CountStackInstructionsUpTo(lowered.Length).Should().Be(lowered.Length);
+        withTailInvoke.CountStackInstructionsUpTo(lowered.Length - 1).Should().BeNull();
+
         var optimized = withTailInvoke.ReplaceNonEscapingLists(parameterCount: 1);
 
         optimized.LowerToStackInstructions().Should().NotContain(

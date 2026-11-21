@@ -1,0 +1,102 @@
+#nullable enable
+using PineValueInProcess = global::Pine.Core.Internal.PineValueInProcess;
+using NativeValue = global::Pine.Core.DotNet.PineCSharpValue;
+
+public static class CompiledPine
+{
+    public static PineValueInProcess Expr_633ab6dcd4_dispatch(
+        PineValueInProcess environment,
+        global::System.Threading.CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+
+        PineValueInProcess result_0 =
+            Expr_2455106c22_constraint_b690e8aa0c(environment.GetElementAt(0), environment.GetElementAt(1), cancellationToken);
+
+        return result_0;
+    }
+
+    /// <summary>Function 0; unconstrained environment. Arguments: 0 = [0]; 1 = [1].</summary>
+    public static PineValueInProcess Expr_633ab6dcd4_constraint_generic(
+        PineValueInProcess argument_0,
+        PineValueInProcess argument_1,
+        global::System.Threading.CancellationToken cancellationToken)
+    {
+        PineValueInProcess state_0 = argument_0;
+        PineValueInProcess state_1 = argument_1;
+        cancellationToken.ThrowIfCancellationRequested();
+        return Expr_2455106c22_constraint_b690e8aa0c(state_0, state_1, cancellationToken);
+    }
+
+    /// <summary>Function 1; specialized environment. Arguments: 0 = [1]; 1 = [2].</summary>
+    public static PineValueInProcess Expr_2455106c22_constraint_b690e8aa0c(
+        PineValueInProcess argument_0,
+        PineValueInProcess argument_1,
+        global::System.Threading.CancellationToken cancellationToken)
+    {
+        return Loop_0(1, argument_0, argument_1, cancellationToken);
+    }
+
+    /// <summary>Function 2; specialized environment. Arguments: 0 = [1]; 1 = [2].</summary>
+    public static PineValueInProcess Expr_63558fd05e_constraint_b690e8aa0c(
+        PineValueInProcess argument_0,
+        PineValueInProcess argument_1,
+        global::System.Threading.CancellationToken cancellationToken)
+    {
+        return Loop_0(2, argument_0, argument_1, cancellationToken);
+    }
+
+    private static PineValueInProcess Loop_0(
+        int entry,
+        PineValueInProcess state_0,
+        PineValueInProcess state_1,
+        global::System.Threading.CancellationToken cancellationToken)
+    {
+        if (entry == 1)
+            goto function_1_block_0;
+
+        if (entry == 2)
+            goto function_2_block_0;
+
+        throw new global::System.ArgumentOutOfRangeException(nameof(entry));
+
+function_1_block_0:
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+
+            NativeValue value_1_1 =
+                NativeValue.FromBoolean(
+                    NativeValue.LessThanOrEqual(NativeValue.FromValue(state_0), NativeValue.FromInt64(0L)));
+
+            if (value_1_1.IsTrue())
+            {
+                return state_1;
+            }
+        }
+
+        NativeValue value_1_3 = NativeValue.Add(NativeValue.FromValue(state_0), NativeValue.FromInt64(-1L));
+        NativeValue value_1_5 = NativeValue.Add(NativeValue.FromValue(state_1), NativeValue.FromInt64(1L));
+        state_0 = value_1_3.ToPineValue();
+        state_1 = value_1_5.ToPineValue();
+
+function_2_block_0:
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+
+            NativeValue value_2_1 =
+                NativeValue.FromBoolean(
+                    NativeValue.LessThanOrEqual(NativeValue.FromValue(state_0), NativeValue.FromInt64(0L)));
+
+            if (value_2_1.IsTrue())
+            {
+                return state_1;
+            }
+        }
+
+        NativeValue value_2_3 = NativeValue.Add(NativeValue.FromValue(state_0), NativeValue.FromInt64(-1L));
+        NativeValue value_2_5 = NativeValue.Add(NativeValue.FromValue(state_1), NativeValue.FromInt64(2L));
+        state_0 = value_2_3.ToPineValue();
+        state_1 = value_2_5.ToPineValue();
+        goto function_1_block_0;
+    }
+}

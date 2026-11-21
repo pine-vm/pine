@@ -1,0 +1,10 @@
+{
+  "entry": "main",
+  "expressions": {
+    "main": { "Eval": [{ "EnvPath": [0] }, { "EnvPath": [1] }] },
+    "target": { "Builtin": ["int_add", { "List": [[{ "EnvPath": [0] }, { "Literal": [2] }]] }] }
+  },
+  "values": {
+    "target-code": { "EncodedExpression": "target" }
+  }
+}

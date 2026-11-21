@@ -1,0 +1,31 @@
+#nullable enable
+using PineValueInProcess = global::Pine.Core.Internal.PineValueInProcess;
+using NativeValue = global::Pine.Core.DotNet.PineCSharpValue;
+
+public static class CompiledPine
+{
+    public static PineValueInProcess Expr_8cc9e8192d_dispatch(
+        PineValueInProcess environment,
+        global::System.Threading.CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+
+        PineValueInProcess result_0 =
+            Expr_8cc9e8192d_constraint_generic(environment.GetElementAt(0), environment.GetElementAt(1), cancellationToken);
+
+        return result_0;
+    }
+
+    /// <summary>Function 0; unconstrained environment. Arguments: 0 = [0]; 1 = [1].</summary>
+    public static PineValueInProcess Expr_8cc9e8192d_constraint_generic(
+        PineValueInProcess argument_0,
+        PineValueInProcess argument_1,
+        global::System.Threading.CancellationToken cancellationToken)
+    {
+        PineValueInProcess state_0 = argument_0;
+        PineValueInProcess state_1 = argument_1;
+        cancellationToken.ThrowIfCancellationRequested();
+        NativeValue value_0_2 = NativeValue.Add(NativeValue.FromValue(state_0), NativeValue.FromValue(state_1));
+        return value_0_2.ToPineValue();
+    }
+}

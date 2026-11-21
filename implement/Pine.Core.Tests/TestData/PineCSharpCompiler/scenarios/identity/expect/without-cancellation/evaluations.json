@@ -1,0 +1,10 @@
+[
+  {
+    "name": "small",
+    "value": 4
+  },
+  {
+    "name": "missing-element",
+    "value": []
+  }
+]

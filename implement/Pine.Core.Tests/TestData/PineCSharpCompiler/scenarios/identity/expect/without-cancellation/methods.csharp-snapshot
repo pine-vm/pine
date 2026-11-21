@@ -1,0 +1,17 @@
+#nullable enable
+using PineValueInProcess = global::Pine.Core.Internal.PineValueInProcess;
+
+public static class CompiledPine
+{
+    public static PineValueInProcess Expr_65eb76d7b1_dispatch(PineValueInProcess environment)
+    {
+        PineValueInProcess result_0 = Expr_65eb76d7b1_constraint_generic(environment.GetElementAt(0));
+        return result_0;
+    }
+
+    /// <summary>Function 0; unconstrained environment. Arguments: 0 = [0].</summary>
+    public static PineValueInProcess Expr_65eb76d7b1_constraint_generic(PineValueInProcess argument_0)
+    {
+        return argument_0;
+    }
+}

@@ -1,0 +1,21 @@
+[
+  {
+    "name": "small",
+    "value": [
+      4,
+      10
+    ]
+  },
+  {
+    "name": "nested-values",
+    "value": [
+      [
+        1,
+        2
+      ],
+      {
+        "AsBase64": "AAEC"
+      }
+    ]
+  }
+]

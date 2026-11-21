@@ -1,0 +1,17 @@
+entry b0
+irreducible cycle: b1, b2 entries: b1, b2
+
+block b0():
+  v0 = Push_Literal (true)
+  if v0 == true then b2() else b1()
+
+block b1():
+  jump b2()
+
+block b2():
+  v2 = Push_Literal (true)
+  if v2 == true then b3() else b1()
+
+block b3():
+  v3 = Push_Literal (true)
+  return v3

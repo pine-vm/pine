@@ -1,0 +1,14 @@
+[
+  {
+    "name": "matching",
+    "value": 14
+  },
+  {
+    "name": "mismatching",
+    "value": 10
+  },
+  {
+    "name": "missing-path",
+    "value": []
+  }
+]

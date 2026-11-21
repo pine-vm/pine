@@ -1,0 +1,64 @@
+#nullable enable
+using PineValueInProcess = global::Pine.Core.Internal.PineValueInProcess;
+using NativeValue = global::Pine.Core.DotNet.PineCSharpValue;
+using Return_3 = (global::Pine.Core.Internal.PineValueInProcess item0, global::Pine.Core.Internal.PineValueInProcess item1, global::Pine.Core.Internal.PineValueInProcess item2);
+using PineLiteralsModule = global::PineLiterals;
+
+public static class CompiledPine
+{
+    public static PineValueInProcess Expr_e49d2f656c_dispatch(PineValueInProcess environment)
+    {
+        Return_3 result_0 =
+            Expr_e49d2f656c_constraint_generic(
+                environment.GetElementAt(0),
+                environment.GetElementAt(1),
+                environment.GetElementAt(2));
+
+        if (PineValueInProcess.AreEqual(result_0.item0, PineLiteralsModule.Value_int_pos_1))
+        {
+            return
+                PineValueInProcess.CreateList(
+                    new PineValueInProcess[] { PineLiteralsModule.Value_int_pos_1, PineValueInProcess.CreateList(new PineValueInProcess[] { result_0.item1, result_0.item2 }) });
+        }
+
+        if (PineValueInProcess.AreEqual(result_0.item0, PineLiteralsModule.Value_int_pos_0))
+        {
+            return PineLiteralsModule.Value_0a7103c50c;
+        }
+
+        throw new global::System.InvalidOperationException("Invalid return discriminant in slot 0.");
+    }
+
+    /// <summary>Function 0; unconstrained environment. Arguments: 0 = [0]; 1 = [1]; 2 = [2].</summary>
+    public static Return_3 Expr_e49d2f656c_constraint_generic(
+        PineValueInProcess argument_0,
+        PineValueInProcess argument_1,
+        PineValueInProcess argument_2)
+    {
+        NativeValue value_0_6 = default;
+        NativeValue value_0_16 = default;
+        PineValueInProcess value_0_17 = PineValueInProcess.EmptyList;
+        PineValueInProcess state_2 = argument_2;
+
+        if (PineValueInProcess.AreEqual(state_2, PineValueInProcess.KernelTrueValue))
+        {
+            goto function_0_block_4;
+        }
+
+        NativeValue value_0_3 = NativeValue.FromInt64(0L);
+        value_0_6 = value_0_3;
+        PineValueInProcess value_0_7 = PineValueInProcess.EmptyList;
+        value_0_16 = value_0_6;
+        value_0_17 = value_0_7;
+        PineValueInProcess value_0_18 = PineValueInProcess.EmptyList;
+        return (value_0_16.ToPineValue(), value_0_17, value_0_18);
+
+function_0_block_4:
+        {
+            PineValueInProcess state_0 = argument_0;
+            PineValueInProcess state_1 = argument_1;
+            NativeValue value_0_27 = NativeValue.FromInt64(1L);
+            return (value_0_27.ToPineValue(), state_0, state_1);
+        }
+    }
+}

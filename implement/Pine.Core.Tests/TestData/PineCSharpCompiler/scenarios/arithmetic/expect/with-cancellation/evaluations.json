@@ -1,0 +1,10 @@
+[
+  {
+    "name": "small",
+    "value": 14
+  },
+  {
+    "name": "invalid-integer",
+    "value": []
+  }
+]

@@ -30,7 +30,8 @@ public sealed partial record PineControlFlowGraph
         IntegerAdd = 64,
         Literal = 128,
         EqualityBranch = 256,
-        ValueMap = 512
+        ValueMap = 512,
+        PotentialCycle = 1024
     }
 
     private sealed record BlockSummary(
@@ -43,7 +44,7 @@ public sealed partial record PineControlFlowGraph
         EmptyBlocks, JumpsToReturn, BooleanBranches, Unreachable,
         ScalarReplacement, LocalCopies, RedundantWrites, EquivalentReads,
         ListProjections, EqualityBranches, DeadStores, DiscardedValues,
-        ForwardJumps, DescendingAdditions, LocalAdditions, LiteralValues, ValueMaps, LiteralStores
+        ForwardJumps, DescendingAdditions, LocalAdditions, LiteralValues, ValueMaps, LiteralStores, LoopInvariants
     }
 
     // This context owns only one compilation's snapshots. Nothing is attached to graph record equality.
@@ -77,10 +78,14 @@ public sealed partial record PineControlFlowGraph
 
         private ValueFlowState?[]? _valueFlow;
 
-        private readonly PineControlFlowGraph?[] _noChange =
-            new PineControlFlowGraph?[(int)OptimizationPass.LiteralStores + 1];
+        private PineControlFlowGraph? _loopGraph;
 
-        private readonly int[] _noChangeParameters = new int[(int)OptimizationPass.LiteralStores + 1];
+        private PineControlFlowLoopAnalysis? _loops;
+
+        private readonly PineControlFlowGraph?[] _noChange =
+            new PineControlFlowGraph?[(int)OptimizationPass.LoopInvariants + 1];
+
+        private readonly int[] _noChangeParameters = new int[(int)OptimizationPass.LoopInvariants + 1];
 
         public int ValidationRuns { get; private set; }
 
@@ -197,6 +202,12 @@ public sealed partial record PineControlFlowGraph
                             "GetSummary does not handle terminator variant: " + block.Terminator.GetType().Name);
                 }
 
+                foreach (var (target, _) in Successors(block.Terminator))
+                {
+                    if (target.Value <= block.Id.Value)
+                        blockFlags |= OperationFlags.PotentialCycle;
+                }
+
                 blocks[index] = new(block, written, uses, blockFlags);
                 flags |= blockFlags;
             }
@@ -306,6 +317,17 @@ public sealed partial record PineControlFlowGraph
             return _valueFlow = graph.AnalyzeValueFlow();
         }
 
+        public PineControlFlowLoopAnalysis GetLoops(PineControlFlowGraph graph)
+        {
+            Validate(graph);
+
+            if (_loops is null || !SameTopology(_loopGraph, graph))
+                _loops = graph.AnalyzeLoops(GetPredecessors(graph));
+
+            _loopGraph = graph;
+            return _loops;
+        }
+
         private static bool Eligible(OptimizationPass pass, OperationFlags flags)
         {
             bool Has(OperationFlags required) => (flags & required) == required;
@@ -333,6 +355,10 @@ public sealed partial record PineControlFlowGraph
 
                 OptimizationPass.LiteralStores =>
                 Has(OperationFlags.Literal | OperationFlags.LocalStore | OperationFlags.Pop),
+
+                OptimizationPass.LoopInvariants =>
+                Has(OperationFlags.PotentialCycle) &&
+                (flags & (OperationFlags.LocalStore | OperationFlags.LiteralStore)) != 0,
 
                 _ =>
                 true
@@ -376,6 +402,7 @@ public sealed partial record PineControlFlowGraph
                     OptimizationPass.LiteralValues => graph.FoldKnownLiteralValues(parameterCount, this),
                     OptimizationPass.ValueMaps => graph.ComposeValueMaps(this),
                     OptimizationPass.LiteralStores => graph.FuseLiteralLocalStores(this),
+                    OptimizationPass.LoopInvariants => graph.HoistLoopInvariantStores(parameterCount, this),
 
                     _ =>
                     throw new NotImplementedException("Apply does not handle optimization pass: " + pass)
@@ -412,7 +439,7 @@ public sealed partial record PineControlFlowGraph
                     OptimizationPass.DescendingAdditions, OptimizationPass.LocalAdditions,
                     OptimizationPass.LiteralValues, OptimizationPass.LiteralStores,
                     OptimizationPass.DeadStores, OptimizationPass.RedundantWrites,
-                    OptimizationPass.DiscardedValues
+                    OptimizationPass.DiscardedValues, OptimizationPass.LoopInvariants
                 ];
 
             foreach (var pass in order)
@@ -422,11 +449,12 @@ public sealed partial record PineControlFlowGraph
             while (true)
             {
                 var scalarized = Apply(graph, OptimizationPass.ScalarReplacement, parameterCount);
+                var invariant = Apply(scalarized, OptimizationPass.LoopInvariants, parameterCount);
 
-                if (ReferenceEquals(scalarized, graph))
+                if (ReferenceEquals(invariant, graph))
                     break;
 
-                graph = scalarized;
+                graph = invariant;
 
                 foreach (var pass in order)
                     graph = Apply(graph, pass, parameterCount);
