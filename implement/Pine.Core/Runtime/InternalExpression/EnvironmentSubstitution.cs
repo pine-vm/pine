@@ -63,6 +63,7 @@ internal static class EnvironmentSubstitution
             case Expression.BuiltinBinary:
             case Expression.Length_Equal_Binary:
             case Expression.HeadSkip:
+            case Expression.Switch:
                 return
                     ExpressionFusion.Rebuild(
                         expression,

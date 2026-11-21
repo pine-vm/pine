@@ -13,6 +13,8 @@ using System.Linq;
 using System.Numerics;
 using Xunit;
 
+using Retained = Pine.Core.Runtime.InternalExpression.Expression;
+
 namespace Pine.Core.Tests.Runtime.IntermediateVM;
 
 public class CompileExpressionTests
@@ -155,6 +157,49 @@ public class CompileExpressionTests
         var summary = TestResultSummary.RenderSummary(results);
 
         results.Where(r => !r.Passed).Should().BeEmpty(summary);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void Compile_switch_keeps_selector_available_to_later_consumers(bool duplicateKeys)
+    {
+        var selector = new Retained.HeadSkip(1, Retained.Environment.Instance);
+        var firstKey = PineValue.Blob([4]);
+        var secondKey = duplicateKeys ? firstKey : PineValue.Blob([5]);
+
+        var dispatch =
+            new Retained.Switch(
+                selector,
+                [
+                new(firstKey, false, new Retained.Literal(PineValue.Blob([1]))),
+                new(secondKey, false, new Retained.Literal(PineValue.Blob([2]))),
+                ],
+                new Retained.Literal(PineValue.EmptyBlob));
+
+        var parseCache = new PineVMParseCache();
+
+        var context =
+            InternalPineIRCompiler.CompilationContext.Init(
+                StaticFunctionInterface.Generic,
+                enableDirectInvocation: true,
+                skipDirectInvocation: null);
+
+        var compiled =
+            InternalPineIRCompiler.CompileExpressionTransitive(
+                dispatch,
+                context,
+                localIndexFromExpr: [],
+                parseCache);
+
+        compiled.LocalsSet.Should().ContainKey(selector);
+
+        var next = compiled.ContinueWithExpression(selector, context, parseCache);
+
+        next.Fragment.Nodes.Skip(compiled.Fragment.Nodes.Count)
+            .OfType<PineControlFlowNode.Operation>()
+            .Select(operation => operation.Instruction)
+            .Should().Equal(StackInstruction.Local_Get(compiled.LocalsSet[selector]));
     }
 
     [Fact]

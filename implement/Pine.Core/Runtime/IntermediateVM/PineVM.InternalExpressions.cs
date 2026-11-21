@@ -272,6 +272,18 @@ public partial class PineVM
             }
         }
 
+        if (expression is Retained.Switch dispatch)
+        {
+            var selector =
+                EvalDirect(dispatch.Selector, envValue, ref evalWorkCounters, references, underRepeatFrontier: pruned);
+
+            if (selector is null)
+                return null;
+
+            var branch = dispatch.SelectBranch(selector.Evaluate());
+            return EvalDirect(branch, envValue, ref evalWorkCounters, references, underRepeatFrontier: pruned);
+        }
+
         if (expression is Retained.Environment)
         {
             constructorMemo?.Add(expression, new(envValue, 1, 0, 0));

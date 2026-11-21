@@ -89,6 +89,26 @@ public static partial class ExpressionValueEncoding
                         length.LengthOnLeft ? List(measured, other) : List(other, measured));
             }
 
+            PineValue.ListValue EncodeSwitch(Expression.Switch dispatch)
+            {
+                var selector = encoded[dispatch.Selector];
+                var tail = encoded[dispatch.Default];
+
+                foreach (var (key, literalOnLeft, branch) in Enumerable.Reverse(dispatch.Arms))
+                {
+                    var literal = Literal(key);
+
+                    var test =
+                        Builtin(
+                            BuiltinFunction.Equal,
+                            literalOnLeft ? List(literal, selector) : List(selector, literal));
+
+                    tail = PineValue.List([s_conditionalTag, test, tail, encoded[branch]]);
+                }
+
+                return tail;
+            }
+
             encoded.Add(
                 node,
                 node switch
@@ -111,6 +131,7 @@ public static partial class ExpressionValueEncoding
                         ]),
 
                     Expression.Environment => s_environment,
+                    Expression.Switch dispatch => EncodeSwitch(dispatch),
                     Expression.Label label => PineValue.List([s_labelTag, label.Value, encoded[label.Tagged]]),
 
                     Expression.BuiltinBinary equal =>

@@ -135,6 +135,20 @@ public static partial class ExpressionBinary
                     WriteExpression(conditional.TrueBranch, depth + 1);
                     break;
 
+                case Expression.Switch dispatch:
+                    Start(Constructor.Switch, checked(2 + 3 * dispatch.Arms.Count));
+                    WriteExpression(dispatch.Selector, depth + 1);
+                    WriteExpression(dispatch.Default, depth + 1);
+
+                    foreach (var (key, literalOnLeft, branch) in dispatch.Arms)
+                    {
+                        Value(key, depth + 1);
+                        _writer.Integer(literalOnLeft ? 1 : 0);
+                        WriteExpression(branch, depth + 1);
+                    }
+
+                    break;
+
                 case Expression.Environment:
                     Start(Constructor.Environment, 0);
                     break;

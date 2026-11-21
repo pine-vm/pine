@@ -62,6 +62,14 @@ internal static class ReturnShapeInference
                         case Expression.Conditional conditional:
                             return Join(Analyze(conditional.FalseBranch), Analyze(conditional.TrueBranch));
 
+                        case Expression.Switch dispatch:
+                            var joined = Analyze(dispatch.Default);
+
+                            foreach (var arm in Enumerable.Reverse(dispatch.Arms))
+                                joined = Join(joined, Analyze(arm.Branch));
+
+                            return joined;
+
                         case Expression.Label label:
                             return Analyze(label.Tagged);
 

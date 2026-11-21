@@ -81,7 +81,15 @@ internal static class ExpressionFusion
                 continue;
             }
 
-            mapped[work.Node] = Rebuild(work.Node, Child);
+            mapped[work.Node] =
+                work.Node is Expression.Conditional conditional
+                ?
+                Expression.FuseConditional(
+                    Child(conditional.Condition),
+                    Child(conditional.FalseBranch),
+                    Child(conditional.TrueBranch))
+                :
+                Rebuild(work.Node, Child);
         }
 
         return mapped[expression];
@@ -198,6 +206,9 @@ internal static class ExpressionFusion
             case Expression.HeadSkip head:
                 var source = child(head.Input);
                 return ReferenceEquals(source, head.Input) ? head : new Expression.HeadSkip(head.Count, source);
+
+            case Expression.Switch dispatch:
+                return dispatch.MapChildren(child);
 
             default:
                 throw new NotImplementedException(

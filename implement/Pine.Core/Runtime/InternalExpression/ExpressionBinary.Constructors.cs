@@ -23,7 +23,8 @@ public static partial class ExpressionBinary
         Label,
         BuiltinBinary,
         Length_Equal_Binary,
-        HeadSkip
+        HeadSkip,
+        Switch
     }
 
     private static class ConstructorExpressions
@@ -65,7 +66,8 @@ public static partial class ExpressionBinary
             "1448655241228ac4f2cc635eeb89a3857a9b881c8ca9fbe917c6ed060870cab9" +
             "68554a13960f8add4c7761d7a78f720b44d563142b120da0d829693c137490d1" +
             "7577b17aa5ba759567b72843ac379167a409a9e2115ea47421fab31ad147a479" +
-            "b9937055783274d3a36bf45b4cf2a56c3be282325678742baf38769ef1d22f09");
+            "b9937055783274d3a36bf45b4cf2a56c3be282325678742baf38769ef1d22f09" +
+            "470ad261d51114ed33e148f61e53a4327482035834df118d85ee761ce2b9472f");
 
     private static ReadOnlySpan<byte> ConstructorHash(Constructor constructor) =>
         s_constructorHashes.AsSpan((int)constructor * 32, 32);
@@ -97,7 +99,10 @@ public static partial class ExpressionBinary
     private static Canonical Builtin(string name, params Canonical[] items) => Canonical.BuiltinInst(name, List(items));
 
     private static Canonical At(int index) =>
-        Canonical.BuiltinInst("head", Builtin("skip", Number(index), Canonical.EnvironmentInstance));
+        At(index, Canonical.EnvironmentInstance);
+
+    private static Canonical At(int index, Canonical list) =>
+        Canonical.BuiltinInst("head", Builtin("skip", Number(index), list));
 
     private static Canonical Tag(string name, params Canonical[] fields) =>
         List([Literal(StringEncoding.ValueFromString(name)), .. fields]);
@@ -135,11 +140,41 @@ public static partial class ExpressionBinary
                 Call("equal", Tag("List", Call("length", At(0)), At(1)))),
 
             Constructor.HeadSkip => Call("head", Call("skip", Tag("List", Tag("Litral", At(0)), At(1)))),
+            Constructor.Switch => SwitchConstructor(),
 
             _ =>
             throw new NotImplementedException(
                 nameof(BuildConstructor) + " does not handle constructor: " + constructor)
         };
+
+    private static Canonical SwitchConstructor()
+    {
+        // The worker consumes flat (key, orientation, branch) triples in source order.
+        var fields = At(3);
+        var selector = At(1);
+        var literal = Tag("Litral", At(0, fields));
+
+        var operands =
+            Canonical.ConditionalInst(
+                Builtin("equal", At(1, fields), Number(1)),
+                Tag("List", selector, literal),
+                Tag("List", literal, selector));
+
+        var tail = new Canonical.Eval(At(0), List(At(0), selector, At(2), Builtin("skip", Number(3), fields)));
+
+        var worker =
+            Canonical.ConditionalInst(
+                Builtin("equal", fields, Literal(PineValue.EmptyList)),
+                Tag("Conditional", Call("equal", operands), tail, At(2, fields)),
+                At(2));
+
+        var encodedWorker = Literal(ExpressionEncoding.EncodeExpressionAsValue(worker));
+
+        return
+            new Canonical.Eval(
+                encodedWorker,
+                List(encodedWorker, At(0), At(1), Builtin("skip", Number(2), Canonical.EnvironmentInstance)));
+    }
 
     private static Canonical BuiltinName(Canonical identifier) =>
         Canonical.BuiltinInst(
