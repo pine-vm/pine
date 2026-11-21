@@ -5,6 +5,7 @@ using Pine.Core.Elm.ElmCompilerInDotnet;
 using Pine.Core.Files;
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using System.Text;
@@ -214,8 +215,10 @@ public sealed partial class RunWatchCommandTests : IDisposable
                 replacement,
                 File.ReadAllText(helper).Replace("decorate value = value", "decorate value = value ++ \"!\""));
 
+            var changeTimestamp = Stopwatch.GetTimestamp();
             File.Move(replacement, helper, overwrite: true);
             await error.NextWaiting();
+            var rerunDuration = Stopwatch.GetElapsedTime(changeTimestamp);
             File.ReadAllText(destination).Should().Be("value!");
             error.ToString().Should().Contain("Program source changed: " + helper);
             AssertDurations(compilations: 2, executions: 2);
@@ -234,7 +237,9 @@ public sealed partial class RunWatchCommandTests : IDisposable
                     double.Parse(latest.Groups[1].Value, System.Globalization.CultureInfo.InvariantCulture) /
                     (latest.Groups[2].Value == "ms" ? 1000 : 1);
 
-                seconds.Should().BeLessThan(2);
+                seconds.Should().BeLessThanOrEqualTo(
+                    rerunDuration.TotalSeconds + 0.01,
+                    "execution must fit within the time after the edit, allowing for display rounding");
             }
 
             File.WriteAllText(Module, "not an Elm module");
