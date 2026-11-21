@@ -813,7 +813,15 @@ public static class FormatCSharpFile
                 ContinueStatementSyntax => node,
                 YieldStatementSyntax => node,
                 EmptyStatementSyntax => node,
-                LabeledStatementSyntax => node,
+
+                LabeledStatementSyntax n =>
+                n.Statement is BlockSyntax labeledBlock
+                ?
+                n.WithColonToken(n.ColonToken.WithTrailingTrivia(s_lineFeed))
+                .WithStatement(FormatBlock(labeledBlock, ctx))
+                :
+                node,
+
                 GotoStatementSyntax => node,
                 CheckedStatementSyntax => node,
                 UnsafeStatementSyntax => node,
