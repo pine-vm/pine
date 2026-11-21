@@ -444,6 +444,87 @@ public class PineValueInProcess
         return CreateWithDerivedRepresentations(evaluated);
     }
 
+    /// <summary>Retains a precomputed canonical list and already shared in-process child representations.</summary>
+    public static PineValueInProcess CreateFullyRepresented(
+        PineValue evaluated, IReadOnlyList<PineValueInProcess> items)
+    {
+        if (evaluated is not PineValue.ListValue list || list.Items.Length != items.Count)
+        {
+            throw new ArgumentException(
+                "The canonical value and shared children must describe the same list.",
+                nameof(items));
+        }
+
+        return
+            items.Count is 0
+            ?
+            EmptyList
+            :
+            new PineValueInProcess
+            {
+                _evaluated = evaluated,
+                _list = items,
+                _length = items.Count
+            };
+    }
+
+    /// <summary>Prepends an item without first constructing a singleton Pine list.</summary>
+    public static PineValueInProcess PrependItem(PineValueInProcess item, PineValueInProcess list)
+    {
+        if (!list.IsList())
+            return EmptyList;
+
+        if (list._list is { } items && (items is PrependListView || items.Count >= PrependMinBackLength))
+            return CreateList(PrependListView.Prepend([item], items));
+
+        var length = list.GetLength();
+
+        if (length >= ConcatDirectThreshold)
+            return ConcatBinary(CreateList([item]), list);
+
+        var result = new PineValueInProcess[length + 1];
+        result[0] = item;
+
+        for (var index = 0; index < length; index++)
+            result[index + 1] = list.GetElementAt(index);
+
+        return CreateList(result);
+    }
+
+    /// <summary>Combines a right-associated binary concatenation without intermediate wrappers for uniform blobs.</summary>
+    public static PineValueInProcess ConcatManyRight(ReadOnlySpan<PineValueInProcess> parts)
+    {
+        if (parts.Length is 0)
+            return EmptyList;
+
+        if (parts.Length is 1)
+            return parts[0];
+
+        var blobs = true;
+
+        for (var index = 0; index < parts.Length; index++)
+            blobs &= parts[index].IsBlob();
+
+        if (blobs)
+        {
+            var values = new PineValue[parts.Length];
+            values[^2] = parts[^2].Evaluate();
+            values[^1] = parts[^1].Evaluate();
+
+            for (var index = parts.Length - 3; index >= 0; index--)
+                values[index] = parts[index].Evaluate();
+
+            return new PineValueInProcess { _concatBuilder = new ImmutableConcatBuilder.Leaf(values) };
+        }
+
+        var result = parts[^1];
+
+        for (var index = parts.Length - 2; index >= 0; index--)
+            result = ConcatBinary(parts[index], result);
+
+        return result;
+    }
+
     private static PineValueInProcess CreateWithDerivedRepresentations(PineValue evaluated)
     {
         if (BuiltinFunction.SignedIntegerFromValueRelaxed(evaluated) is { } integer)
@@ -823,6 +904,38 @@ public class PineValueInProcess
     }
 
     /// <summary>
+    /// Materializes a blob, or returns null without materializing a value known to be a list.
+    /// </summary>
+    public PineValue.BlobValue? EvaluateIfBlob()
+    {
+        if (_evaluated is { } evaluated)
+            return evaluated as PineValue.BlobValue;
+
+        return
+            _deferredTemplateValue is not null || IsBlob()
+            ?
+            Evaluate() as PineValue.BlobValue
+            :
+            null;
+    }
+
+    /// <summary>
+    /// Materializes a list, or returns null without materializing a value known to be a blob.
+    /// </summary>
+    public PineValue.ListValue? EvaluateIfList()
+    {
+        if (_evaluated is { } evaluated)
+            return evaluated as PineValue.ListValue;
+
+        return
+            _deferredTemplateValue is not null || IsList()
+            ?
+            Evaluate() as PineValue.ListValue
+            :
+            null;
+    }
+
+    /// <summary>
     /// Attempts to obtain the integer interpretation of this value (signed).
     /// </summary>
     /// <remarks>
@@ -837,9 +950,12 @@ public class PineValueInProcess
             return _integer;
         }
 
-        var asEvaluated = Evaluate();
+        if (EvaluateIfBlob() is not { } blob)
+        {
+            return null;
+        }
 
-        _integer = BuiltinFunction.SignedIntegerFromValueRelaxed(asEvaluated);
+        _integer = BuiltinFunction.SignedIntegerFromValueRelaxed(blob);
 
         return _integer;
     }
@@ -934,6 +1050,39 @@ public class PineValueInProcess
 
         throw new NotImplementedException(
             "Missing branch in " + nameof(GetLength));
+    }
+
+    /// <summary>
+    /// Tests the sequence length without materializing a list or encoding a native integer.
+    /// </summary>
+    public bool LengthEqual(long length)
+    {
+        if (length < 0)
+            return false;
+
+        if (_length is { } cachedLength)
+            return cachedLength == length;
+
+        if (_list is { } list)
+            return list.Count == length;
+
+        if (_evaluated is { } evaluated)
+        {
+            return evaluated switch
+            {
+                PineValue.BlobValue blob => blob.Bytes.Length == length,
+                PineValue.ListValue items => items.Items.Length == length,
+
+                _ =>
+                throw new NotImplementedException(
+                    nameof(LengthEqual) + " does not handle value variant: " + evaluated.GetType().Name)
+            };
+        }
+
+        if (_integer is { } integer)
+            return BigInteger.Abs(integer).GetByteCount(isUnsigned: true) + 1 == length;
+
+        return GetLength() == length;
     }
 
     /// <summary>

@@ -395,7 +395,7 @@ public partial class ElmSyntaxInterpreter
         // begins with the initial accumulator characters in reverse order.
         for (var i = initialChars.Count - 1; i >= 0; --i)
         {
-            if (initialChars[i].Evaluate() is PineValue.BlobValue charBlob)
+            if (initialChars[i].EvaluateIfBlob() is { } charBlob)
             {
                 output.Write(charBlob.Bytes.Span);
             }

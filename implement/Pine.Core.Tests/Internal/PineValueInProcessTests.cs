@@ -816,6 +816,101 @@ public class PineValueInProcessTests
     }
 
     [Fact]
+    public void Typed_evaluation_preserves_value_kind_and_cached_identity_across_representations()
+    {
+        var blob = PineValue.Blob([17, 31, 47, 63, 79, 95, 111, 127, 143, 159]);
+        var list = PineValue.List([blob, PineValue.EmptyList]);
+
+        Func<PineValueInProcess>[] factories =
+            [
+                () => PineValueInProcess.Create(blob),
+                () => PineValueInProcess.Create(list),
+                () => PineValueInProcess.CreateList([PineValueInProcess.Create(blob), PineValueInProcess.EmptyList]),
+                () => PineValueInProcess.CreateInteger(BigInteger.One << 80),
+                () => PineValueInProcess.Create(PineValue.Blob([4, 0, 1])),
+                () => PineValueInProcess.Slice(1, 8, PineValueInProcess.Create(blob)),
+                () => PineValueInProcess.Slice(0, 1, PineValueInProcess.Create(list)),
+                () => PineValueInProcess.ConcatBinary(PineValueInProcess.Create(blob), PineValueInProcess.Create(blob)),
+                () => CreateDeferredTemplateFixture(list, [], _ => list),
+                () => PineValueInProcess.EmptyBlob,
+                () => PineValueInProcess.EmptyList
+            ];
+
+        foreach (var create in factories)
+        {
+            var value = create();
+            var expected = create().Evaluate();
+
+            if (expected is PineValue.BlobValue)
+            {
+                var previous = value.EvaluatedOrNull;
+                value.EvaluateIfList().Should().BeNull();
+                value.EvaluatedOrNull.Should().BeSameAs(previous);
+                value.EvaluateIfBlob().Should().Be(expected);
+                value.EvaluateIfBlob().Should().BeSameAs(value.Evaluate());
+            }
+            else
+            {
+                value.EvaluateIfBlob().Should().BeNull();
+                value.EvaluateIfList().Should().Be(expected);
+                value.EvaluateIfList().Should().BeSameAs(value.Evaluate());
+            }
+        }
+
+        var child = PineValueInProcess.CreateInteger(BigInteger.One << 100);
+        var lazyList = PineValueInProcess.CreateList([child]);
+        lazyList.EvaluateIfBlob().Should().BeNull();
+        lazyList.EvaluatedOrNull.Should().BeNull();
+        child.EvaluatedOrNull.Should().BeNull();
+    }
+
+    [Fact]
+    public void LengthEqual_preserves_encodings_and_does_not_materialize_native_representations()
+    {
+        var child = PineValueInProcess.CreateInteger(BigInteger.One << 100);
+        var list = PineValueInProcess.CreateList([child, child]);
+        list.LengthEqual(2).Should().BeTrue();
+        list.LengthEqual(1).Should().BeFalse();
+        list.EvaluatedOrNull.Should().BeNull();
+        child.EvaluatedOrNull.Should().BeNull();
+
+        foreach (var integer in new BigInteger[] { 0, 255, 256, -256, BigInteger.One << 80, -(BigInteger.One << 512) })
+        {
+            var value = PineValueInProcess.CreateInteger(integer);
+            var expected = ((PineValue.BlobValue)IntegerEncoding.EncodeSignedInteger(integer)).Bytes.Length;
+            var previous = value.EvaluatedOrNull;
+            value.LengthEqual(expected).Should().BeTrue();
+            value.LengthEqual(expected - 1).Should().BeFalse();
+            value.LengthEqual(expected + 1).Should().BeFalse();
+            value.EvaluatedOrNull.Should().BeSameAs(previous);
+        }
+
+        var blob = PineValue.Blob([4, 0, 1]);
+
+        Func<PineValueInProcess>[] factories =
+            {
+                () => PineValueInProcess.Create(blob),
+                () => PineValueInProcess.EmptyBlob,
+                () => PineValueInProcess.EmptyList,
+                () => PineValueInProcess.Slice(1, 1, PineValueInProcess.Create(blob)),
+                () => PineValueInProcess.ConcatBinary(PineValueInProcess.Create(blob), PineValueInProcess.Create(blob)),
+                () => CreateDeferredTemplateFixture(PineValue.List([blob]), [], _ => PineValue.List([blob]))
+            };
+
+        foreach (var create in factories)
+        {
+            var value = create();
+            var expected = BuiltinFunctionSpecialized.length_as_int(create().Evaluate());
+
+            foreach (var length in new[] { -1, 0, 1, expected - 1, expected, expected + 1, int.MaxValue })
+                value.LengthEqual(length).Should().Be(expected == length);
+
+            value.GetLength();
+            value.LengthEqual(expected).Should().BeTrue();
+        }
+    }
+
+    [Fact]
     public void Skip_with_zero_returns_same_value()
     {
         var original =

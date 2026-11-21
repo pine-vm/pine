@@ -1966,15 +1966,22 @@ public partial class PineVM : ICancellablePineVM
                         {
                             var topmostValue = currentFrame.PopTopmostFromStack();
 
-                            var length = topmostValue.GetLength();
-
                             var testedLength =
                                 currentInstruction.IntegerLiteral
                                 ??
                                 throw new Exception(
                                     "Invalid operation form: Missing integer literal value for length comparison");
 
-                            var areEqual = length == testedLength;
+                            var areEqual =
+                                testedLength < 0
+                                ?
+                                false
+                                :
+                                testedLength > long.MaxValue
+                                ?
+                                false
+                                :
+                                topmostValue.LengthEqual((long)testedLength);
 
                             currentFrame.PushInstructionResult(
                                 PineValueInProcess.CreateBool(areEqual));

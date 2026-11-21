@@ -162,7 +162,7 @@ public static class LanguageServicePrecompiledLeaves
     {
         if (!EnvironmentMatches(environment, "dropWhileEmpty") ||
             PineValueInProcess.ValueInProcessFromPathOrNull(environment, [1]) is not { } lines ||
-            lines.Evaluate() is not PineValue.ListValue linesValue)
+            lines.EvaluateIfList() is not { } linesValue)
         {
             return null;
         }

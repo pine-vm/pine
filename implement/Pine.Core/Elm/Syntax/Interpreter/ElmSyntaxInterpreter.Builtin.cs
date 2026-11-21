@@ -878,7 +878,7 @@ public partial class ElmSyntaxInterpreter
 
         foreach (var charItem in charItems)
         {
-            if (charItem.Evaluate() is not PineValue.BlobValue charBlob)
+            if (charItem.EvaluateIfBlob() is not { } charBlob)
             {
                 throw new System.InvalidOperationException(
                     "String.fromList: expected each character to be a blob.");
