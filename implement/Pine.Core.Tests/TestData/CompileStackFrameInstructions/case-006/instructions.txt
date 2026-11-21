@@ -1,5 +1,5 @@
 Push_Literal (Blob [2] (int 13))
-Eval_Const (Blob [2] (int 11))
+Parse_Error_Const (Expected a nonempty expression list.)
 Push_Literal (Blob [2] (int 17))
 Build_List (2)
 Local_Get ([ 0 ])

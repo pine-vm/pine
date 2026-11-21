@@ -1,6 +1,7 @@
 using AwesomeAssertions;
 using Pine.Core.CodeAnalysis;
 using Pine.Core.Encodings;
+using Pine.Core.Internal;
 using Pine.Core.PineLanguage;
 using Pine.Core.Runtime.IntermediateVM;
 using System;
@@ -16,7 +17,16 @@ public class StackFrameInstructionsTests
     {
         var instructions =
             Enum.GetValues<StackInstructionKind>()
-            .Select(kind => new StackInstruction(kind, TakeCount: 3, PopCount: 2, LocalIndices: [0, 1]))
+            .Select(
+                kind =>
+                kind is StackInstructionKind.Parse_Error_Const
+                ?
+                new StackInstruction(kind, Literal: PineValueInProcess.EmptyList)
+                {
+                    ParseError = "Expected a nonempty expression list."
+                }
+                :
+                new StackInstruction(kind, TakeCount: 3, PopCount: 2, LocalIndices: [0, 1]))
             .ToArray();
 
         static int Query(StackInstruction[] items)

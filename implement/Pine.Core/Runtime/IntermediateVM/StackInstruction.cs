@@ -500,6 +500,12 @@ public enum StackInstructionKind
     Eval_Const,
 
     /// <summary>
+    /// Fails with a compile-time established expression-parse error after evaluating its environment.
+    /// No runtime parsing or generic evaluation is performed.
+    /// </summary>
+    Parse_Error_Const,
+
+    /// <summary>
     /// Add <see cref="StackInstruction.IntegerLiteral"/> to the integer in
     /// each of <see cref="StackInstruction.LocalIndices"/> and store the results in those locals.
     /// Leaves the evaluation stack unchanged.
@@ -698,6 +704,9 @@ public record StackInstruction(
 
     internal bool TemplateProducer { get; init; }
 
+    /// <summary>The compile-time parse failure reported by <see cref="StackInstructionKind.Parse_Error_Const"/>.</summary>
+    public string? ParseError { get; init; }
+
     /// <summary>
     /// Gets the only local index, throwing if this instruction does not have exactly one.
     /// </summary>
@@ -730,6 +739,7 @@ public record StackInstruction(
             JumpOffset != other.JumpOffset ||
             ShiftCount != other.ShiftCount ||
             TemplateProducer != other.TemplateProducer ||
+            ParseError != other.ParseError ||
             OptimizedInvocation != other.OptimizedInvocation ||
             !ValueMapsEqual(ValueMap, other.ValueMap) ||
             !EqualityComparer<ImmutableDictionary<PineValue, int>?>.Default.Equals(
@@ -753,6 +763,7 @@ public record StackInstruction(
 
         hashCode.Add(Kind);
         hashCode.Add(TemplateProducer);
+        hashCode.Add(ParseError);
         hashCode.Add(Literal?.Evaluate());
         hashCode.Add(IntegerLiteral);
         hashCode.Add(PopCount);
@@ -1590,7 +1601,7 @@ public record StackInstruction(
 
         foreach (var line in rendered.DetailLines)
         {
-            stringBuilder.Append("\n");
+            stringBuilder.Append('\n');
             stringBuilder.Append(indent);
             stringBuilder.Append(line);
         }
@@ -1743,6 +1754,13 @@ public record StackInstruction(
 
             StackInstructionKind.Local_Get_Skip_Head_Const =>
             new(PopCount: 0, PushCount: instruction.LocalIndices.Length),
+
+            StackInstructionKind.Parse_Error_Const =>
+            instruction.Literal is not null && instruction.ParseError is not null
+            ?
+            new(PopCount: 1, PushCount: 1)
+            :
+            throw new InvalidOperationException("Static parse errors require an encoded value and diagnostic."),
 
             StackInstructionKind.Pop =>
             new(
@@ -2188,6 +2206,12 @@ public record StackInstruction(
                     ?.Evaluate()
                     ?? throw new Exception(
                         "Missing Literal for EvalConst instruction"))
+                ]),
+
+            StackInstructionKind.Parse_Error_Const =>
+            InstructionDisplay.WithoutDetailLines(
+                [
+                    instruction.ParseError ?? throw new InvalidOperationException("Missing static parse error")
                 ]),
 
             StackInstructionKind.Invoke_StackFrame_Const =>

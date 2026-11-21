@@ -1417,6 +1417,19 @@ internal class InternalPineIRCompiler
         if (evalExpr.Encoded.EvalCount is 0 &&
             TryEvalIndependent(evalExpr.Encoded, parseCache) is { } encodedValue)
         {
+            if (parseCache.ParseInternalExpression(encodedValue).IsErrOrNull() is { } parseError)
+            {
+                return
+                    prior.ContinueWithExpression(evalExpr.Environment, context, parseCache)
+                    .AppendInstruction(
+                        new(
+                            StackInstructionKind.Parse_Error_Const,
+                            Literal: Internal.PineValueInProcess.Create(encodedValue))
+                        {
+                            ParseError = parseError
+                        });
+            }
+
             if (context.EnableDirectInvocation &&
                 !(context.SkipDirectInvocation?.Invoke(encodedValue) ?? false) &&
                 ExpressionTemplatePlan.TryParseTemplate(

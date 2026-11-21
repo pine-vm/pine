@@ -3002,6 +3002,25 @@ public partial class PineVM : ICancellablePineVM
                             continue;
                         }
 
+                    case StackInstructionKind.Parse_Error_Const:
+                        {
+                            if (CheckCancellation() is { } cancellationError)
+                                return cancellationError;
+
+                            var environment = currentFrame.PopTopmostFromStack();
+                            ++evalCount;
+
+                            if (IncrementInvocationCountAndEnforceLimits() is { } limitError)
+                                return limitError;
+
+                            return
+                                BuildParseExpressionError(
+                                    currentInstruction.ParseError ??
+                                    throw new InvalidOperationException("Missing static parse error."),
+                                    currentInstruction.Literal!.Evaluate(),
+                                    environment);
+                        }
+
                     case StackInstructionKind.Eval_Const:
                         {
                             if (CheckCancellation() is { } cancellationError)

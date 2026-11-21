@@ -234,6 +234,9 @@ public static class StackInstructionTextFormat
             if (instruction.TemplateProducer)
                 fields.Add("TemplateProducer: true");
 
+            if (instruction.ParseError is { } parseError)
+                fields.Add("ParseError: " + Value(StringEncoding.ValueFromString(parseError)));
+
             if (instruction.ValueMap is { } valueMap)
                 fields.Add("ValueMap: " + Value(StackInstructionMetadataEncoding.EncodeValueMap(valueMap)));
 
@@ -514,6 +517,7 @@ public static class StackInstructionTextFormat
                     _links.Add((invocation ?? throw Error("LinkedFrame requires an invocation."), Int(linked)));
 
                 var planValue = OptionalValue(fields, "TemplatePlan");
+                var parseErrorValue = OptionalValue(fields, "ParseError");
 
                 var producer =
                     fields.Remove("TemplateProducer", out var producerText) &&
@@ -588,7 +592,13 @@ public static class StackInstructionTextFormat
                     {
                         TemplatePlan =
                         planValue is null ? null : StackInstructionMetadataEncoding.DecodePlan(planValue),
-                        TemplateProducer = producer
+                        TemplateProducer = producer,
+                        ParseError =
+                        parseErrorValue is null
+                        ?
+                        null
+                        :
+                        StringEncoding.StringFromValue(parseErrorValue).Extract(error => throw Error(error))
                     });
             }
 

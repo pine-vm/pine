@@ -132,29 +132,38 @@ public class DirectTailLoopCompilationTests
     }
 
     [Fact]
-    public void Literal_encoded_tail_call_with_invalid_encoding_uses_eval_const_without_loop_guard()
+    public void Literal_encoded_tail_call_with_invalid_encoding_uses_static_parse_error_without_loop_guard()
     {
+        var invalidEncoding = PineValue.EmptyList;
+        var parseCache = new PineVMParseCache();
+
         var expression =
             new Expression.Eval(
-                encoded: Expression.LitralInst(PineValue.EmptyList),
+                encoded: Expression.LitralInst(invalidEncoding),
                 environment: Expression.EnvironmentInstance);
 
         var compilation =
             ExpressionCompilation.CompileExpression(
                 expression,
                 specializations: [],
-                parseCache: new(),
+                parseCache,
                 disableReduction: true,
                 enableTailRecursionOptimization: true,
                 skipInlining: (_, _) => false);
 
-        compilation.Generic.Instructions
+        var failure =
+            compilation.Generic.Instructions
             .Should().ContainSingle(
-            instruction => instruction.Kind == StackInstructionKind.Eval_Const);
+                instruction => instruction.Kind == StackInstructionKind.Parse_Error_Const)
+            .Which;
+
+        failure.Literal?.Evaluate().Should().Be(invalidEncoding);
+        failure.ParseError.Should().Be(parseCache.ParseInternalExpression(invalidEncoding).IsErrOrNull());
 
         compilation.Generic.Instructions
             .Should().NotContain(
             instruction =>
+            PineControlFlowGraph.IsInvocation(instruction.Kind) ||
             instruction.Kind == StackInstructionKind.Jump_If_Equal_Const ||
             instruction.Kind == StackInstructionKind.Jump_Const);
     }
