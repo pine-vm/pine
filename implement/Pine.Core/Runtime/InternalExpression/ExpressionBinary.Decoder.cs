@@ -2,6 +2,7 @@ using Pine.Core.Encodings;
 using Pine.Core.Functional;
 using Pine.Core.PineLanguage;
 using System;
+using System.Collections.Immutable;
 using System.IO;
 using System.Runtime.InteropServices;
 
@@ -169,6 +170,27 @@ public static partial class ExpressionBinary
             case Constructor.Conditional:
                 Arity(ref reader, count, 3);
                 return new Expression.Conditional(Read(ref reader), Read(ref reader), Read(ref reader));
+
+            case Constructor.Switch:
+                if (count < 8 || (count - 2) % 3 != 0 || count > reader.Remaining / 8)
+                    throw reader.Invalid("Invalid switch constructor environment arity");
+
+                var selector = Read(ref reader);
+                var defaultBranch = Read(ref reader);
+                var arms = ImmutableList.CreateBuilder<Expression.Switch.Arm>();
+
+                for (var index = 2; index < count; index += 3)
+                {
+                    var key = Value(ref reader);
+                    var literalOnLeft = Int32(ref reader);
+
+                    if (literalOnLeft is not (0 or 1))
+                        throw reader.Invalid("Invalid switch operand order flag");
+
+                    arms.Add(new Expression.Switch.Arm(key, literalOnLeft is 1, Read(ref reader)));
+                }
+
+                return new Expression.Switch(selector, arms.ToImmutable(), defaultBranch);
 
             case Constructor.Environment:
                 Arity(ref reader, count, 0);

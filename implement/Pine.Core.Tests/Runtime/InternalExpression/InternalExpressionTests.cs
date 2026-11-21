@@ -1,4 +1,5 @@
 using AwesomeAssertions;
+using Pine.Core.Addressing;
 using Pine.Core.CodeAnalysis;
 using Pine.Core.Encodings;
 using Pine.Core.Functional;
@@ -627,6 +628,11 @@ public class InternalExpressionTests
 
             Expression.HeadSkip head => "HeadSkip(" + head.Count + ", " + Render(head.Input) + ")",
 
+            Expression.Switch dispatch =>
+            "Switch(" + Render(dispatch.Selector) + ", " +
+            string.Join(", ", dispatch.Arms.Select(arm => Value(arm.Key) + ": " + Render(arm.Branch))) +
+            ", default: " + Render(dispatch.Default) + ")",
+
             _ =>
             throw new NotImplementedException(
                 nameof(Render) + " does not handle expression variant: " + expression.GetType().Name)
@@ -688,6 +694,11 @@ public class InternalExpressionTests
     private static Expression[] RetainedCorpus() =>
         [
             .. CanonicalCorpus().Select(expression => ExpressionConversion.FromCanonical(expression)),
+            ExpressionConversion.FromCanonical(
+                Canonical.ConditionalInst(
+                    Call("equal", Integer(1), Canonical.EnvironmentInstance),
+                    SwitchSource(Integer(10), Integer(20), Integer(30)),
+                    Integer(40))),
             .. Enum.GetValues<BuiltinFunction>().Select(
                 function => new Expression.Builtin(function, Expression.Environment.Instance)),
             .. Enum.GetValues<BuiltinFunction>().Select(
@@ -701,6 +712,138 @@ public class InternalExpressionTests
                 new Expression.Literal(
                     PineValue.List([StringEncoding.ValueFromString("Condition"), PineValue.Blob([2, 0])])))
         ];
+
+    private static Canonical SwitchSource(Canonical first, Canonical second, Canonical fallback) =>
+        Canonical.ConditionalInst(
+            Call("equal", Integer(1), Canonical.EnvironmentInstance),
+            Canonical.ConditionalInst(
+                Call("equal", Canonical.EnvironmentInstance, Canonical.LitralInst(PineValue.EmptyList)),
+                fallback,
+                second),
+            first);
+
+    [Fact]
+    public void Switch_fuses_literal_equalities_and_evaluates_only_the_selected_arm()
+    {
+        var failingBranch = new Canonical.Eval(Integer(0), Canonical.EnvironmentInstance);
+        var source = SwitchSource(Integer(10), Integer(20), failingBranch);
+        var unfused = ExpressionConversion.FromCanonical(source, fusePopularShapes: false);
+        var dispatch = ExpressionConversion.FromCanonical(source).Should().BeOfType<Expression.Switch>().Subject;
+
+        Render(dispatch).Should().Be(
+            "Switch(Environment, 0x0401: Literal(0x040a), []: Literal(0x0414), default: Eval(Literal(0x0400), Environment))");
+
+        dispatch.SubexpressionCount.Should().Be(unfused.SubexpressionCount);
+        dispatch.ConditionCount.Should().Be(unfused.ConditionCount);
+        dispatch.BuiltinCount.Should().Be(unfused.BuiltinCount);
+        dispatch.MaxDepth.Should().Be(unfused.MaxDepth);
+        ExpressionConversion.ToCanonical(dispatch).Should().Be(source);
+        unfused.Should().BeOfType<Expression.Conditional>();
+
+        var vm = CreateSwitchTestVM();
+
+        vm.EvaluateExpression(source, IntegerEncoding.EncodeSignedInteger(1))
+            .Extract(error => throw new InvalidOperationException(error)).Should().Be(IntegerEncoding.EncodeSignedInteger(10));
+
+        vm.EvaluateExpression(source, PineValue.EmptyList)
+            .Extract(error => throw new InvalidOperationException(error)).Should().Be(IntegerEncoding.EncodeSignedInteger(20));
+
+        vm.EvaluateExpression(SwitchSource(Integer(10), Integer(20), Integer(30)), PineValue.EmptyBlob)
+            .Extract(error => throw new InvalidOperationException(error)).Should().Be(IntegerEncoding.EncodeSignedInteger(30));
+    }
+
+    private static Core.Runtime.IntermediateVM.PineVM CreateSwitchTestVM() =>
+        Core.Runtime.IntermediateVM.PineVM.CreateCustom(
+            evalCache: null,
+            evaluationConfigDefault: null,
+            reportFunctionApplication: null,
+            compilationEnvClasses: null,
+            disableReductionInCompilation: true,
+            selectPrecompiled: null,
+            skipInlineForExpression: null,
+            enableTailRecursionOptimization: true,
+            parseCache: null,
+            precompiledLeaves: null,
+            reportEnterPrecompiledLeaf: null,
+            reportExitPrecompiledLeaf: null,
+            optimizationParametersSerial: null,
+            cacheFileStore: null);
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void Switch_preserves_duplicate_keys_but_runs_only_the_first_match(bool includeDistinctKey)
+    {
+        var key = IntegerEncoding.EncodeSignedInteger(1);
+        var firstValue = IntegerEncoding.EncodeSignedInteger(40);
+        var failingBranch = new Canonical.Eval(Integer(0), Canonical.EnvironmentInstance);
+
+        var tail =
+            includeDistinctKey
+            ?
+            SwitchSource(failingBranch, Integer(20), Integer(30))
+            :
+            Canonical.ConditionalInst(
+                Call("equal", Canonical.EnvironmentInstance, Integer(1)),
+                Integer(30),
+                failingBranch);
+
+        var source =
+            Canonical.ConditionalInst(Call("equal", Integer(1), Canonical.EnvironmentInstance), tail, Integer(40));
+
+        var dispatch = ExpressionConversion.FromCanonical(source).Should().BeOfType<Expression.Switch>().Subject;
+
+        dispatch.Arms.Take(2).Select(arm => arm.Key).Should().Equal(key, key);
+        ExpressionConversion.ToCanonical(ExpressionBinary.Decode(Encode(dispatch), out _)).Should().Be(source);
+
+        var directResult = Core.Runtime.IntermediateVM.PineVM.EvalDirect(dispatch, PineValueInProcess.Create(key));
+        (directResult?.value.Evaluate()).Should().Be(firstValue);
+        var vm = CreateSwitchTestVM();
+
+        vm.EvaluateExpression(source, key).Extract(error => throw new InvalidOperationException(error))
+            .Should().Be(firstValue);
+
+        vm.EvaluateExpression(source, PineValue.EmptyBlob).Extract(error => throw new InvalidOperationException(error))
+            .Should().Be(IntegerEncoding.EncodeSignedInteger(30));
+    }
+
+    [Fact]
+    public void Switch_does_not_merge_distinct_selectors()
+    {
+        var tail = SwitchSource(Integer(10), Integer(20), Integer(30));
+
+        var source =
+            Canonical.ConditionalInst(Call("equal", Integer(2), Path(PineValue.Blob([4, 0]))), tail, Integer(50));
+
+        var retained = ExpressionConversion.FromCanonical(source).Should().BeOfType<Expression.Conditional>().Subject;
+        retained.FalseBranch.Should().BeOfType<Expression.Switch>();
+        ExpressionConversion.ToCanonical(retained).Should().Be(source);
+    }
+
+    [Fact]
+    public void Switch_binary_decoder_rejects_invalid_arm_orientation()
+    {
+        var constructors = ExpressionBinary.GetConstructorExpressions();
+        var switchHash = PineValueHashTree.ComputeHash(constructors["Switch"]);
+        var environmentHash = PineValueHashTree.ComputeHash(constructors["Environment"]);
+        using var stream = new MemoryStream();
+
+        using (var writer = new PineTreeBinaryEncoding.TreeEncoder<object>(stream.Write))
+        {
+            writer.StartExternalEval(switchHash.Span, 8);
+            writer.StartExternalEval(environmentHash.Span, 0);
+            writer.StartExternalEval(environmentHash.Span, 0);
+            writer.Integer(1);
+            writer.Integer(0);
+            writer.StartExternalEval(environmentHash.Span, 0);
+            writer.Integer(2);
+            writer.Integer(2);
+            writer.StartExternalEval(environmentHash.Span, 0);
+        }
+
+        Action decode = () => ExpressionBinary.Decode(stream.ToArray(), out _);
+        decode.Should().Throw<InvalidDataException>().WithMessage("*Invalid switch operand order flag*");
+    }
 
     [Fact]
     public void Conversion_snapshot_exposes_fused_shapes_and_preserves_exact_canonical_syntax()

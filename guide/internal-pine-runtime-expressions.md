@@ -23,6 +23,7 @@ Additional variants:
 | `BuiltinBinary(function, left, right)` | `Builtin(name(function), List([left, right]))` | No input-list node or child array; checked enum and two expression references |
 | `Length_Equal_Binary(sequence, other, lengthOnLeft)` | `Builtin("equal", List([Builtin("length", sequence), other]))`, or the reversed operand order | No length node, equality input-list node or child array; two expression references and an inline ordering flag |
 | `HeadSkip(count, input)` | `Builtin("head", Builtin("skip", List([Litral(count), input])))` | No skip node, input-list node/array or literal-count reference; count is an inline Int32 |
+| `Switch(selector, arms, default)` | False-branch chain of `Conditional` nodes testing binary `equal` against literal keys | One retained selector and an immutable ordered list of arms |
 
 These are structural fusions, not new arithmetic/sequence semantics. In
 particular, **any** builtin whose input is statically a two-item expression
@@ -50,6 +51,14 @@ contribute the length; the flag preserves the original evaluation order and
 syntax. If both operands are length calls, the left one is fused and the
 right remains a general builtin. Generic `Head` and `Equal` retained variants
 were removed: their small savings did not justify extra reduction branches.
+
+`Switch` fuses two or more adjacent binary equality tests on the same selector.
+Its arm list preserves canonical order, operand placement, and repeated keys
+for exact expansion. Runtime dispatch evaluates the selector once and runs
+only the first matching arm or the default. Compiled dispatch omits shadowed
+arms from its lookup table without removing them from the retained syntax.
+Common subexpression elimination still treats the selector as shared by the
+original comparisons, so fusion does not hide a candidate for reuse.
 
 Both conversions preserve shared child identity within one conversion.
 `fusePopularShapes: false` preserves the general variant layout. Explicit
@@ -245,6 +254,9 @@ environment; binary builtins construct the canonical builtin/input-list
 encoding; head/skip constructs the literal count and general builtin layers.
 `Length_Equal_Binary` writes sequence, other operand and an inline integer ordering
 flag (0 or 1); its constructor chooses the matching operand order.
+`Switch` writes the selector and default, followed by flat triples containing
+each literal key, its inline operand-order flag, and the corresponding branch.
+Its constructor reconstructs the canonical conditional chain.
 `Builtin` and `BuiltinBinary` constructor programs map their numeric enum to
 the canonical function name. Their hashes consequently capture that mapping.
 `BuiltinBinary` writes the enum, left operand and right operand in that order;

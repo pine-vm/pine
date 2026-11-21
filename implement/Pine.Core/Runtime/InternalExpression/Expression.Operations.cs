@@ -149,7 +149,10 @@ public abstract partial record Expression
         {
             Builtin builtin => (builtin.Function, (ExpressionInput)builtin.Input),
             BuiltinBinary binary => (binary.Function, ExpressionInput.FromBinary(binary)),
-            Literal or List or Eval or Conditional or Environment or Label or Length_Equal_Binary or HeadSkip => null,
+
+            Literal or List or Eval or Conditional or Switch or Environment or Label or Length_Equal_Binary or HeadSkip =>
+            null,
+
             null => null,
 
             _ =>
@@ -245,6 +248,19 @@ public abstract partial record Expression
                 {
                     pending.Push(conditional.FalseBranch);
                     pending.Push(conditional.TrueBranch);
+                }
+
+                break;
+
+            case Switch dispatch:
+                pending.Push(dispatch.Selector);
+
+                if (!skipConditionalBranches)
+                {
+                    pending.Push(dispatch.Default);
+
+                    foreach (var arm in dispatch.Arms)
+                        pending.Push(arm.Branch);
                 }
 
                 break;

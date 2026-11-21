@@ -226,6 +226,9 @@ internal class InternalPineIRCompiler
         if (expression is Expression.Conditional conditional)
             return CompileConditional(conditional, context, prior, parseCache, layout);
 
+        if (expression is Expression.Switch dispatch)
+            return CompileSwitch(dispatch, context, prior, parseCache, layout);
+
         if (expression is Expression.List list &&
             TryCompileReturningList(list, context, prior, parseCache, layout) is { } directProducer)
         {
@@ -564,6 +567,7 @@ internal class InternalPineIRCompiler
         NodeCompilationResult prior)
     {
         var subexprAppearingMultipleTimesIncludingConditional = new HashSet<Expression>();
+        HashSet<Expression>? switchSelectors = null;
 
         {
             var allSubexpressions = new HashSet<Expression>();
@@ -601,6 +605,9 @@ internal class InternalPineIRCompiler
                     }
 
                     allSubexpressions.Add(subexpression);
+
+                    if (subexpression is Expression.Switch dispatch)
+                        (switchSelectors ??= []).Add(dispatch.Selector);
 
                     return false;
                 },
@@ -654,6 +661,11 @@ internal class InternalPineIRCompiler
             {
             }
         }
+
+        // The equality chain made its selector a reuse candidate even though only
+        // the first comparison was unconditional. Keep that eligibility after fusion.
+        if (switchSelectors is not null)
+            subexprAppearingMultipleTimesIncludingConditional.UnionWith(switchSelectors);
 
         var copyToLocalNew =
             context.CopyToLocal
@@ -786,6 +798,9 @@ internal class InternalPineIRCompiler
                         context,
                         prior,
                         parseCache);
+
+            case Expression.Switch dispatch:
+                return CompileSwitch(dispatch, context, prior, parseCache);
 
             case Expression.Eval evalExpr:
                 return
@@ -1058,6 +1073,75 @@ internal class InternalPineIRCompiler
             defaultBranch = nestedConditional.FalseBranch;
         }
 
+        while (defaultBranch is Expression.Switch dispatch && dispatch.Selector == comparedExpression)
+        {
+            foreach (var arm in dispatch.Arms)
+            {
+                if (cases.Any(item => item.Literal == arm.Key))
+                    return null;
+
+                cases.Add((arm.Key, arm.Branch));
+            }
+
+            defaultBranch = dispatch.Default;
+        }
+
+        return
+            TryCompileSwitchEqual(
+                comparedExpression,
+                cases,
+                defaultBranch,
+                context,
+                prior,
+                parseCache,
+                returnLayout);
+    }
+
+    private static NodeCompilationResult CompileSwitch(
+        Expression.Switch dispatch,
+        CompilationContext context,
+        NodeCompilationResult prior,
+        PineVMParseCache parseCache,
+        ReturnValueLayout? returnLayout = null)
+    {
+        var cases = new List<(PineValue Literal, Expression Branch)>(dispatch.Arms.Count);
+        var seen = new HashSet<PineValue>();
+
+        foreach (var arm in dispatch.Arms)
+        {
+            if (seen.Add(arm.Key))
+                cases.Add((arm.Key, arm.Branch));
+        }
+
+        return
+            TryCompileSwitchEqual(
+                dispatch.Selector,
+                cases,
+                dispatch.Default,
+                context,
+                prior,
+                parseCache,
+                returnLayout) ??
+            CompileConditionalWithoutFusion(
+                conditionExpression: dispatch.Selector,
+                jumpLiteralValue: cases[0].Literal,
+                falseBranch: dispatch.Default,
+                trueBranch: cases[0].Branch,
+                context: context,
+                prior: prior,
+                parseCache: parseCache,
+                returnLayout: returnLayout);
+    }
+
+    private static NodeCompilationResult? TryCompileSwitchEqual(
+        Expression comparedExpression,
+        IReadOnlyList<(PineValue Literal, Expression Branch)> cases,
+        Expression defaultBranch,
+        CompilationContext context,
+        NodeCompilationResult prior,
+        PineVMParseCache parseCache,
+        ReturnValueLayout? returnLayout)
+    {
         (Expression sourceExpr, Expression skipCountExpr)? sliceSkipVar = null;
 
         if (TryParse_Builtin_Take_Const(comparedExpression, parseCache) is { } parsedTake &&
@@ -1224,7 +1308,7 @@ internal class InternalPineIRCompiler
             :
             null,
 
-            Expression.Literal or Expression.List or Expression.Eval or Expression.Conditional or
+            Expression.Literal or Expression.List or Expression.Eval or Expression.Conditional or Expression.Switch or
             Expression.Environment or Expression.Label or Expression.Length_Equal_Binary or Expression.HeadSkip =>
             null,
 

@@ -727,6 +727,7 @@ public sealed class PineVMWorkProfile : IDisposable
             case Expression.Eval:
             case Retained.Label:
             case Retained.Conditional:
+            case Retained.Switch:
             case Retained.Builtin:
             case Retained.BuiltinBinary:
             case Retained.HeadSkip:
@@ -1265,7 +1266,7 @@ public sealed class PineVMWorkProfile : IDisposable
                 Expression.Litral or Retained.Literal => Metric.EvalDirectLiteral,
                 Expression.List or Retained.List => Metric.EvalDirectList,
                 Expression.Environment or Retained.Environment => Metric.EvalDirectEnvironment,
-                Expression.Conditional or Retained.Conditional => Metric.EvalDirectConditional,
+                Expression.Conditional or Retained.Conditional or Retained.Switch => Metric.EvalDirectConditional,
 
                 Expression.Builtin or Retained.Builtin or Retained.BuiltinBinary or Retained.HeadSkip or Retained.Length_Equal_Binary =>
                 Metric.EvalDirectBuiltin,

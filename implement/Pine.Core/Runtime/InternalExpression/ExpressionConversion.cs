@@ -2,6 +2,7 @@ using Pine.Core.Encodings;
 using Pine.Core.PineLanguage;
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 
@@ -119,6 +120,13 @@ public static class ExpressionConversion
 
                 case Canonical.Conditional conditional:
                     result =
+                        fusePopularShapes
+                        ?
+                        Expression.FuseConditional(
+                            converted[conditional.Condition],
+                            converted[conditional.FalseBranch],
+                            converted[conditional.TrueBranch])
+                        :
                         new Expression.Conditional(
                             converted[conditional.Condition],
                             converted[conditional.FalseBranch],
@@ -316,6 +324,8 @@ public static class ExpressionConversion
                         converted[conditional.FalseBranch],
                         converted[conditional.TrueBranch]),
 
+                    Expression.Switch dispatch => ExpandSwitch(dispatch, child => converted[child]),
+
                     Expression.Environment => Canonical.EnvironmentInstance,
                     Expression.Label label => new Canonical.Label(label.Value, converted[label.Tagged]),
 
@@ -365,6 +375,26 @@ public static class ExpressionConversion
                 Canonical.ListInst(expression.LengthOnLeft ? [length, other] : [other, length]));
     }
 
+    private static Canonical ExpandSwitch(Expression.Switch dispatch, Func<Expression, Canonical> convert)
+    {
+        var selector = convert(dispatch.Selector);
+        var tail = convert(dispatch.Default);
+
+        foreach (var (key, literalOnLeft, branch) in Enumerable.Reverse(dispatch.Arms))
+        {
+            var literal = Canonical.LitralInst(key);
+
+            var condition =
+                Canonical.BuiltinInst(
+                    "equal",
+                    Canonical.ListInst(literalOnLeft ? [literal, selector] : [selector, literal]));
+
+            tail = Canonical.ConditionalInst(condition, tail, convert(branch));
+        }
+
+        return tail;
+    }
+
     internal static void PushRetainedChildren(Expression node, Stack<(Expression Node, bool Expanded)> pending)
     {
         switch (node)
@@ -392,6 +422,15 @@ public static class ExpressionConversion
                 pending.Push((conditional.TrueBranch, false));
                 pending.Push((conditional.FalseBranch, false));
                 pending.Push((conditional.Condition, false));
+                break;
+
+            case Expression.Switch dispatch:
+                pending.Push((dispatch.Default, false));
+
+                foreach (var arm in dispatch.Arms)
+                    pending.Push((arm.Branch, false));
+
+                pending.Push((dispatch.Selector, false));
                 break;
 
             case Expression.Label label:

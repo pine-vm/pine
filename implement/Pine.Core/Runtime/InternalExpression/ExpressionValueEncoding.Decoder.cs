@@ -91,7 +91,7 @@ public static partial class ExpressionValueEncoding
                 result = shape.Error;
             }
             else
-                result = Construct(work.Shape, parsed);
+                result = Construct(work.Shape, fusePopularShapes, parsed);
 
             parsed[work.Node] = result;
         }
@@ -100,7 +100,7 @@ public static partial class ExpressionValueEncoding
     }
 
     private static ValueResult<string, Expression> Construct(
-        Shape shape, IDictionary<PineValue, ValueResult<string, Expression>> parsed)
+        Shape shape, bool fusePopularShapes, IDictionary<PineValue, ValueResult<string, Expression>> parsed)
     {
         for (var index = 0; index < shape.ChildCount; index++)
         {
@@ -128,7 +128,14 @@ public static partial class ExpressionValueEncoding
             Kind.List => BuildList(),
             Kind.Eval => new Expression.Eval(Child(0), Child(1)),
             Kind.Builtin => new Expression.Builtin(shape.Function, Child(0)),
-            Kind.Conditional => new Expression.Conditional(Child(0), Child(1), Child(2)),
+
+            Kind.Conditional =>
+            fusePopularShapes
+            ?
+            Expression.FuseConditional(Child(0), Child(1), Child(2))
+            :
+            new Expression.Conditional(Child(0), Child(1), Child(2)),
+
             Kind.Environment => Expression.Environment.Instance,
             Kind.Label => new Expression.Label(shape.Payload!, Child(0)),
             Kind.BuiltinBinary => new Expression.BuiltinBinary(shape.Function, Child(0), Child(1)),

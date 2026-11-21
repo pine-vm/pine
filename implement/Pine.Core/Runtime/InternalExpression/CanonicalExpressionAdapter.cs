@@ -19,8 +19,11 @@ internal static class CanonicalExpressionAdapter
     internal static Expression.Eval ToInternal(Canonical.Eval expression) =>
         (Expression.Eval)ToInternal((Canonical)expression);
 
-    internal static Expression.Conditional ToInternal(Canonical.Conditional expression) =>
-        (Expression.Conditional)ToInternal((Canonical)expression);
+    internal static Expression.Conditional ToInternal(Canonical.Conditional expression)
+    {
+        var retained = ToInternal((Canonical)expression);
+        return retained is Expression.Switch dispatch ? dispatch.Expand() : (Expression.Conditional)retained;
+    }
 
     internal static Expression.Label ToInternal(Canonical.Label expression) =>
         (Expression.Label)ToInternal((Canonical)expression);

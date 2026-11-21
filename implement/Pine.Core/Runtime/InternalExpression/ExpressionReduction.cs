@@ -83,6 +83,9 @@ internal static class ExpressionReduction
             Expression.Conditional conditional =>
             TryEvalIndependent(conditional, parseCache),
 
+            Expression.Switch dispatch =>
+            TryEvalSwitch(dispatch, parseCache),
+
             Expression.Label labelExpr =>
             TryEvalIndependent(labelExpr.Tagged, parseCache),
 
@@ -104,6 +107,18 @@ internal static class ExpressionReduction
                 "TryEvalIndependent does not handle expression variant: " +
                 expression.GetType().Name)
         };
+
+    private static ValueEvalResult TryEvalSwitch(Expression.Switch dispatch, PineVMParseCache parseCache)
+    {
+        var selected = TryEvalIndependent(dispatch.Selector, parseCache);
+
+        return
+            selected.Value is { } key
+            ?
+            TryEvalIndependent(dispatch.SelectBranch(key), parseCache)
+            :
+            selected;
+    }
 
     private static ValueEvalResult TryEvalBuiltinBinary(Expression.BuiltinBinary binary, PineVMParseCache parseCache)
     {
@@ -917,6 +932,9 @@ internal static class ExpressionReduction
             case Expression.HeadSkip head:
                 return TryReduceSelectListItem(head.Input, head.Count) ?? AttemptReduceViaEval();
 
+            case Expression.Switch dispatch:
+                return SearchForExpressionReduction(dispatch.Expand(), envConstraintId, parseCache);
+
             case Expression.Literal:
             case Expression.List:
             case Expression.Eval:
@@ -1065,6 +1083,9 @@ internal static class ExpressionReduction
 
                     return (null, items[0], Expression.LiteralInstance(fields.Items.Span[0]));
                 }
+
+            case Expression.Switch dispatch:
+                return TryUnwrapSingleFieldTagFromAllBranches(dispatch.Expand(), parseCache);
 
             case Expression.Conditional conditional:
                 {
@@ -1435,6 +1456,10 @@ internal static class ExpressionReduction
             Expression.Conditional conditional =>
             IsKnownBooleanExpression(conditional.TrueBranch) &&
             IsKnownBooleanExpression(conditional.FalseBranch),
+
+            Expression.Switch dispatch =>
+            IsKnownBooleanExpression(dispatch.Default) &&
+            dispatch.Arms.All(arm => IsKnownBooleanExpression(arm.Branch)),
 
             Expression.Label labelExpr =>
             IsKnownBooleanExpression(labelExpr.Tagged),
@@ -1963,6 +1988,16 @@ internal static class ExpressionReduction
                         return (ReferenceEquals(input.expr, head.Input) ? head : new Expression.HeadSkip(head.Count, input.expr), input.referencesOriginalEnv);
                     }
 
+                case Expression.Switch dispatch:
+                    {
+                        var expanded = dispatch.Expand();
+
+                        var transformed =
+                            TransformPineExpressionWithOptionalReplacement(findReplacement, expanded, cache);
+
+                        return (transformed.expr == expanded ? dispatch : transformed.expr, transformed.referencesOriginalEnv);
+                    }
+
                 case Expression.Label labelExpr:
                     {
                         var taggedTransform =
@@ -2112,6 +2147,9 @@ internal static class ExpressionReduction
                     parseCache,
                     reducedExpressionCache,
                     config),
+
+                Expression.Switch dispatch =>
+                ReduceSwitchBottomUp(dispatch, config, parseCache, reducedExpressionCache),
 
                 Expression.Label labelExpr =>
                 ReduceLabelBottomUp(
@@ -2721,6 +2759,18 @@ internal static class ExpressionReduction
                 trueBranch: reducedTrue);
     }
 
+    private static Expression ReduceSwitchBottomUp(
+        Expression.Switch dispatch,
+        ReductionConfig config,
+        PineVMParseCache parseCache,
+        IDictionary<(Expression, ReductionConfig), Expression>? cache)
+    {
+        // Reuse the existing branch-assumption logic, which reasons about individual equality tests.
+        var expanded = dispatch.Expand();
+        var reduced = ReduceExpressionBottomUp(expanded, config, parseCache, cache);
+        return reduced == expanded ? dispatch : reduced;
+    }
+
     private static Expression ReduceBranchUnderAssumption(
         Expression branch,
         Expression condition,
@@ -2907,6 +2957,9 @@ internal static class ExpressionReduction
                     return Expression.TryGetBuiltinInput(expression, BuiltinId.Reverse)?.ToExpression();
                 }
 
+            case Expression.Switch dispatch:
+                return ApplyBuiltinFunctionReverseToAllBranches(dispatch.Expand());
+
             case Expression.Conditional cond:
                 {
                     if (ApplyBuiltinFunctionReverseToAllBranches(cond.FalseBranch) is { } falseOk &&
@@ -3014,6 +3067,9 @@ internal static class ExpressionReduction
                     return null;
                 }
 
+            case Expression.Switch dispatch:
+                return ApplyBuiltinFunctionSkipToAllBranches(countClamped, dispatch.Expand());
+
             case Expression.Conditional conditional:
                 {
                     if (ApplyBuiltinFunctionSkipToAllBranches(countClamped, conditional.FalseBranch) is { } falseOk &&
@@ -3108,6 +3164,9 @@ internal static class ExpressionReduction
                     return null;
                 }
 
+            case Expression.Switch dispatch:
+                return ApplyBuiltinFunctionTakeToAllBranches(countClamped, dispatch.Expand());
+
             case Expression.Conditional conditional:
                 {
                     if (ApplyBuiltinFunctionTakeToAllBranches(countClamped, conditional.FalseBranch) is { } falseOk &&
@@ -3167,6 +3226,9 @@ internal static class ExpressionReduction
 
         switch (expression)
         {
+            case Expression.Switch dispatch:
+                return ApplyBuiltinFunctionHeadToAllBranches(dispatch.Expand());
+
             case Expression.Conditional cond:
                 {
                     if (ApplyBuiltinFunctionHeadToAllBranches(cond.FalseBranch) is { } falseOk &&
@@ -3266,6 +3328,9 @@ internal static class ExpressionReduction
                     // Not a list-literal: no structural reduction.
                     return null;
                 }
+
+            case Expression.Switch dispatch:
+                return TryReduceSelectListItem(dispatch.Expand(), index);
 
             case Expression.Conditional cond:
                 {

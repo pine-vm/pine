@@ -719,6 +719,9 @@ internal static partial class InternalExpressionCompilation
                     Expression.Conditional conditional =>
                     InlineConditional(conditional),
 
+                    Expression.Switch dispatch =>
+                    InlineSwitch(dispatch),
+
                     Expression.Label label =>
                     InlineLabel(label),
 
@@ -816,6 +819,13 @@ internal static partial class InternalExpressionCompilation
                 return builtin;
 
             return Expression.BuiltinInst(builtin.Function, inputInlined);
+        }
+
+        Expression InlineSwitch(Expression.Switch dispatch)
+        {
+            var expanded = dispatch.Expand();
+            var inlined = InlineConditional(expanded);
+            return inlined == expanded ? dispatch : inlined;
         }
 
         Expression InlineConditional(Expression.Conditional conditional)
@@ -944,6 +954,8 @@ internal static partial class InternalExpressionCompilation
                         costs[conditional.Condition],
                         Math.Max(costs[conditional.TrueBranch], costs[conditional.FalseBranch])),
 
+                    Expression.Switch dispatch => SwitchCost(dispatch),
+
                     Expression.Eval eval =>
                     Add(isExpansionCandidate(eval) ? 1 : 0, Add(costs[eval.Encoded], costs[eval.Environment])),
 
@@ -967,11 +979,24 @@ internal static partial class InternalExpressionCompilation
 
         static int Add(int left, int right) => (int)Math.Min(int.MaxValue, (long)left + right);
 
+        int SwitchCost(Expression.Switch dispatch)
+        {
+            var cost = costs[dispatch.Default];
+
+            foreach (var arm in Enumerable.Reverse(dispatch.Arms))
+                cost = Add(costs[dispatch.Selector], Math.Max(costs[arm.Branch], cost));
+
+            return cost;
+        }
+
         static IEnumerable<Expression> Children(Expression node) =>
             node switch
             {
                 Expression.Conditional conditional =>
                 [conditional.Condition, conditional.TrueBranch, conditional.FalseBranch],
+
+                Expression.Switch dispatch =>
+                [dispatch.Selector, dispatch.Default, .. dispatch.Arms.Select(arm => arm.Branch)],
 
                 Expression.Eval eval => [eval.Encoded, eval.Environment],
                 Expression.List list => list.Items,
