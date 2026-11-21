@@ -2379,7 +2379,8 @@ internal static class ExpressionReduction
 
         var evalCountAfter = reducedViaEval.EvalCount;
 
-        if (evalCountAfter > evalCountBefore)
+        // Substitution must not discard a potentially failing environment evaluation either.
+        if (evalCountAfter != evalCountBefore)
         {
             return null;
         }
