@@ -210,6 +210,13 @@ internal static class ExpressionFusion
             case Expression.Switch dispatch:
                 return dispatch.MapChildren(child);
 
+            case Expression.Call call:
+                var argument = child(call.Environment);
+                return ReferenceEquals(argument, call.Environment) ? call : new Expression.Call(call.FunctionId, argument);
+
+            case Expression.LetFunctions block:
+                return block.MapChildren(child);
+
             default:
                 throw new NotImplementedException(
                     nameof(Rebuild) + " does not handle expression variant: " + node.GetType().Name);

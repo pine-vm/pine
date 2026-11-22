@@ -170,13 +170,16 @@ public sealed partial record PineControlFlowGraph(
                 new PineControlFlowTerminator.Return(returnValueCount);
         }
 
-        var graph =
-            new PineControlFlowGraph(entry.Id, builder.Build())
-            .RemoveEmptyForwardingBlocks();
+        var graph = new PineControlFlowGraph(entry.Id, builder.Build());
+        var simplified = graph.RemoveEmptyForwardingBlocks();
 
-        graph.Validate();
+        // A changed graph was already validated by the rewrite.
+        if (ReferenceEquals(simplified, graph))
+        {
+            graph.Validate();
+        }
 
-        return graph;
+        return simplified;
     }
 
     private sealed class BlockUnderConstruction(
@@ -490,11 +493,9 @@ public sealed partial record PineControlFlowGraph(
 
         while (true)
         {
-            var adjacentJumpRemoved = false;
-
             var blocks =
                 graph.RewriteBlocks(
-                    block =>
+                    static block =>
                     {
                         if (block.Terminator is PineControlFlowTerminator.Jump
                             {
@@ -503,7 +504,6 @@ public sealed partial record PineControlFlowGraph(
                             } jump &&
                             target.Value == block.Id.Value + 1)
                         {
-                            adjacentJumpRemoved = true;
                             return block with { Terminator = jump with { IsFallThrough = true } };
                         }
 
@@ -513,7 +513,7 @@ public sealed partial record PineControlFlowGraph(
             var next =
                 (blocks == graph.Blocks ? graph : graph with { Blocks = blocks }).RemoveEmptyForwardingBlocks(context);
 
-            if (!adjacentJumpRemoved && next.Blocks.Length == graph.Blocks.Length)
+            if (ReferenceEquals(next, graph))
             {
                 return graph;
             }
@@ -531,7 +531,7 @@ public sealed partial record PineControlFlowGraph(
 
     private PineControlFlowGraph RemoveEmptyForwardingBlocks(OptimizationContext? context)
     {
-        var forwardTargets = new Dictionary<PineBlockId, PineBlockId>();
+        Dictionary<PineBlockId, PineBlockId>? forwardTargets = null;
 
         for (var blockIndex = Blocks.Length - 1; blockIndex >= 0; blockIndex--)
         {
@@ -547,13 +547,13 @@ public sealed partial record PineControlFlowGraph(
                 } &&
                 arguments.SequenceEqual(block.Parameters))
             {
-                forwardTargets.Add(
+                (forwardTargets ??= new()).Add(
                     block.Id,
                     forwardTargets.TryGetValue(target, out var transitiveTarget) ? transitiveTarget : target);
             }
         }
 
-        if (forwardTargets.Count is 0)
+        if (forwardTargets is null)
         {
             return this;
         }

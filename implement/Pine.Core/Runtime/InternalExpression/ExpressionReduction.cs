@@ -102,6 +102,9 @@ internal static class ExpressionReduction
             Expression.HeadSkip head =>
             TryEvalHeadSkip(head, parseCache),
 
+            Expression.Call or Expression.LetFunctions =>
+            ValueEvalResult.Err("Scoped function bindings require lowering before evaluation"),
+
             _ =>
             throw new NotImplementedException(
                 "TryEvalIndependent does not handle expression variant: " +
@@ -942,6 +945,10 @@ internal static class ExpressionReduction
             case Expression.Label:
                 return AttemptReduceViaEval();
 
+            case Expression.Call:
+            case Expression.LetFunctions:
+                return null;
+
             default:
                 throw new NotImplementedException(
                     nameof(SearchForExpressionReduction) + " does not handle expression variant: " +
@@ -1166,6 +1173,8 @@ internal static class ExpressionReduction
             case Expression.BuiltinBinary:
             case Expression.Length_Equal_Binary:
             case Expression.HeadSkip:
+            case Expression.Call:
+            case Expression.LetFunctions:
                 return null;
 
             default:
@@ -1466,7 +1475,10 @@ internal static class ExpressionReduction
 
             Expression.BuiltinBinary binary => binary.Function is BuiltinId.Equal or BuiltinId.IntIsSortedAsc,
             Expression.Length_Equal_Binary => true,
-            Expression.Environment or Expression.Eval or Expression.HeadSkip or Expression.List => false,
+
+            Expression.Environment or Expression.Eval or Expression.HeadSkip or Expression.List or
+            Expression.Call or Expression.LetFunctions =>
+            false,
 
             _ =>
             throw new NotImplementedException(
@@ -2018,10 +2030,15 @@ internal static class ExpressionReduction
                                 taggedTransform.expr),
                             taggedTransform.referencesOriginalEnv);
                     }
-            }
 
-            throw new NotImplementedException(
-                "Expression type not implemented: " + expression.GetType().FullName);
+                case Expression.Call:
+                case Expression.LetFunctions:
+                    throw Expression.UnloweredFunctionBindings();
+
+                default:
+                    throw new NotImplementedException(
+                        "Expression type not implemented: " + expression.GetType().FullName);
+            }
         }
 
         var result = LessCache();
@@ -2166,6 +2183,9 @@ internal static class ExpressionReduction
                 ExpressionFusion.Rebuild(
                     expression,
                     child => ReduceExpressionBottomUp(child, config, parseCache, reducedExpressionCache)),
+
+                Expression.Call or Expression.LetFunctions =>
+                throw Expression.UnloweredFunctionBindings(),
 
                 _ =>
                 throw new NotImplementedException(
@@ -2989,6 +3009,8 @@ internal static class ExpressionReduction
             case Expression.Environment:
             case Expression.Length_Equal_Binary:
             case Expression.HeadSkip:
+            case Expression.Call:
+            case Expression.LetFunctions:
                 break;
 
             default:
@@ -3099,6 +3121,8 @@ internal static class ExpressionReduction
             case Expression.Environment:
             case Expression.Length_Equal_Binary:
             case Expression.HeadSkip:
+            case Expression.Call:
+            case Expression.LetFunctions:
                 break;
 
             default:
@@ -3196,6 +3220,8 @@ internal static class ExpressionReduction
             case Expression.Environment:
             case Expression.Length_Equal_Binary:
             case Expression.HeadSkip:
+            case Expression.Call:
+            case Expression.LetFunctions:
                 break;
 
             default:
@@ -3262,6 +3288,8 @@ internal static class ExpressionReduction
             case Expression.BuiltinBinary:
             case Expression.Length_Equal_Binary:
             case Expression.HeadSkip:
+            case Expression.Call:
+            case Expression.LetFunctions:
                 break;
 
             default:
@@ -3360,6 +3388,8 @@ internal static class ExpressionReduction
             case Expression.BuiltinBinary:
             case Expression.Length_Equal_Binary:
             case Expression.HeadSkip:
+            case Expression.Call:
+            case Expression.LetFunctions:
                 break;
 
             default:

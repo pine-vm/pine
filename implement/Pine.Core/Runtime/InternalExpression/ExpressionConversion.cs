@@ -267,13 +267,18 @@ public static class ExpressionConversion
         return false;
     }
 
-    /// <summary>Expands fused nodes back to their exact canonical syntax, retaining shared children.</summary>
+    /// <summary>Expands fused nodes of a lowered tree back to their exact canonical syntax, retaining shared children.</summary>
     public static Canonical ToCanonical(Expression expression) =>
         ToCanonicalCore(expression, cacheIdentities: false);
+
+    /// <summary>Lowers scoped functions with the selected environment layout, then expands to canonical Pine.</summary>
+    public static Canonical ToCanonical(Expression expression, FunctionBlockLowering.EnvironmentLayout layout) =>
+        ToCanonical(FunctionBlockLowering.Lower(expression, layout));
 
     private static Canonical ToCanonicalCore(Expression expression, bool cacheIdentities)
     {
         ArgumentNullException.ThrowIfNull(expression);
+        expression.RequireLoweredFunctionBindings();
         var converted = new Dictionary<Expression, Canonical>(ReferenceEqualityComparer.Instance);
         var pending = new Stack<(Expression Node, bool Expanded)>();
         pending.Push((expression, false));
@@ -347,6 +352,9 @@ public static class ExpressionConversion
                                 Canonical.LitralInst(IntegerEncoding.EncodeSignedInteger(head.Count)),
                                 converted[head.Input]
                                 ]))),
+
+                    Expression.Call or Expression.LetFunctions =>
+                    throw Expression.UnloweredFunctionBindings(),
 
                     _ =>
                     throw new NotImplementedException(
@@ -450,6 +458,10 @@ public static class ExpressionConversion
             case Expression.HeadSkip head:
                 pending.Push((head.Input, false));
                 break;
+
+            case Expression.Call:
+            case Expression.LetFunctions:
+                throw Expression.UnloweredFunctionBindings();
 
             default:
                 throw new NotImplementedException(

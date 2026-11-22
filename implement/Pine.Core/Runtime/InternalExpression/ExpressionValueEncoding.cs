@@ -45,10 +45,11 @@ public static partial class ExpressionValueEncoding
         return index >= 0;
     }
 
-    /// <summary>Emits the standard compact encoding, expanding fused wrappers only as Pine values.</summary>
+    /// <summary>Emits the standard compact encoding of a lowered expression, expanding fused nodes.</summary>
     public static PineValue.ListValue EncodeExpressionAsValue(Expression expression)
     {
         ArgumentNullException.ThrowIfNull(expression);
+        expression.RequireLoweredFunctionBindings();
         var encoded = new Dictionary<Expression, PineValue.ListValue>(ReferenceEqualityComparer.Instance);
         var pending = new Stack<(Expression Node, bool Expanded)>();
         pending.Push((expression, false));
@@ -132,6 +133,10 @@ public static partial class ExpressionValueEncoding
 
                     Expression.Environment => s_environment,
                     Expression.Switch dispatch => EncodeSwitch(dispatch),
+
+                    Expression.Call or Expression.LetFunctions =>
+                    throw Expression.UnloweredFunctionBindings(),
+
                     Expression.Label label => PineValue.List([s_labelTag, label.Value, encoded[label.Tagged]]),
 
                     Expression.BuiltinBinary equal =>

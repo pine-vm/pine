@@ -104,6 +104,10 @@ internal static class ReturnShapeInference
                         case Expression.HeadSkip:
                             return new Shape.Dynamic();
 
+                        case Expression.Call:
+                        case Expression.LetFunctions:
+                            throw Expression.UnloweredFunctionBindings();
+
                         default:
                             throw new NotImplementedException("Infer does not handle expression: " + item.GetType().Name);
                     }

@@ -15,6 +15,9 @@ internal static class EnvironmentSubstitution
         Expression expression,
         Expression environmentReplacement)
     {
+        expression.RequireLoweredFunctionBindings();
+        environmentReplacement.RequireLoweredFunctionBindings();
+
         if (expression is Expression.Environment)
             return environmentReplacement;
 
@@ -60,6 +63,10 @@ internal static class EnvironmentSubstitution
     {
         switch (expression)
         {
+            case Expression.Call:
+            case Expression.LetFunctions:
+                throw Expression.UnloweredFunctionBindings();
+
             case Expression.BuiltinBinary:
             case Expression.Length_Equal_Binary:
             case Expression.HeadSkip:

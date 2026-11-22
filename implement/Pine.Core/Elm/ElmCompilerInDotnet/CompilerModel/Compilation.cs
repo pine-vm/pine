@@ -5,6 +5,7 @@ using Pine.Core.Elm.Syntax.Concrete;
 using Pine.Core.Encodings;
 using Pine.Core.Functional;
 using Pine.Core.PineLanguage;
+using Pine.Core.Runtime.InternalExpression;
 using System;
 using System.Collections.Frozen;
 using System.Collections.Generic;
@@ -307,6 +308,17 @@ public static class Compilation
                     ReductionConfig.Default with { DisableGenericApplicationChainConsolidation = input.DisableGenericApplicationChainConsolidation },
                     parseCache,
                     reducedExpressionCache: reductions));
+        }
+
+        if (layout.Count > 0)
+        {
+            var optimized =
+                FunctionBlockAdapters.OptimizeFrontendBodies(
+                    layout.Select(id => bodies[id]).ToArray(),
+                    FunctionBlockLowering.EnvironmentLayout.FlatArguments);
+
+            for (var index = 0; index < layout.Count; index++)
+                bodies[layout[index]] = optimized[index];
         }
 
         var encoded =

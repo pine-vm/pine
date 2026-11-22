@@ -82,8 +82,13 @@ public static partial class ExpressionBinary
     {
         private PineTreeBinaryEncoding.TreeEncoder<object> _writer = new(write, reuseReferences: true);
 
-        /// <summary>Writes a root without resetting session references.</summary>
-        public void WriteExpression(Expression expression) => WriteExpression(expression, 0);
+        /// <summary>Writes a lowered root without resetting session references.</summary>
+        public void WriteExpression(Expression expression)
+        {
+            ArgumentNullException.ThrowIfNull(expression);
+            expression.RequireLoweredFunctionBindings();
+            WriteExpression(expression, 0);
+        }
 
         private static void CheckDepth(int depth)
         {
@@ -178,6 +183,10 @@ public static partial class ExpressionBinary
                     _writer.Integer(head.Count);
                     WriteExpression(head.Input, depth + 1);
                     break;
+
+                case Expression.Call:
+                case Expression.LetFunctions:
+                    throw Expression.UnloweredFunctionBindings();
 
                 default:
                     throw new NotImplementedException(

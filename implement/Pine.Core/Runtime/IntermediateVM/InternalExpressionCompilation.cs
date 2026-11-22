@@ -42,8 +42,11 @@ internal static partial class InternalExpressionCompilation
         bool disableGenericApplicationChainConsolidation = false,
         bool enableDirectInvocation = true,
         Func<PineValue, bool>? skipDirectInvocation = null,
-        IReadOnlyDictionary<Expression, IReadOnlyList<PineValueClass>>? compilationEnvClasses = null)
+        IReadOnlyDictionary<Expression, IReadOnlyList<PineValueClass>>? compilationEnvClasses = null,
+        FunctionBlockOptimization.Policy? functionBlockPolicy = null)
     {
+        rootExpression.RequireLoweredFunctionBindings();
+
         var dispatch =
             new StaticDispatchCompilation(
                 rootExpression,
@@ -58,7 +61,8 @@ internal static partial class InternalExpressionCompilation
                 disableGenericApplicationChainConsolidation,
                 enableDirectInvocation,
                 skipDirectInvocation,
-                compilationEnvClasses);
+                compilationEnvClasses,
+                functionBlockPolicy: functionBlockPolicy);
 
         return dispatch.CompileExpression();
     }
@@ -141,6 +145,9 @@ internal static partial class InternalExpressionCompilation
         ReturnValueLayout? returnLayout = null,
         bool requireStaticClosure = false)
     {
+        rootExpression.RequireLoweredFunctionBindings();
+        preparedExpression?.RequireLoweredFunctionBindings();
+
         var reducedExpression =
             preparedExpression ??
             PrepareExpression(
@@ -154,9 +161,12 @@ internal static partial class InternalExpressionCompilation
                 pathMaxHighInclusive,
                 disableGenericApplicationChainConsolidation);
 
+        var forwardedExpression =
+            disableReduction ? reducedExpression : FunctionBlockOptimization.ForwardBranchPredicates(reducedExpression);
+
         var graph =
             ControlFlowGraphFromExpression(
-                rootExpression: reducedExpression,
+                rootExpression: forwardedExpression,
                 rootExprAlternativeForms: [rootExpression],
                 envClass: envConstraintId,
                 parametersAsLocals: parametersAsLocals,
@@ -198,15 +208,23 @@ internal static partial class InternalExpressionCompilation
         IDictionary<(Expression, ReductionConfig), Expression>? reducedExpressionCache,
         int pathMaxLowExclusive,
         int pathMaxHighInclusive,
-        bool disableGenericApplicationChainConsolidation)
+        bool disableGenericApplicationChainConsolidation,
+        FunctionBlockOptimization.Policy? functionBlockPolicy = null)
     {
-        var inlinedStaticInvocations =
+        var expressionWithOptimizedFunctionBlocks =
             disableReduction
             ?
             rootExpression
             :
+            FunctionBlockAdapters.OptimizeKnownCalls(rootExpression, parseCache, envConstraintId, functionBlockPolicy);
+
+        var inlinedStaticInvocations =
+            disableReduction
+            ?
+            expressionWithOptimizedFunctionBlocks
+            :
             InlineStaticInvocationsAndReduceRecursive(
-                rootExpression,
+                expressionWithOptimizedFunctionBlocks,
                 inlinedParents: [],
                 maxDepth: 6,
                 maxSubexpressionCount: 4_000,
@@ -733,6 +751,9 @@ internal static partial class InternalExpressionCompilation
                         expression,
                         child => InlineEvalRecursiveWithCache(child, conditionCount, tryInlineEval, cache)),
 
+                    Expression.Call or Expression.LetFunctions =>
+                    throw Expression.UnloweredFunctionBindings(),
+
                     _ =>
                     throw new NotImplementedException(
                         "Expression type not implemented: " + expression.GetType().FullName)
@@ -968,6 +989,9 @@ internal static partial class InternalExpressionCompilation
                     Expression.Length_Equal_Binary length => Add(costs[length.Sequence], costs[length.Other]),
                     Expression.HeadSkip head => costs[head.Input],
 
+                    Expression.Call or Expression.LetFunctions =>
+                    throw Expression.UnloweredFunctionBindings(),
+
                     _ =>
                     throw new NotImplementedException(
                         nameof(ComputeEvalPathMax) + " does not handle expression variant: " +
@@ -1007,6 +1031,9 @@ internal static partial class InternalExpressionCompilation
                 Expression.BuiltinBinary equal => [equal.Left, equal.Right],
                 Expression.Length_Equal_Binary length => [length.Sequence, length.Other],
                 Expression.HeadSkip head => [head.Input],
+
+                Expression.Call or Expression.LetFunctions =>
+                throw Expression.UnloweredFunctionBindings(),
 
                 _ =>
                 throw new NotImplementedException(

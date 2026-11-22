@@ -65,6 +65,17 @@ in the rendering path and is not prepared during ordinary compilation or executi
 For `Select_Value_Const`, the stack effect describes fall-through; a missing-key
 jump consumes the key without pushing a value.
 
+## Scoped function expressions
+
+`InternalExpression.Expression.LetFunctions` groups functions with an entry
+expression. Each `Call` names a function in the innermost block and supplies one
+logical Pine environment. These variants are compiler-only: lower the whole
+block with `FunctionBlockLowering.Lower` before binary encoding or execution.
+To convert directly to canonical Pine, use `ExpressionConversion.ToCanonical`
+with an explicit environment layout. `Packed` puts the logical environment in
+one slot after the code table; `FlatArguments` expects a logical argument list
+and puts its items directly after the table. Both emit existing `Eval` syntax.
+
 ## Lowering Pine values to C# locals
 
 Generated workers take and return `PineValueInProcess`. Within a worker,

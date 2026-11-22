@@ -47,7 +47,12 @@ public abstract partial record Expression
             ImmutableList<Arm> arms,
             Expression defaultBranch)
         {
-            var measures = (HashCode.Combine(typeof(Switch), selector, defaultBranch), defaultBranch._statistics);
+            var measures =
+                (HashCode.Combine(typeof(Switch), selector, defaultBranch),
+                defaultBranch._statistics with
+                {
+                    FunctionBindings = selector.ContainsFunctionBindings || defaultBranch.ContainsFunctionBindings
+                });
 
             foreach (var arm in Enumerable.Reverse(arms))
                 measures = PrependMeasures(selector, arm, measures);
@@ -72,7 +77,8 @@ public abstract partial record Expression
                     Conditions: test.Conditions + hit.Conditions + miss.Conditions + 1,
                     Builtins: test.Builtins + hit.Builtins + miss.Builtins + 1,
                     Depth: 1 + Math.Max(test.Depth + 2, Math.Max(hit.Depth, miss.Depth)),
-                    Environment: test.Environment || hit.Environment || miss.Environment));
+                    Environment: test.Environment || hit.Environment || miss.Environment,
+                    FunctionBindings: test.FunctionBindings || hit.FunctionBindings || miss.FunctionBindings));
         }
 
         internal Switch Prepend(Arm arm) =>
@@ -190,7 +196,7 @@ public abstract partial record Expression
             (binary.Left, literal.Value, false),
 
             Literal or List or Eval or Builtin or Conditional or Switch or Environment or Label or
-            BuiltinBinary or Length_Equal_Binary or HeadSkip =>
+            BuiltinBinary or Length_Equal_Binary or HeadSkip or Call or LetFunctions =>
             null,
 
             _ =>

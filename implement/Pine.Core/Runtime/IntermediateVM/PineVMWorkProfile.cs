@@ -735,6 +735,10 @@ public sealed class PineVMWorkProfile : IDisposable
             case Retained.Eval:
                 throw new InvalidOperationException("Only pure constructor nodes can have memo hits.");
 
+            case Retained.Call:
+            case Retained.LetFunctions:
+                throw Retained.UnloweredFunctionBindings();
+
             default:
                 throw new NotImplementedException(
                     "DirectConstructorMemoHit does not handle expression variant: " + expression.GetType().Name);
@@ -1273,6 +1277,9 @@ public sealed class PineVMWorkProfile : IDisposable
 
                 Expression.Label or Retained.Label => Metric.EvalDirectStringTag,
                 Expression.Eval or Retained.Eval => Metric.EvalDirectUnsupported,
+
+                Retained.Call or Retained.LetFunctions =>
+                throw Retained.UnloweredFunctionBindings(),
 
                 _ =>
                 throw new NotImplementedException(

@@ -7,8 +7,8 @@ using System.Linq;
 namespace Pine.Core.Runtime.InternalExpression;
 
 /// <summary>
-/// Immutable retained syntax private to a Pine release. Fused nodes preserve the canonical
-/// expression's structure and semantics; they do not add primitives to the Pine language.
+/// Immutable syntax private to a Pine release. Fused nodes preserve the canonical syntax;
+/// scoped function bindings are compiler-only and must be lowered before encoding or execution.
 /// </summary>
 public abstract partial record Expression
 {

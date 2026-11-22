@@ -58,7 +58,8 @@ internal static partial class InternalExpressionCompilation
         Func<PineValue, bool>? skipDirectInvocation,
         IReadOnlyDictionary<Expression, IReadOnlyList<PineValueClass>>? compilationEnvClasses,
         StaticDispatchCache? sharedCache = null,
-        bool requireStaticClosure = false)
+        bool requireStaticClosure = false,
+        FunctionBlockOptimization.Policy? functionBlockPolicy = null)
     {
         private readonly ConcurrentDictionary<
             (Expression, PineValueClass?), Lazy<StaticFunction>>
@@ -145,7 +146,8 @@ internal static partial class InternalExpressionCompilation
                     reducedExpressionCache,
                     pathMaxLowExclusive,
                     pathMaxHighInclusive,
-                    disableGenericApplicationChainConsolidation));
+                    disableGenericApplicationChainConsolidation,
+                    functionBlockPolicy));
 
         private StaticFunction PrepareFunction(Expression expression, PineValueClass? constraint)
         {

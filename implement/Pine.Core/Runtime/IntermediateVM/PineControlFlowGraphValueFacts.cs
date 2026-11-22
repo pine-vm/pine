@@ -422,8 +422,6 @@ public sealed partial record PineControlFlowGraph
 
     private PineControlFlowGraph ForwardProvenEqualityBranches(ValueFlowState?[] states, OptimizationContext? context)
     {
-        var changed = false;
-
         var blocks =
             RewriteBlocks(
                 block =>
@@ -438,7 +436,6 @@ public sealed partial record PineControlFlowGraph
                     PineBlockId target;
                     ImmutableArray<PineVirtualValueId> arguments;
                     bool fallThrough;
-                    int popCount;
 
                     switch (block.Terminator)
                     {
@@ -451,47 +448,15 @@ public sealed partial record PineControlFlowGraph
                             arguments =
                                 fallThrough ? conditional.FallThroughArguments : conditional.BranchArguments;
 
-                            popCount = 1;
                             break;
 
                         case PineControlFlowTerminator.Switch { Kind: PineSwitchKind.Equal } switchTerminator
-                        when values.GetValueOrDefault(stack[^1], ValueFacts.Unknown).ExactValue is { } selector:
-                            var matchingCase =
-                                switchTerminator.Cases.FirstOrDefault(
-                                    switchCase => selector.Equals(switchCase.Literal));
-
-                            target = matchingCase == default ? switchTerminator.FallThrough : matchingCase.Target;
+                        when SelectKnownSwitchTarget(
+                                switchTerminator,
+                                values.GetValueOrDefault(stack[^1], ValueFacts.Unknown))
+                            is { } selected:
+                            (target, fallThrough) = selected;
                             arguments = switchTerminator.Arguments;
-                            fallThrough = target == switchTerminator.FallThrough;
-                            popCount = 1;
-                            break;
-
-                        case PineControlFlowTerminator.Switch { Kind: PineSwitchKind.Equal } switchTerminator
-                        when switchTerminator.Cases.Any(
-                                switchCase =>
-                                    values.GetValueOrDefault(stack[^1], ValueFacts.Unknown)
-                                    .EqualsLiteral(switchCase.Literal) is true):
-                            var provenCase =
-                                switchTerminator.Cases.First(
-                                    switchCase =>
-                                    values.GetValueOrDefault(stack[^1], ValueFacts.Unknown)
-                                        .EqualsLiteral(switchCase.Literal) is true);
-
-                            target = provenCase.Target;
-                            arguments = switchTerminator.Arguments;
-                            fallThrough = false;
-                            popCount = 1;
-                            break;
-
-                        case PineControlFlowTerminator.Switch { Kind: PineSwitchKind.Equal } switchTerminator
-                        when switchTerminator.Cases.All(
-                                switchCase =>
-                                    values.GetValueOrDefault(stack[^1], ValueFacts.Unknown)
-                                    .EqualsLiteral(switchCase.Literal) is false):
-                            target = switchTerminator.FallThrough;
-                            arguments = switchTerminator.Arguments;
-                            fallThrough = true;
-                            popCount = 1;
                             break;
 
                         case PineControlFlowTerminator.Return:
@@ -533,8 +498,6 @@ public sealed partial record PineControlFlowGraph
                         StackInstructionKind.Length or
                         StackInstructionKind.Length_Equal_Const;
 
-                    changed = true;
-
                     // An immediately preceding, pure stack push can be dropped together with
                     // the branch input; otherwise consume the input as the terminator did.
                     if (dropLast)
@@ -554,8 +517,8 @@ public sealed partial record PineControlFlowGraph
                     {
                         operations.Add(
                             new PineControlFlowOperation(
-                                StackInstruction.PopMultiple(popCount),
-                                [.. stack.TakeLast(popCount)],
+                                StackInstruction.Pop,
+                                [stack[^1]],
                                 []));
                     }
 
@@ -567,7 +530,7 @@ public sealed partial record PineControlFlowGraph
                         };
                 });
 
-        if (!changed)
+        if (blocks == Blocks)
         {
             return this;
         }
@@ -575,6 +538,28 @@ public sealed partial record PineControlFlowGraph
         var result = this with { Blocks = blocks };
         result.Validate(context);
         return result.RemoveUnreachableBlocks(context);
+    }
+
+    private static (PineBlockId Target, bool FallThrough)? SelectKnownSwitchTarget(
+        PineControlFlowTerminator.Switch dispatch,
+        ValueFacts selector)
+    {
+        var hasUnknown = false;
+        var exact = selector.ExactValue;
+
+        foreach (var @case in dispatch.Cases)
+        {
+            var matches = exact is null ? selector.EqualsLiteral(@case.Literal) : exact.Equals(@case.Literal);
+
+            if (matches is true)
+            {
+                return (@case.Target, exact is not null && @case.Target == dispatch.FallThrough);
+            }
+
+            hasUnknown |= matches is null;
+        }
+
+        return hasUnknown ? null : (dispatch.FallThrough, true);
     }
 
     private static PineValue? KnownValueMapResult(StackInstruction instruction, PineValue? key) =>

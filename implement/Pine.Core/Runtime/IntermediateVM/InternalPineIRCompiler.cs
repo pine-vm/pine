@@ -170,6 +170,8 @@ internal class InternalPineIRCompiler
         ReturnValueLayout? returnLayout = null,
         bool requireStaticClosure = false)
     {
+        rootExpression.RequireLoweredFunctionBindings();
+
         var prior =
             new NodeCompilationResult(
                 Fragment: PineControlFlowFragment.Empty,
@@ -840,6 +842,10 @@ internal class InternalPineIRCompiler
                     CompileExpressionTransitive(head.Input, context, prior, parseCache)
                     .AppendInstruction(StackInstruction.Skip_Head_Const(head.Count));
 
+            case Expression.Call:
+            case Expression.LetFunctions:
+                throw Expression.UnloweredFunctionBindings();
+
             default:
                 throw new NotImplementedException(
                     "Unexpected expression type: " + expr.GetType().Name);
@@ -1309,7 +1315,8 @@ internal class InternalPineIRCompiler
             null,
 
             Expression.Literal or Expression.List or Expression.Eval or Expression.Conditional or Expression.Switch or
-            Expression.Environment or Expression.Label or Expression.Length_Equal_Binary or Expression.HeadSkip =>
+            Expression.Environment or Expression.Label or Expression.Length_Equal_Binary or Expression.HeadSkip or
+            Expression.Call or Expression.LetFunctions =>
             null,
 
             null => null,

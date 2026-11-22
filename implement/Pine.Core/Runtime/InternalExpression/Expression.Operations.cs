@@ -10,13 +10,13 @@ public abstract partial record Expression
 {
     private readonly Statistics _statistics;
 
-    /// <summary>Canonical-expanded size, preserving existing compiler budgets.</summary>
+    /// <summary>Canonical-expanded size for retained nodes; scoped nodes count their syntax before lowering.</summary>
     public long SubexpressionCount => _statistics.Subexpressions;
 
     /// <summary>Whether evaluation reads its environment.</summary>
     public bool ReferencesEnvironment => _statistics.Environment;
 
-    /// <summary>Canonical Eval count.</summary>
+    /// <summary>Canonical Eval count, including one per symbolic call before lowering.</summary>
     public long EvalCount => _statistics.Evals;
 
     /// <summary>Canonical conditional count.</summary>
@@ -25,12 +25,12 @@ public abstract partial record Expression
     /// <summary>Canonical builtin count, including fused builtins.</summary>
     public long BuiltinCount => _statistics.Builtins;
 
-    /// <summary>Canonical-expanded maximum depth.</summary>
+    /// <summary>Canonical-expanded maximum depth for retained nodes, before lowering scoped nodes.</summary>
     public int MaxDepth => _statistics.Depth;
 
     private protected readonly record struct Statistics(
         long Subexpressions = 0, long Evals = 0, long Conditions = 0,
-        long Builtins = 0, int Depth = 0, bool Environment = false)
+        long Builtins = 0, int Depth = 0, bool Environment = false, bool FunctionBindings = false)
     {
         public static Statistics Unary(Expression child, long builtins = 0, long subexpressions = 1, int depth = 1)
         {
@@ -63,7 +63,8 @@ public abstract partial record Expression
                     Evals: first.EvalCount + second.EvalCount + evals,
                     Conditions: first.ConditionCount + second.ConditionCount,
                     Builtins: first.BuiltinCount + second.BuiltinCount + builtins,
-                    Depth: Math.Max(first.MaxDepth, second.MaxDepth) + depth);
+                    Depth: Math.Max(first.MaxDepth, second.MaxDepth) + depth,
+                    FunctionBindings: first.ContainsFunctionBindings || second.ContainsFunctionBindings);
         }
 
         public static Statistics Conditional(Expression condition, Expression whenFalse, Expression whenTrue)
@@ -78,7 +79,8 @@ public abstract partial record Expression
                     Evals: condition.EvalCount + pair.Evals,
                     Conditions: condition.ConditionCount + pair.Conditions + 1,
                     Builtins: condition.BuiltinCount + pair.Builtins,
-                    Depth: Math.Max(condition.MaxDepth + 1, pair.Depth));
+                    Depth: Math.Max(condition.MaxDepth + 1, pair.Depth),
+                    FunctionBindings: condition.ContainsFunctionBindings || pair.FunctionBindings);
         }
 
         public static Statistics List(ImmutableArray<Expression> items)
@@ -87,14 +89,7 @@ public abstract partial record Expression
 
             foreach (var item in items)
             {
-                result =
-                    new(
-                        Subexpressions: result.Subexpressions + item.SubexpressionCount,
-                        Environment: result.Environment || item.ReferencesEnvironment,
-                        Evals: result.Evals + item.EvalCount,
-                        Conditions: result.Conditions + item.ConditionCount,
-                        Builtins: result.Builtins + item.BuiltinCount,
-                        Depth: Math.Max(result.Depth, item.MaxDepth + 1));
+                result = result.IncludeChild(item);
             }
 
             return result;
@@ -103,6 +98,21 @@ public abstract partial record Expression
         public static Statistics LengthEqual(Expression sequence, Expression other) =>
             Binary(sequence, other, subexpressions: 4, builtins: 2, depth: 2) with
             { Depth = Math.Max(sequence.MaxDepth + 1, other.MaxDepth) + 2 };
+
+        public Statistics IncludeChild(Expression child)
+        {
+            ArgumentNullException.ThrowIfNull(child);
+
+            return
+                new(
+                    Subexpressions: Subexpressions + child.SubexpressionCount,
+                    Environment: Environment || child.ReferencesEnvironment,
+                    Evals: Evals + child.EvalCount,
+                    Conditions: Conditions + child.ConditionCount,
+                    Builtins: Builtins + child.BuiltinCount,
+                    Depth: Math.Max(Depth, child.MaxDepth + 1),
+                    FunctionBindings: FunctionBindings || child.ContainsFunctionBindings);
+        }
     }
 
     /// <summary>Shared environment leaf.</summary>
@@ -150,7 +160,8 @@ public abstract partial record Expression
             Builtin builtin => (builtin.Function, (ExpressionInput)builtin.Input),
             BuiltinBinary binary => (binary.Function, ExpressionInput.FromBinary(binary)),
 
-            Literal or List or Eval or Conditional or Switch or Environment or Label or Length_Equal_Binary or HeadSkip =>
+            Literal or List or Eval or Conditional or Switch or Environment or Label or Length_Equal_Binary or HeadSkip or
+            Call or LetFunctions =>
             null,
 
             null => null,
@@ -281,6 +292,21 @@ public abstract partial record Expression
 
             case HeadSkip head:
                 pending.Push(head.Input);
+                break;
+
+            case Call call:
+                pending.Push(call.Environment);
+                break;
+
+            case LetFunctions block:
+                pending.Push(block.Entry);
+
+                if (!skipConditionalBranches)
+                {
+                    foreach (var function in block.Functions)
+                        pending.Push(function.Body);
+                }
+
                 break;
 
             default:
