@@ -1208,6 +1208,51 @@ public class PineValueInProcess
     }
 
     /// <summary>
+    /// Classifies a slice for a switch over blobs of up to four bytes and the empty list.
+    /// For blob sources with available bytes this reads the original memory without creating a slice value.
+    /// </summary>
+    public static (bool Blob, int Length, uint Word) GetShortSliceSwitchKey(
+        PineValueInProcess source, BigInteger? skipCount, int takeCount)
+    {
+        if (skipCount is not { } skip)
+            return (false, 0, 0u);
+
+        var offset = skip < 0 ? 0 : (int)skip;
+
+        if (source._evaluated is PineValue.BlobValue blob)
+        {
+            var bytes = blob.Bytes.Span;
+            var start = Math.Min(offset, bytes.Length);
+            var length = Math.Min(takeCount, bytes.Length - start);
+            return (true, length, PackShortBlob(bytes.Slice(start, length)));
+        }
+
+        var slice = Slice(offset, takeCount, source).Evaluate();
+
+        return slice switch
+        {
+            PineValue.BlobValue slicedBlob => (true, slicedBlob.Bytes.Length, PackShortBlob(slicedBlob.Bytes.Span)),
+            PineValue.ListValue list => (false, list.Items.Length, 0u),
+
+            _ =>
+            throw new NotImplementedException("GetShortSliceSwitchKey does not handle: " + slice.GetType().Name)
+        };
+    }
+
+    internal static uint PackShortBlob(ReadOnlySpan<byte> bytes) =>
+        bytes.Length switch
+        {
+            0 => 0u,
+            1 => bytes[0],
+            2 => System.Buffers.Binary.BinaryPrimitives.ReadUInt16BigEndian(bytes),
+            3 => ((uint)bytes[0] << 16) | System.Buffers.Binary.BinaryPrimitives.ReadUInt16BigEndian(bytes[1..]),
+            4 => System.Buffers.Binary.BinaryPrimitives.ReadUInt32BigEndian(bytes),
+
+            _ =>
+            throw new ArgumentOutOfRangeException(nameof(bytes), "Expected at most four bytes.")
+        };
+
+    /// <summary>
     /// Analog to <see cref="BuiltinFunctionSpecialized.take(BigInteger, PineValue)"/>
     /// </summary>
     /// <param name="takeCount">Maximum number of elements/bytes to take.</param>

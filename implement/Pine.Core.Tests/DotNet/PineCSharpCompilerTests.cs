@@ -514,6 +514,137 @@ public class PineCSharpCompilerTests
         }
     }
 
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void Pine_CSharp_exact_slice_switch_preserves_value_kind_length_and_offset_semantics(bool retainSlice)
+    {
+        var graph = ExactSliceSwitchGraph(retainSlice);
+        var compilation = EmitGraph(graph);
+
+        if (retainSlice)
+        {
+            compilation.MethodsSource.Should().NotContain("GetShortSliceSwitchKey").And.Contain(
+                "PineValueInProcess.Slice(");
+        }
+        else
+        {
+            compilation.MethodsSource.Should().Contain("GetShortSliceSwitchKey").And.NotContain(
+                "PineValueInProcess.Slice(");
+        }
+
+        using var loaded = Load(compilation);
+
+        var bytes = PineValue.Blob([0, 0, 0, 10, 0, 0, 0, 13]);
+
+        foreach (var source in new[] { bytes, PineValue.EmptyBlob, PineValue.EmptyList, PineValue.List([NumberValue(1)]) })
+        {
+            foreach (var count in new[]
+            {
+                NumberValue(0), NumberValue(1), NumberValue(4), NumberValue(5), NumberValue(6), NumberValue(7),
+                NumberValue(8), NumberValue(10), PineValue.EmptyBlob, PineValue.Blob([4, 0, 4]), NumberValue(-1),
+                IntegerEncoding.EncodeSignedInteger(-(BigInteger.One << 80))
+            })
+            {
+                var environment = PineValue.List([source, count]);
+
+                loaded.Evaluate(PineValueInProcess.Create(environment))!.Evaluate()
+                    .Should().Be(EvaluateGraph(graph, environment));
+            }
+        }
+
+        loaded.Evaluate(
+            PineValueInProcess.Create(PineValue.List([PineValue.Blob([1, 0, 0, 10]), NumberValue(0)])))!
+            .Evaluate().Should().Be(NumberValue(0));
+
+        var original = PineValueInProcess.Create(PineValue.Blob(new byte[40]));
+        var deferred = PineValueInProcess.Slice(1, 24, original);
+        var deferredEnvironment = PineValueInProcess.CreateList([deferred, PineValueInProcess.CreateInteger(24)]);
+        loaded.Evaluate(deferredEnvironment)!.Evaluate().Should().Be(NumberValue(1));
+
+        Action overflowing =
+            () => loaded.Evaluate(
+                PineValueInProcess.Create(
+                    PineValue.List([bytes, IntegerEncoding.EncodeSignedInteger(BigInteger.One << 80)])));
+
+        overflowing.Should().Throw<OverflowException>();
+    }
+
+    [Fact]
+    public void Pine_CSharp_exact_slice_switch_does_not_allocate_blob_keys()
+    {
+        var graph = ExactSliceSwitchGraph();
+        using var optimized = Load(EmitGraph(graph));
+        using var baseline = Load(EmitGraph(graph, matchLimit: 0));
+
+        var bytes = new byte[1024];
+        bytes[19] = 10;
+        var source = PineValueInProcess.Create(PineValue.Blob(bytes));
+        var hit = PineValueInProcess.CreateList([source, PineValueInProcess.CreateInteger(16)]);
+        var miss = PineValueInProcess.CreateList([source, PineValueInProcess.CreateInteger(20)]);
+
+        static long AllocatedBytes(PineCSharpAssembly assembly, PineValueInProcess hit, PineValueInProcess miss)
+        {
+            assembly.Evaluate(hit)!.Evaluate().Should().Be(NumberValue(2));
+            assembly.Evaluate(miss)!.Evaluate().Should().Be(NumberValue(0));
+
+            var before = GC.GetAllocatedBytesForCurrentThread();
+
+            for (var i = 0; i < 1000; ++i)
+            {
+                _ = assembly.Evaluate(hit);
+                _ = assembly.Evaluate(miss);
+            }
+
+            return GC.GetAllocatedBytesForCurrentThread() - before;
+        }
+
+        AllocatedBytes(optimized, hit, miss).Should().Be(0);
+        AllocatedBytes(baseline, hit, miss).Should().BeGreaterThan(0);
+    }
+
+    private static PineControlFlowGraph ExactSliceSwitchGraph(bool retainSlice = false)
+    {
+        var fragment =
+            PineControlFlowFragment.Empty.AppendOperations(
+                [
+                    StackInstruction.Local_Get_Skip_Head_Const(0, 0),
+                    StackInstruction.Local_Get_Skip_Head_Const(0, 1),
+                    StackInstruction.Slice_Skip_Var_Take_Const(4)
+                ]);
+
+        if (retainSlice)
+            fragment = fragment.AppendOperation(StackInstruction.Local_Set([1], popCount: 0));
+
+        return
+            PineControlFlowGraph.FromFragment(
+                fragment.Append(
+                    new PineControlFlowNode.Switch(
+                        PineSwitchKind.Equal,
+                        [
+                            new(PineValue.EmptyBlob, 0),
+                            new(StringEncoding.ValueFromString("\n"), 1),
+                            new(StringEncoding.ValueFromString("\r"), 1),
+                            new(PineValue.EmptyList, 2),
+                            new(PineValue.Blob([0, 0]), 3)
+                        ],
+                        PineControlFlowFragment.Empty.AppendOperation(StackInstruction.Push_Literal(NumberValue(0))),
+                        [
+                            .. Enumerable.Range(1, 4)
+                            .Select(
+                                value =>
+                                retainSlice && value == 2
+                                ?
+                                PineControlFlowFragment.Empty.AppendOperations(
+                                    [StackInstruction.Local_Get(1), StackInstruction.Length])
+                                :
+                                PineControlFlowFragment.Empty.AppendOperation(
+                                    StackInstruction.Push_Literal(NumberValue(value))))
+                        ],
+                        SkipCountMultiplier: 1,
+                        ResultCount: 1)));
+    }
+
     [Fact]
     public void Pine_CSharp_slice_switch_hoists_offset_and_preserves_invalid_and_overflowing_counts()
     {

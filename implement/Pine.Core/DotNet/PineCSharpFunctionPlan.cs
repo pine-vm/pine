@@ -194,6 +194,32 @@ internal sealed class PineCSharpFunctionPlan
         return block with { Operations = [.. operations], Terminator = terminator };
     }
 
+    public static PineControlFlowOperation? FindExactSliceSwitch(PineBasicBlock block)
+    {
+        if (block.Terminator is not PineControlFlowTerminator.Switch { Kind: PineSwitchKind.Equal } choice ||
+            block.Operations.IsEmpty ||
+            block.Operations[^1] is not
+            {
+                Instruction:
+                {
+                    Kind: StackInstructionKind.Slice_Skip_Var_Take_Const,
+                    TakeCount: >= 0 and <= sizeof(uint)
+                },
+                Results.Length: 1
+            } slice ||
+            choice.Arguments.Contains(slice.Results[0]) ||
+            !choice.Cases.Any(item => item.Literal is PineValue.BlobValue) ||
+            !choice.Cases.All(
+                item => item.Literal is PineValue.BlobValue { Bytes.Length: <= sizeof(uint) } ||
+                    item.Literal.Equals(PineValue.EmptyList)))
+        {
+            return null;
+        }
+
+        // The last result is on top of the stack, and no successor receives it.
+        return slice;
+    }
+
     public static IEnumerable<PineBlockId> Successors(PineControlFlowTerminator terminator) =>
         Edges(terminator).Select(edge => edge.Target).Distinct();
 

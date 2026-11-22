@@ -481,6 +481,45 @@ internal sealed partial class PineCSharpEmitter
         }
     }
 
+    private void EmitExactSliceSwitch(
+        StringBuilder text,
+        Function function,
+        PineBlockId block,
+        PineControlFlowTerminator.Switch choice,
+        PineControlFlowOperation slice)
+    {
+        var source = Pine(Value(function, slice.Inputs[0]));
+        var skip = Numeric(Value(function, slice.Inputs[1]));
+        var arguments = choice.Arguments.Select(value => Value(function, value));
+
+        text.AppendLine(
+            "switch (PineValueInProcess.GetShortSliceSwitchKey(" + source + ", " + skip + ", " +
+            slice.Instruction.TakeCount + "))");
+
+        text.AppendLine("{");
+
+        foreach (var group in choice.Cases.GroupBy(item => item.Target))
+        {
+            foreach (var item in group)
+            {
+                if (item.Literal is PineValue.BlobValue blob)
+                {
+                    var word = Internal.PineValueInProcess.PackShortBlob(blob.Bytes.Span);
+
+                    text.AppendLine(
+                        "case (true, " + blob.Bytes.Length + ", " +
+                        word.ToString(System.Globalization.CultureInfo.InvariantCulture) + "u):");
+                }
+                else
+                    text.AppendLine("case (false, 0, 0u):");
+            }
+
+            Edge(text, function, block, group.Key, arguments);
+        }
+
+        text.AppendLine("}");
+    }
+
     private void EmitMatchCases<TTarget>(
         StringBuilder text,
         string source,

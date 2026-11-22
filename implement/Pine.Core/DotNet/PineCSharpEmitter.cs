@@ -455,6 +455,13 @@ internal sealed partial class PineCSharpEmitter
                 var stack = block.Parameters.Select(value => Value(function, value)).ToList();
                 var branchCondition = BranchCondition(function, block);
 
+                var exactSlice =
+                    _options.MaximumInlineMatchDifferingPositions is 0
+                    ?
+                    null
+                    :
+                    PineCSharpFunctionPlan.FindExactSliceSwitch(block);
+
                 for (var operationIndex = 0; operationIndex < block.Operations.Length; operationIndex++)
                 {
                     if (EmitConcatChain(text, function, block, ref operationIndex, stack))
@@ -462,7 +469,7 @@ internal sealed partial class PineCSharpEmitter
 
                     var operation = block.Operations[operationIndex];
 
-                    if (operation != branchCondition?.Operation)
+                    if (operation != branchCondition?.Operation && operation != exactSlice)
                         EmitOperation(text, function, block.Id, operationIndex, operation, stack);
 
                     if (operation.Instruction.Kind == StackInstructionKind.Parse_Error_Const)
@@ -473,7 +480,7 @@ internal sealed partial class PineCSharpEmitter
                 }
 
                 if (!block.Operations.Any(operation => operation.Instruction.Kind == StackInstructionKind.Parse_Error_Const))
-                    EmitTerminator(text, function, block, stack, branchCondition?.Code);
+                    EmitTerminator(text, function, block, stack, branchCondition?.Code, exactSlice);
 
                 text.AppendLine("}");
             }
@@ -529,7 +536,12 @@ internal sealed partial class PineCSharpEmitter
     }
 
     private void EmitTerminator(
-        StringBuilder text, Function function, PineBasicBlock block, List<string> stack, string? branchCondition)
+        StringBuilder text,
+        Function function,
+        PineBasicBlock block,
+        List<string> stack,
+        string? branchCondition,
+        PineControlFlowOperation? exactSlice)
     {
         string V(PineVirtualValueId value) => Value(function, value);
 
@@ -561,6 +573,11 @@ internal sealed partial class PineCSharpEmitter
                 Edge(text, function, block.Id, branch.Branch, branch.BranchArguments.Select(V));
                 text.AppendLine("}");
                 Edge(text, function, block.Id, branch.FallThrough, branch.FallThroughArguments.Select(V));
+                break;
+
+            case PineControlFlowTerminator.Switch choice when exactSlice is not null:
+                EmitExactSliceSwitch(text, function, block.Id, choice, exactSlice);
+                Edge(text, function, block.Id, choice.FallThrough, choice.Arguments.Select(V));
                 break;
 
             case PineControlFlowTerminator.Switch choice:
