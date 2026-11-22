@@ -333,8 +333,10 @@ public static class PopularValues
         "operator",
 
 
-        // From the Pine module
+        // From the Pine language modules
         "Pine",
+        "PineLanguage",
+        "PineLanguageStrict",
         "Value",
         "ListValue",
         "BlobValue",

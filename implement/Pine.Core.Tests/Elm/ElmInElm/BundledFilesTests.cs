@@ -17,7 +17,7 @@ public class BundledFilesTests
                 ["elm.json"],
                 ["src", "ElmCompiler2024.elm"],
                 ["src", "Pine2024.elm"],
-                ["src", "Pine.elm"],
+                ["src", "PineLanguageStrict.elm"],
                 ["src", "ElmInteractive2024.elm"],
                 ["src", "FirCompiler2024.elm"],
                 ["elm-syntax", "src", "Elm", "Syntax", "Expression.elm"],

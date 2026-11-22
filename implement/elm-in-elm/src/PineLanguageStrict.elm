@@ -1,4 +1,4 @@
-module Pine exposing
+module PineLanguageStrict exposing
     ( Expression(..)
     , Value(..)
     , applyBuiltinFunction
@@ -15,7 +15,7 @@ module Pine exposing
     , valueFromString
     )
 
-{-| Pine expressions, their 2026 encoding, and a direct interpreter.
+{-| Pine expressions, their 2026 encoding, and a strict interpreter.
 
 Blob bytes are represented as lists of integers in the range 0 through 255.
 Labels are arbitrary Pine values and have no effect on evaluation.

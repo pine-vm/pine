@@ -18,13 +18,13 @@ using Xunit;
 
 namespace Pine.Core.Tests.Elm.ElmInElm;
 
-public class Pine2026ModuleTests
+public class PineLanguageStrictModuleTests
 {
     private static readonly Lazy<IReadOnlyDictionary<string, PineValue>> s_functions =
         new(CompileFunctions);
 
     [Fact]
-    public void Elm_Pine_2026_roundtrips_and_evaluates_every_expression_variant()
+    public void PineLanguageStrict_roundtrips_and_evaluates_every_expression_variant()
     {
         var literal = Expression.LitralInst(PineValue.Blob([1, 2, 255]));
         var environment = PineValue.List([PineValue.Blob([17]), PineValue.EmptyList]);
@@ -64,7 +64,7 @@ public class Pine2026ModuleTests
     }
 
     [Fact]
-    public void Elm_Pine_builtins_match_the_DotNet_reference()
+    public void PineLanguageStrict_builtins_match_the_DotNet_reference()
     {
         Func<BigInteger, PineValue> integer = IntegerEncoding.EncodeSignedInteger;
         var large = integer(BigInteger.One << 128);
@@ -103,7 +103,7 @@ public class Pine2026ModuleTests
     }
 
     [Fact]
-    public void Elm_Pine_rejects_malformed_code_and_keeps_unselected_Eval_lazy()
+    public void PineLanguageStrict_rejects_malformed_code_and_keeps_unselected_Eval_lazy()
     {
         PineValue[] malformed =
             [
@@ -161,39 +161,39 @@ public class Pine2026ModuleTests
     {
         const string adapter =
             """
-            module Pine2026TestAdapter exposing (roundtrip, evaluate)
-            import Pine
+            module PineLanguageStrictTestAdapter exposing (roundtrip, evaluate)
+            import PineLanguageStrict
 
-            roundtrip : Pine.Value -> Result String Pine.Value
+            roundtrip : PineLanguageStrict.Value -> Result String PineLanguageStrict.Value
             roundtrip encoded =
-                Pine.parseExpressionFromValue encoded
-                    |> Result.map Pine.encodeExpressionAsValue
+                PineLanguageStrict.parseExpressionFromValue encoded
+                    |> Result.map PineLanguageStrict.encodeExpressionAsValue
 
-            evaluate : Pine.Value -> Pine.Value -> Result String Pine.Value
+            evaluate : PineLanguageStrict.Value -> PineLanguageStrict.Value -> Result String PineLanguageStrict.Value
             evaluate encoded environment =
-                Pine.parseExpressionFromValue encoded
-                    |> Result.andThen (\expression -> Pine.evalExpression expression environment)
+                PineLanguageStrict.parseExpressionFromValue encoded
+                    |> Result.andThen (\expression -> PineLanguageStrict.evalExpression expression environment)
             """;
 
         var sources =
             BundledFiles.CompilerSourceContainerFilesDefault.Value
             .SetNodeAtPathSorted(
-                ["src", "Pine2026TestAdapter.elm"],
+                ["src", "PineLanguageStrictTestAdapter.elm"],
                 FileTree.File(Encoding.UTF8.GetBytes(adapter)));
 
         var (environment, _) =
             ElmCompiler.CompileInteractiveEnvironment(
                 sources,
                 [
-                    DeclQualifiedName.Create(["Pine2026TestAdapter"], "roundtrip"),
-                    DeclQualifiedName.Create(["Pine2026TestAdapter"], "evaluate")
+                    DeclQualifiedName.Create(["PineLanguageStrictTestAdapter"], "roundtrip"),
+                    DeclQualifiedName.Create(["PineLanguageStrictTestAdapter"], "evaluate")
                 ])
             .Extract(error => throw new Exception(error));
 
         return
             ElmInteractiveEnvironment.ParseInteractiveEnvironment(environment)
             .Extract(error => throw new Exception(error))
-            .Modules.Single(module => module.moduleName is "Pine2026TestAdapter")
+            .Modules.Single(module => module.moduleName is "PineLanguageStrictTestAdapter")
             .moduleContent.FunctionDeclarations.ToDictionary();
     }
 }

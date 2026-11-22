@@ -1,14 +1,14 @@
-module PineTests exposing (tests)
+module PineLanguageStrictTests exposing (tests)
 
 import BigInt
 import Expect
-import Pine exposing (Expression(..), Value(..))
+import PineLanguageStrict exposing (Expression(..), Value(..))
 import Test exposing (Test, describe, test)
 
 
 tests : Test
 tests =
-    describe "Pine 2026"
+    describe "PineLanguageStrict"
         [ encodingTests
         , decodingTests
         , evaluationTests
@@ -39,8 +39,8 @@ encodingTests =
                     test name <|
                         \_ ->
                             Expect.all
-                                [ \_ -> Expect.equal expected (Pine.encodeExpressionAsValue expression)
-                                , \_ -> Expect.equal (Ok expression) (Pine.parseExpressionFromValue expected)
+                                [ \_ -> Expect.equal expected (PineLanguageStrict.encodeExpressionAsValue expression)
+                                , \_ -> Expect.equal (Ok expression) (PineLanguageStrict.parseExpressionFromValue expected)
                                 ]
                                 ()
                 )
@@ -52,7 +52,7 @@ encodingTests =
                   )
                 , ( "Builtin"
                   , BuiltinExpression "length" literal
-                  , tagged "Builtin" [ Pine.valueFromString "length", encodedLiteral ]
+                  , tagged "Builtin" [ PineLanguageStrict.valueFromString "length", encodedLiteral ]
                   )
                 , ( "Conditional stores false before true"
                   , ConditionalExpression EnvironmentExpression literal (ListExpression [])
@@ -76,14 +76,14 @@ encodingTests =
                         \_ ->
                             let
                                 encoded =
-                                    Pine.encodeExpressionAsValue expression
+                                    PineLanguageStrict.encodeExpressionAsValue expression
 
                                 parsed =
-                                    Pine.parseExpressionFromValue encoded
+                                    PineLanguageStrict.parseExpressionFromValue encoded
                             in
                             Expect.all
                                 [ \_ -> Expect.equal (Ok expression) parsed
-                                , \_ -> Expect.equal (Ok encoded) (Result.map Pine.encodeExpressionAsValue parsed)
+                                , \_ -> Expect.equal (Ok encoded) (Result.map PineLanguageStrict.encodeExpressionAsValue parsed)
                                 ]
                                 ()
                 )
@@ -97,9 +97,9 @@ encodingTests =
                             (\( environmentName, environment ) ->
                                 test ("environment " ++ environmentName) <|
                                     \_ ->
-                                        Expect.equal (Pine.evalExpression expression environment)
-                                            (Pine.parseExpressionFromValue (Pine.encodeExpressionAsValue expression)
-                                                |> Result.andThen (\parsed -> Pine.evalExpression parsed environment)
+                                        Expect.equal (PineLanguageStrict.evalExpression expression environment)
+                                            (PineLanguageStrict.parseExpressionFromValue (PineLanguageStrict.encodeExpressionAsValue expression)
+                                                |> Result.andThen (\parsed -> PineLanguageStrict.evalExpression parsed environment)
                                             )
                             )
                             valueExamples
@@ -124,7 +124,7 @@ decodingTests =
 
         fixedShapes =
             [ ( "Litral", [ ListValue [] ] )
-            , ( "Builtin", [ Pine.valueFromString "head", environment ] )
+            , ( "Builtin", [ PineLanguageStrict.valueFromString "head", environment ] )
             , ( "Conditional", [ literal, environment, environment ] )
             , ( "Environment", [] )
             , ( "Eval", [ literal, environment ] )
@@ -133,7 +133,7 @@ decodingTests =
 
         invalidChildren =
             [ ( "List item", tagged "List" [ literal, malformed ] )
-            , ( "Builtin input", tagged "Builtin" [ Pine.valueFromString "head", malformed ] )
+            , ( "Builtin input", tagged "Builtin" [ PineLanguageStrict.valueFromString "head", malformed ] )
             , ( "condition", tagged "Conditional" [ malformed, literal, environment ] )
             , ( "false branch", tagged "Conditional" [ literal, malformed, environment ] )
             , ( "true branch", tagged "Conditional" [ literal, environment, malformed ] )
@@ -147,7 +147,7 @@ decodingTests =
             (List.indexedMap
                 (\index value ->
                     test (String.fromInt index)
-                        (\_ -> expectError (Pine.parseExpressionFromValue value))
+                        (\_ -> expectError (PineLanguageStrict.parseExpressionFromValue value))
                 )
                 [ BlobValue []
                 , ListValue []
@@ -155,9 +155,9 @@ decodingTests =
                 , tagged "Unknown" []
                 , tagged "Literal" [ ListValue [] ]
                 , tagged "Condition" [ literal, environment, environment ]
-                , tagged "KernelApplication" [ Pine.valueFromString "head", environment ]
+                , tagged "KernelApplication" [ PineLanguageStrict.valueFromString "head", environment ]
                 , tagged "ParseAndEval" [ literal, environment ]
-                , tagged "StringTag" [ Pine.valueFromString "label", environment ]
+                , tagged "StringTag" [ PineLanguageStrict.valueFromString "label", environment ]
                 , tagged "List" [ ListValue [ literal ] ]
                 , tagged "Builtin" [ ListValue [], environment ]
                 ]
@@ -166,14 +166,14 @@ decodingTests =
             (List.concatMap
                 (\( name, arguments ) ->
                     [ test (name ++ " rejects extra arguments")
-                        (\_ -> expectError (Pine.parseExpressionFromValue (tagged name (arguments ++ [ malformed ]))))
+                        (\_ -> expectError (PineLanguageStrict.parseExpressionFromValue (tagged name (arguments ++ [ malformed ]))))
                     ]
                         ++ (if List.isEmpty arguments then
                                 []
 
                             else
                                 [ test (name ++ " rejects missing arguments")
-                                    (\_ -> expectError (Pine.parseExpressionFromValue (tagged name (List.drop 1 arguments))))
+                                    (\_ -> expectError (PineLanguageStrict.parseExpressionFromValue (tagged name (List.drop 1 arguments))))
                                 ]
                            )
                 )
@@ -182,27 +182,27 @@ decodingTests =
         , describe "Recursively validate every operand"
             (List.map
                 (\( name, value ) ->
-                    test name (\_ -> expectError (Pine.parseExpressionFromValue value))
+                    test name (\_ -> expectError (PineLanguageStrict.parseExpressionFromValue value))
                 )
                 invalidChildren
             )
         , test "decoder validates even an unselected conditional branch" <|
             \_ ->
                 tagged "Conditional"
-                    [ tagged "Litral" [ Pine.trueValue ], malformed, literal ]
-                    |> Pine.parseExpressionFromValue
+                    [ tagged "Litral" [ PineLanguageStrict.trueValue ], malformed, literal ]
+                    |> PineLanguageStrict.parseExpressionFromValue
                     |> expectError
         , test "literal data is not recursively decoded" <|
             \_ ->
                 Expect.equal (Ok (LitralExpression malformed))
-                    (Pine.parseExpressionFromValue (tagged "Litral" [ malformed ]))
+                    (PineLanguageStrict.parseExpressionFromValue (tagged "Litral" [ malformed ]))
         , describe "Label data is not decoded as an expression or string"
             (List.map
                 (\( name, label ) ->
                     test name <|
                         \_ ->
                             Expect.equal (Ok (LabelExpression label EnvironmentExpression))
-                                (Pine.parseExpressionFromValue (tagged "Label" [ label, environment ]))
+                                (PineLanguageStrict.parseExpressionFromValue (tagged "Label" [ label, environment ]))
                 )
                 valueExamples
             )
@@ -215,19 +215,19 @@ decodingTests =
                 Expect.equal (List.map Ok values)
                     (List.map
                         (\value ->
-                            Pine.parseExpressionFromValue value
-                                |> Result.map Pine.encodeExpressionAsValue
+                            PineLanguageStrict.parseExpressionFromValue value
+                                |> Result.map PineLanguageStrict.encodeExpressionAsValue
                         )
                         values
                     )
         , test "unknown builtin names decode but fail when evaluated" <|
             \_ ->
-                Pine.parseExpressionFromValue (tagged "Builtin" [ Pine.valueFromString "unknown", literal ])
-                    |> Result.andThen (\expression -> Pine.evalExpression expression (ListValue []))
+                PineLanguageStrict.parseExpressionFromValue (tagged "Builtin" [ PineLanguageStrict.valueFromString "unknown", literal ])
+                    |> Result.andThen (\expression -> PineLanguageStrict.evalExpression expression (ListValue []))
                     |> expectErrorContaining "Unknown builtin function"
         , test "nested decoding errors identify the operand" <|
             \_ ->
-                Pine.parseExpressionFromValue (tagged "List" [ literal, malformed ])
+                PineLanguageStrict.parseExpressionFromValue (tagged "List" [ literal, malformed ])
                     |> expectErrorContaining "List item 1"
         ]
 
@@ -239,7 +239,7 @@ evaluationTests =
             ListValue [ BlobValue [ 7, 8 ], BlobValue [ 9 ] ]
 
         run expression =
-            Pine.evalExpression expression environment
+            PineLanguageStrict.evalExpression expression environment
 
         crash =
             EvalExpression (LitralExpression (BlobValue [])) EnvironmentExpression
@@ -250,19 +250,19 @@ evaluationTests =
         number =
             BuiltinExpression "head"
                 (BuiltinExpression "skip"
-                    (ListExpression [ LitralExpression (Pine.valueFromInt 1), EnvironmentExpression ])
+                    (ListExpression [ LitralExpression (PineLanguageStrict.valueFromInt 1), EnvironmentExpression ])
                 )
 
         recursiveBody =
             ConditionalExpression
                 (BuiltinExpression "equal"
-                    (ListExpression [ number, LitralExpression (Pine.valueFromInt 0) ])
+                    (ListExpression [ number, LitralExpression (PineLanguageStrict.valueFromInt 0) ])
                 )
                 (EvalExpression head
                     (ListExpression
                         [ head
                         , BuiltinExpression "int_add"
-                            (ListExpression [ number, LitralExpression (Pine.valueFromInt -1) ])
+                            (ListExpression [ number, LitralExpression (PineLanguageStrict.valueFromInt -1) ])
                         ]
                     )
                 )
@@ -277,7 +277,7 @@ evaluationTests =
                             (\( environmentName, env ) ->
                                 test ("environment " ++ environmentName) <|
                                     \_ ->
-                                        Expect.equal (Ok literal) (Pine.evalExpression (LitralExpression literal) env)
+                                        Expect.equal (Ok literal) (PineLanguageStrict.evalExpression (LitralExpression literal) env)
                             )
                             valueExamples
                         )
@@ -289,7 +289,7 @@ evaluationTests =
                 (\( name, env ) ->
                     test name <|
                         \_ ->
-                            Expect.equal (Ok env) (Pine.evalExpression EnvironmentExpression env)
+                            Expect.equal (Ok env) (PineLanguageStrict.evalExpression EnvironmentExpression env)
                 )
                 valueExamples
             )
@@ -298,8 +298,8 @@ evaluationTests =
         , test "wide lists encode, decode and evaluate without consuming the call stack" <|
             \_ ->
                 ListExpression (List.repeat 10000 EnvironmentExpression)
-                    |> Pine.encodeExpressionAsValue
-                    |> Pine.parseExpressionFromValue
+                    |> PineLanguageStrict.encodeExpressionAsValue
+                    |> PineLanguageStrict.parseExpressionFromValue
                     |> Result.andThen run
                     |> Expect.equal (Ok (ListValue (List.repeat 10000 environment)))
         , test "list evaluation preserves order and environment" <|
@@ -308,7 +308,7 @@ evaluationTests =
                     (run (ListExpression [ LitralExpression (BlobValue [ 3 ]), EnvironmentExpression, head ]))
         , test "Builtin evaluates its input expression" <|
             \_ ->
-                Expect.equal (Ok (Pine.valueFromInt 2)) (run (BuiltinExpression "length" EnvironmentExpression))
+                Expect.equal (Ok (PineLanguageStrict.valueFromInt 2)) (run (BuiltinExpression "length" EnvironmentExpression))
         , describe "Label leaves evaluation unchanged"
             (List.map
                 (\( name, label ) ->
@@ -323,7 +323,7 @@ evaluationTests =
         , test "true selects only the true branch" <|
             \_ ->
                 Expect.equal (Ok environment)
-                    (run (ConditionalExpression (LitralExpression Pine.trueValue) crash EnvironmentExpression))
+                    (run (ConditionalExpression (LitralExpression PineLanguageStrict.trueValue) crash EnvironmentExpression))
         , describe "Anything other than exactly blob [4] selects the false branch"
             (List.indexedMap
                 (\index condition ->
@@ -332,7 +332,7 @@ evaluationTests =
                             Expect.equal (Ok environment)
                                 (run (ConditionalExpression (LitralExpression condition) EnvironmentExpression crash))
                 )
-                [ Pine.falseValue, BlobValue [], BlobValue [ 4, 0 ], ListValue [], Pine.valueFromInt 1 ]
+                [ PineLanguageStrict.falseValue, BlobValue [], BlobValue [ 4, 0 ], ListValue [], PineLanguageStrict.valueFromInt 1 ]
             )
         , test "condition errors propagate" <|
             \_ ->
@@ -351,7 +351,7 @@ evaluationTests =
                 Expect.equal (Ok (BlobValue [ 42 ]))
                     (run
                         (EvalExpression
-                            (LitralExpression (Pine.encodeExpressionAsValue EnvironmentExpression))
+                            (LitralExpression (PineLanguageStrict.encodeExpressionAsValue EnvironmentExpression))
                             (LitralExpression (BlobValue [ 42 ]))
                         )
                     )
@@ -359,19 +359,19 @@ evaluationTests =
             \_ ->
                 let
                     encodedHead =
-                        Pine.encodeExpressionAsValue head
+                        PineLanguageStrict.encodeExpressionAsValue head
 
                     expression =
                         EvalExpression
                             (BuiltinExpression "head" EnvironmentExpression)
                             (BuiltinExpression "head"
                                 (BuiltinExpression "skip"
-                                    (ListExpression [ LitralExpression (Pine.valueFromInt 1), EnvironmentExpression ])
+                                    (ListExpression [ LitralExpression (PineLanguageStrict.valueFromInt 1), EnvironmentExpression ])
                                 )
                             )
                 in
                 Expect.equal (Ok (BlobValue [ 99 ]))
-                    (Pine.evalExpression expression
+                    (PineLanguageStrict.evalExpression expression
                         (ListValue [ encodedHead, ListValue [ BlobValue [ 99 ] ] ])
                     )
         , test "nested Eval has its own environment" <|
@@ -379,12 +379,12 @@ evaluationTests =
                 let
                     inner =
                         EvalExpression
-                            (LitralExpression (Pine.encodeExpressionAsValue EnvironmentExpression))
+                            (LitralExpression (PineLanguageStrict.encodeExpressionAsValue EnvironmentExpression))
                             EnvironmentExpression
                 in
                 Expect.equal (Ok (BlobValue [ 10 ]))
                     (run
-                        (EvalExpression (LitralExpression (Pine.encodeExpressionAsValue inner))
+                        (EvalExpression (LitralExpression (PineLanguageStrict.encodeExpressionAsValue inner))
                             (LitralExpression (BlobValue [ 10 ]))
                         )
                     )
@@ -400,15 +400,15 @@ evaluationTests =
                     |> expectErrorContaining "Eval encoded expression"
         , test "Eval supports recursion through finite environment values" <|
             \_ ->
-                Expect.equal (Ok (Pine.valueFromInt 0))
-                    (Pine.evalExpression recursiveBody
-                        (ListValue [ Pine.encodeExpressionAsValue recursiveBody, Pine.valueFromInt 20 ])
+                Expect.equal (Ok (PineLanguageStrict.valueFromInt 0))
+                    (PineLanguageStrict.evalExpression recursiveBody
+                        (ListValue [ PineLanguageStrict.encodeExpressionAsValue recursiveBody, PineLanguageStrict.valueFromInt 20 ])
                     )
         , test "literal-wrapped invalid code in an unselected branch stays lazy" <|
             \_ ->
-                ConditionalExpression (LitralExpression Pine.trueValue) crash EnvironmentExpression
-                    |> Pine.encodeExpressionAsValue
-                    |> Pine.parseExpressionFromValue
+                ConditionalExpression (LitralExpression PineLanguageStrict.trueValue) crash EnvironmentExpression
+                    |> PineLanguageStrict.encodeExpressionAsValue
+                    |> PineLanguageStrict.parseExpressionFromValue
                     |> Result.andThen run
                     |> Expect.equal (Ok environment)
         ]
@@ -418,7 +418,7 @@ builtinTests : Test
 builtinTests =
     let
         int =
-            Pine.valueFromInt
+            PineLanguageStrict.valueFromInt
 
         ints values =
             ListValue (List.map int values)
@@ -427,12 +427,12 @@ builtinTests =
             ListValue []
 
         examples =
-            [ ( "equal", BlobValue [ 5, 5 ], Pine.trueValue )
-            , ( "equal", BlobValue [ 5, 6 ], Pine.falseValue )
-            , ( "equal", empty, Pine.trueValue )
-            , ( "equal", ListValue [ empty, empty ], Pine.trueValue )
-            , ( "equal", ListValue [ empty, BlobValue [] ], Pine.falseValue )
-            , ( "negate", BlobValue [ 4 ], Pine.falseValue )
+            [ ( "equal", BlobValue [ 5, 5 ], PineLanguageStrict.trueValue )
+            , ( "equal", BlobValue [ 5, 6 ], PineLanguageStrict.falseValue )
+            , ( "equal", empty, PineLanguageStrict.trueValue )
+            , ( "equal", ListValue [ empty, empty ], PineLanguageStrict.trueValue )
+            , ( "equal", ListValue [ empty, BlobValue [] ], PineLanguageStrict.falseValue )
+            , ( "negate", BlobValue [ 4 ], PineLanguageStrict.falseValue )
             , ( "negate", int -258, int 258 )
             , ( "negate", BlobValue [ 0 ], empty )
             , ( "length", BlobValue [ 1, 2, 3 ], int 3 )
@@ -450,7 +450,7 @@ builtinTests =
             , ( "take", ListValue [ int -1, BlobValue [ 8, 9 ] ], BlobValue [] )
             , ( "take", ListValue [ int 8, ints [ 8, 9 ] ], ints [ 8, 9 ] )
             , ( "take", ListValue [ int 1, ints [ 8, 9 ] ], ints [ 8 ] )
-            , ( "take", ListValue [ Pine.trueValue, empty ], empty )
+            , ( "take", ListValue [ PineLanguageStrict.trueValue, empty ], empty )
             , ( "reverse", BlobValue [ 1, 2, 3 ], BlobValue [ 3, 2, 1 ] )
             , ( "reverse", ints [ 1, 2 ], ints [ 2, 1 ] )
             , ( "concat", ListValue [ BlobValue [ 1 ], BlobValue [ 2, 3 ] ], BlobValue [ 1, 2, 3 ] )
@@ -461,15 +461,15 @@ builtinTests =
             , ( "concat", empty, empty )
             , ( "int_add", ints [ 257, -2, 1 ], int 256 )
             , ( "int_add", empty, int 0 )
-            , ( "int_add", ListValue [ Pine.trueValue ], empty )
+            , ( "int_add", ListValue [ PineLanguageStrict.trueValue ], empty )
             , ( "int_add", ListValue [ BlobValue [ 4, 0, 1 ], BlobValue [ 2, 0, 1 ] ], int 0 )
             , ( "int_mul", ints [ -3, 257 ], int -771 )
             , ( "int_mul", empty, int 1 )
             , ( "int_mul", ListValue [ BlobValue [ 9, 1 ] ], empty )
-            , ( "int_is_sorted_asc", ints [ -3, -3, 0, 2 ], Pine.trueValue )
-            , ( "int_is_sorted_asc", ints [ 2, 1 ], Pine.falseValue )
-            , ( "int_is_sorted_asc", empty, Pine.trueValue )
-            , ( "int_is_sorted_asc", ListValue [ Pine.trueValue ], empty )
+            , ( "int_is_sorted_asc", ints [ -3, -3, 0, 2 ], PineLanguageStrict.trueValue )
+            , ( "int_is_sorted_asc", ints [ 2, 1 ], PineLanguageStrict.falseValue )
+            , ( "int_is_sorted_asc", empty, PineLanguageStrict.trueValue )
+            , ( "int_is_sorted_asc", ListValue [ PineLanguageStrict.trueValue ], empty )
             , ( "bit_and", ListValue [ BlobValue [ 255, 170 ], BlobValue [ 15 ] ], BlobValue [ 10 ] )
             , ( "bit_and", ListValue [ BlobValue [], BlobValue [ 1 ] ], BlobValue [] )
             , ( "bit_or", ListValue [ BlobValue [ 16, 128 ], BlobValue [ 1 ] ], BlobValue [ 16, 129 ] )
@@ -490,7 +490,7 @@ builtinTests =
                     test (name ++ " " ++ String.fromInt index) <|
                         \_ ->
                             Expect.equal (Ok expected)
-                                (Pine.evalExpression (BuiltinExpression name (LitralExpression input)) empty)
+                                (PineLanguageStrict.evalExpression (BuiltinExpression name (LitralExpression input)) empty)
                 )
                 examples
             )
@@ -498,7 +498,7 @@ builtinTests =
             (List.map
                 (\name ->
                     test name <|
-                        \_ -> Expect.equal (Ok empty) (Pine.applyBuiltinFunction name (BlobValue []))
+                        \_ -> Expect.equal (Ok empty) (PineLanguageStrict.applyBuiltinFunction name (BlobValue []))
                 )
                 [ "skip", "take", "concat", "int_add", "int_mul", "int_is_sorted_asc", "bit_and", "bit_or", "bit_xor", "bit_shift_left", "bit_shift_right" ]
             )
@@ -508,9 +508,9 @@ builtinTests =
                     test name <|
                         \_ ->
                             Expect.all
-                                [ \_ -> Expect.equal (Ok empty) (Pine.applyBuiltinFunction name empty)
-                                , \_ -> Expect.equal (Ok empty) (Pine.applyBuiltinFunction name (ListValue [ BlobValue [ 1 ], ints [ 2 ] ]))
-                                , \_ -> Expect.equal (Ok (BlobValue [ 3 ])) (Pine.applyBuiltinFunction name (ListValue [ BlobValue [ 3 ] ]))
+                                [ \_ -> Expect.equal (Ok empty) (PineLanguageStrict.applyBuiltinFunction name empty)
+                                , \_ -> Expect.equal (Ok empty) (PineLanguageStrict.applyBuiltinFunction name (ListValue [ BlobValue [ 1 ], ints [ 2 ] ]))
+                                , \_ -> Expect.equal (Ok (BlobValue [ 3 ])) (PineLanguageStrict.applyBuiltinFunction name (ListValue [ BlobValue [ 3 ] ]))
                                 ]
                                 ()
                 )
@@ -522,8 +522,8 @@ builtinTests =
                     test name <|
                         \_ ->
                             Expect.equal (Ok value)
-                                (Pine.applyBuiltinFunction "reverse" value
-                                    |> Result.andThen (Pine.applyBuiltinFunction "reverse")
+                                (PineLanguageStrict.applyBuiltinFunction "reverse" value
+                                    |> Result.andThen (PineLanguageStrict.applyBuiltinFunction "reverse")
                                 )
                 )
                 valueExamples
@@ -537,9 +537,9 @@ builtinTests =
                                 \_ ->
                                     Result.map2
                                         (\prefix suffix -> ListValue [ prefix, suffix ])
-                                        (Pine.applyBuiltinFunction "take" (ListValue [ int count, value ]))
-                                        (Pine.applyBuiltinFunction "skip" (ListValue [ int count, value ]))
-                                        |> Result.andThen (Pine.applyBuiltinFunction "concat")
+                                        (PineLanguageStrict.applyBuiltinFunction "take" (ListValue [ int count, value ]))
+                                        (PineLanguageStrict.applyBuiltinFunction "skip" (ListValue [ int count, value ]))
+                                        |> Result.andThen (PineLanguageStrict.applyBuiltinFunction "concat")
                                         |> Expect.equal (Ok value)
                         )
                         [ -10, -1, 0, 1, 2, 3, 4, 100 ]
@@ -554,10 +554,10 @@ builtinTests =
                             Expect.all
                                 [ \_ ->
                                     Expect.equal (Ok (BlobValue left))
-                                        (Pine.applyBuiltinFunction "bit_shift_left" (ListValue [ int count, BlobValue [ 129, 165 ] ]))
+                                        (PineLanguageStrict.applyBuiltinFunction "bit_shift_left" (ListValue [ int count, BlobValue [ 129, 165 ] ]))
                                 , \_ ->
                                     Expect.equal (Ok (BlobValue right))
-                                        (Pine.applyBuiltinFunction "bit_shift_right" (ListValue [ int count, BlobValue [ 129, 165 ] ]))
+                                        (PineLanguageStrict.applyBuiltinFunction "bit_shift_right" (ListValue [ int count, BlobValue [ 129, 165 ] ]))
                                 ]
                                 ()
                 )
@@ -589,10 +589,10 @@ builtinTests =
                                     Expect.all
                                         [ \_ ->
                                             Expect.equal (Ok (fromNumber (modBy 65536 (number * 2 ^ min 16 count))))
-                                                (Pine.applyBuiltinFunction "bit_shift_left" (ListValue [ int count, BlobValue bytes ]))
+                                                (PineLanguageStrict.applyBuiltinFunction "bit_shift_left" (ListValue [ int count, BlobValue bytes ]))
                                         , \_ ->
                                             Expect.equal (Ok (fromNumber (number // 2 ^ min 16 count)))
-                                                (Pine.applyBuiltinFunction "bit_shift_right" (ListValue [ int count, BlobValue bytes ]))
+                                                (PineLanguageStrict.applyBuiltinFunction "bit_shift_right" (ListValue [ int count, BlobValue bytes ]))
                                         ]
                                         ()
                         )
@@ -601,7 +601,7 @@ builtinTests =
                 [ [ 0, 0 ], [ 255, 255 ] ]
             )
         , test "unknown builtin is an explicit error" <|
-            \_ -> Pine.applyBuiltinFunction "not_a_builtin" empty |> expectErrorContaining "not_a_builtin"
+            \_ -> PineLanguageStrict.applyBuiltinFunction "not_a_builtin" empty |> expectErrorContaining "not_a_builtin"
         , test "integer arithmetic and comparisons preserve precision beyond native integers" <|
             \_ ->
                 let
@@ -617,13 +617,13 @@ builtinTests =
                 Expect.all
                     [ \_ ->
                         Expect.equal (Ok (int 0))
-                            (Pine.applyBuiltinFunction "int_add" (ListValue [ positive, negative ]))
+                            (PineLanguageStrict.applyBuiltinFunction "int_add" (ListValue [ positive, negative ]))
                     , \_ ->
                         Expect.equal (Ok doubled)
-                            (Pine.applyBuiltinFunction "int_mul" (ListValue [ positive, int 2 ]))
+                            (PineLanguageStrict.applyBuiltinFunction "int_mul" (ListValue [ positive, int 2 ]))
                     , \_ ->
-                        Expect.equal (Ok Pine.trueValue)
-                            (Pine.applyBuiltinFunction "int_is_sorted_asc" (ListValue [ negative, int 0, positive ]))
+                        Expect.equal (Ok PineLanguageStrict.trueValue)
+                            (PineLanguageStrict.applyBuiltinFunction "int_is_sorted_asc" (ListValue [ negative, int 0, positive ]))
                     ]
                     ()
         , test "arbitrarily large slice and shift counts are bounded before conversion" <|
@@ -635,13 +635,13 @@ builtinTests =
                 Expect.all
                     [ \_ ->
                         Expect.equal (Ok (BlobValue []))
-                            (Pine.applyBuiltinFunction "skip" (ListValue [ huge, BlobValue [ 1, 2 ] ]))
+                            (PineLanguageStrict.applyBuiltinFunction "skip" (ListValue [ huge, BlobValue [ 1, 2 ] ]))
                     , \_ ->
                         Expect.equal (Ok (BlobValue [ 1, 2 ]))
-                            (Pine.applyBuiltinFunction "take" (ListValue [ huge, BlobValue [ 1, 2 ] ]))
+                            (PineLanguageStrict.applyBuiltinFunction "take" (ListValue [ huge, BlobValue [ 1, 2 ] ]))
                     , \_ ->
                         Expect.equal (Ok (BlobValue [ 0, 0 ]))
-                            (Pine.applyBuiltinFunction "bit_shift_left" (ListValue [ huge, BlobValue [ 1, 2 ] ]))
+                            (PineLanguageStrict.applyBuiltinFunction "bit_shift_left" (ListValue [ huge, BlobValue [ 1, 2 ] ]))
                     ]
                     ()
         ]
@@ -660,8 +660,8 @@ valueEncodingTests =
                                     BlobValue bytes
                             in
                             Expect.all
-                                [ \_ -> Expect.equal encoded (Pine.valueFromString text)
-                                , \_ -> Expect.equal (Ok text) (Pine.stringFromValue encoded)
+                                [ \_ -> Expect.equal encoded (PineLanguageStrict.valueFromString text)
+                                , \_ -> Expect.equal (Ok text) (PineLanguageStrict.stringFromValue encoded)
                                 ]
                                 ()
                 )
@@ -677,11 +677,11 @@ valueEncodingTests =
         , test "strings use four big-endian bytes per Unicode scalar" <|
             \_ ->
                 Expect.equal (BlobValue [ 0, 0, 0, 65, 0, 1, 246, 0 ])
-                    (Pine.valueFromString "A😀")
+                    (PineLanguageStrict.valueFromString "A😀")
         , describe "Invalid string encodings are errors"
             (List.indexedMap
                 (\index value ->
-                    test (String.fromInt index) (\_ -> expectError (Pine.stringFromValue value))
+                    test (String.fromInt index) (\_ -> expectError (PineLanguageStrict.stringFromValue value))
                 )
                 [ ListValue []
                 , BlobValue [ 0 ]
@@ -702,10 +702,10 @@ valueEncodingTests =
                                     BlobValue bytes
                             in
                             Expect.all
-                                [ \_ -> Expect.equal encoded (Pine.valueFromInt integer)
+                                [ \_ -> Expect.equal encoded (PineLanguageStrict.valueFromInt integer)
                                 , \_ ->
                                     Expect.equal (Ok (String.fromInt integer))
-                                        (Pine.bigIntFromValue encoded |> Result.map BigInt.toString)
+                                        (PineLanguageStrict.bigIntFromValue encoded |> Result.map BigInt.toString)
                                 ]
                                 ()
                 )
@@ -733,11 +733,11 @@ valueEncodingTests =
                                     BlobValue bytes
 
                                 decoded =
-                                    Pine.bigIntFromValue encoded
+                                    PineLanguageStrict.bigIntFromValue encoded
                             in
                             Expect.all
                                 [ \_ -> Expect.equal (Ok decimal) (Result.map BigInt.toString decoded)
-                                , \_ -> Expect.equal (Ok encoded) (Result.map Pine.valueFromBigInt decoded)
+                                , \_ -> Expect.equal (Ok encoded) (Result.map PineLanguageStrict.valueFromBigInt decoded)
                                 ]
                                 ()
                 )
@@ -753,20 +753,20 @@ valueEncodingTests =
             \_ ->
                 Expect.equal
                     [ BlobValue [ 4, 0 ], BlobValue [ 4, 1, 0 ], BlobValue [ 2, 1, 0 ] ]
-                    (List.map Pine.valueFromInt [ 0, 256, -256 ])
+                    (List.map PineLanguageStrict.valueFromInt [ 0, 256, -256 ])
         , describe "Invalid integer encodings are errors"
             (List.indexedMap
                 (\index value ->
-                    test (String.fromInt index) (\_ -> expectError (Pine.bigIntFromValue value))
+                    test (String.fromInt index) (\_ -> expectError (PineLanguageStrict.bigIntFromValue value))
                 )
-                [ ListValue [], BlobValue [], Pine.trueValue, Pine.falseValue, BlobValue [ 0, 1 ], BlobValue [ 4, 256 ] ]
+                [ ListValue [], BlobValue [], PineLanguageStrict.trueValue, PineLanguageStrict.falseValue, BlobValue [ 0, 1 ], BlobValue [ 4, 256 ] ]
             )
         ]
 
 
 tagged : String -> List Value -> Value
 tagged name arguments =
-    ListValue (Pine.valueFromString name :: arguments)
+    ListValue (PineLanguageStrict.valueFromString name :: arguments)
 
 
 valueExamples : List ( String, Value )
@@ -774,8 +774,8 @@ valueExamples =
     [ ( "empty blob", BlobValue [] )
     , ( "zero byte", BlobValue [ 0 ] )
     , ( "byte boundaries", BlobValue [ 0, 1, 127, 128, 255 ] )
-    , ( "true", Pine.trueValue )
-    , ( "false", Pine.falseValue )
+    , ( "true", PineLanguageStrict.trueValue )
+    , ( "false", PineLanguageStrict.falseValue )
     , ( "empty list", ListValue [] )
     , ( "singleton list", ListValue [ BlobValue [ 255 ] ] )
     , ( "mixed nested list", ListValue [ BlobValue [], ListValue [ ListValue [], BlobValue [ 0, 255 ] ], BlobValue [ 42 ] ] )
@@ -800,8 +800,8 @@ expressionExamples =
            , ( "builtin", BuiltinExpression "length" EnvironmentExpression )
            , ( "unknown builtin", BuiltinExpression "unknown" literal )
            , ( "empty builtin name", BuiltinExpression "" literal )
-           , ( "true conditional with an invalid unselected branch", ConditionalExpression (LitralExpression Pine.trueValue) invalidEval literal )
-           , ( "false conditional with an invalid unselected branch", ConditionalExpression (LitralExpression Pine.falseValue) literal invalidEval )
+           , ( "true conditional with an invalid unselected branch", ConditionalExpression (LitralExpression PineLanguageStrict.trueValue) invalidEval literal )
+           , ( "false conditional with an invalid unselected branch", ConditionalExpression (LitralExpression PineLanguageStrict.falseValue) literal invalidEval )
            , ( "conditional depending on the environment", ConditionalExpression EnvironmentExpression literal (ListExpression []) )
            , ( "eval with a rebound environment", EvalExpression (LitralExpression (tagged "Environment" [])) literal )
            , ( "invalid eval", invalidEval )

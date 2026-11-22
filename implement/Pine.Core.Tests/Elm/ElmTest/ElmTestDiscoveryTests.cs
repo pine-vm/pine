@@ -166,7 +166,7 @@ public class ElmTestDiscoveryTests
         AssertCompiledRunnersPass(declarations);
 
     [Theory]
-    [InlineData("PineTests.elm", "Label leaves evaluation unchanged")]
+    [InlineData("PineLanguageStrictTests.elm", "Label leaves evaluation unchanged")]
     [InlineData("ElmInteractive2024Tests.elm", "floor 0.1")]
     [InlineData("LanguageService/CompletionTests.elm", "Function arguments are suggested within their scope")]
     public void Syntax_test_execution_preserves_bundled_project_semantics(string testFile, string selector)
