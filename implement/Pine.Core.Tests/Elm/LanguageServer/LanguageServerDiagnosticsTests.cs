@@ -113,6 +113,35 @@ public class LanguageServerDiagnosticsTests
     }
 
     [Fact]
+    public void Surrogate_pair_quick_fix_targets_only_the_two_escapes_in_the_current_document()
+    {
+        const string source = "module Main exposing (..)\ntext = \"😀\\u{D83D}\\u{DE00} end\"\nlone = '\\u{D800}'";
+        var uri = VirtualWorkspace.DocumentUri("Main.elm");
+        var (server, _) = CreateServer(new StubDiagnosticsProvider());
+        using var serverLifetime = server;
+
+        server.TextDocument_didOpen(new TextDocumentItem(uri, "elm", 7, source));
+
+        var cursor = new Position(1, 11);
+        var request = new CodeActionParams(new(uri), new(cursor, cursor), new(["quickfix"]));
+        var action = server.TextDocument_codeAction(request).Should().ContainSingle().Subject;
+        var change = action.Edit.DocumentChanges.Should().ContainSingle().Subject;
+        change.TextDocument.Should().Be(new OptionalVersionedTextDocumentIdentifier(uri, 7));
+
+        change.Edits.Should().ContainSingle()
+            .Which.Should().Be(new TextEdit(new(new(1, 10), new(1, 26)), "\\u{1F600}"));
+
+        var atLone = new Position(2, 10);
+        server.TextDocument_codeAction(request with { Range = new(atLone, atLone) }).Should().BeEmpty();
+        server.TextDocument_codeAction(request with { Context = new(["refactor"]) }).Should().BeEmpty();
+
+        var changed = source.Replace("\\u{D83D}\\u{DE00}", "\\u{1F600}", System.StringComparison.Ordinal);
+        server.TextDocument_didChange(new(uri, 8), [new(Range: null, RangeLength: null, changed)]);
+
+        server.TextDocument_codeAction(request).Should().BeEmpty();
+    }
+
+    [Fact]
     public async Task Application_diagnostics_replace_previous_results_when_another_document_triggers_analysis()
     {
         var provider = new ApplicationDiagnosticsProvider();

@@ -267,13 +267,12 @@ public partial class ElmCompiler
                     "Unexpected parse result type: " + parseResult.GetType().Name);
             }
 
-            if (parseModuleOk.IncompleteDeclarations.Count is not 0)
+            if (parseModuleOk.IncompleteDeclarations.Count is not 0 ||
+                parseModuleOk.AdditionalParseErrors.Count is not 0)
             {
-                var firstIncompleteDeclaration = parseModuleOk.IncompleteDeclarations[0];
-
                 parseFailures.Add(
                     moduleNameFlattened,
-                    ConcreteSyntax.ParseError.RenderDisplayString(firstIncompleteDeclaration.Value.ParseError));
+                    ConcreteSyntax.ParseError.RenderDisplayString(ElmSyntaxErrorRenderer.CollectErrors(parseResult)[0]));
 
                 continue;
             }

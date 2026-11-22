@@ -5,6 +5,7 @@ using Pine.Core.Text;
 using System;
 using System.Collections.Frozen;
 using System.Collections.Generic;
+using System.Numerics;
 
 namespace Pine.Core.Encodings;
 
@@ -207,9 +208,7 @@ public static class StringEncoding
 
             if (!UnicodeUtility.IsValidUnicodeScalar(codePoint))
             {
-                return
-                    StringParseResult.Err(
-                        "Blob value at [" + index + "] out of range: " + codePoint);
+                return InvalidStringCodePoint(codePoint, index);
             }
 
             stringBuilder.Append(char.ConvertFromUtf32(codePoint));
@@ -258,14 +257,20 @@ public static class StringEncoding
                 continue;
             }
 
-            // https://github.com/dotnet/runtime/blob/e05944dd74118db06d6987fe2724813950725737/src/libraries/System.Private.CoreLib/src/System/Char.cs#L1036
-            return
-                StringParseResult.Err(
-                    "Char code at [" + index + "] out of range: " + charInteger);
+            return InvalidStringCodePoint(charInteger, index);
         }
 
         return StringParseResult.Ok(stringBuilder.ToString());
     }
+
+    private static StringParseResult InvalidStringCodePoint(BigInteger codePoint, int index) =>
+        StringParseResult.Err(
+            0xD800 <= codePoint && codePoint <= 0xDFFF
+            ?
+            $"Unpaired UTF-16 surrogate U+{(int)codePoint:X4} at code-point index {index} (zero-based)." +
+            " Remove it before exporting the string, or export its numeric value as an Int."
+            :
+            $"Invalid Unicode code point {codePoint} at code-point index {index} (zero-based).");
 
     internal readonly struct StringParseResult
     {

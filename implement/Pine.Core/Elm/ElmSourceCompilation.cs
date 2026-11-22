@@ -24,7 +24,14 @@ public static class ElmSourceCompilation
     public static IReadOnlyList<DeclQualifiedName> EnumerateRootDeclarations(
         FileTree sourceTree,
         IReadOnlyList<IReadOnlyList<string>> filePaths,
-        IDictionary<string, Result<ParseError, File>>? sourceParseCache = null)
+        IDictionary<string, Result<ParseError, File>>? sourceParseCache = null) =>
+        TryEnumerateRootDeclarations(sourceTree, filePaths, sourceParseCache)
+        .Extract(error => throw new ArgumentException(error));
+
+    private static Result<string, IReadOnlyList<DeclQualifiedName>> TryEnumerateRootDeclarations(
+        FileTree sourceTree,
+        IReadOnlyList<IReadOnlyList<string>> filePaths,
+        IDictionary<string, Result<ParseError, File>>? sourceParseCache)
     {
         var roots = new List<DeclQualifiedName>();
 
@@ -34,7 +41,7 @@ public static class ElmSourceCompilation
                 continue;
 
             if (sourceTree.GetNodeAtPath(path) is not FileTree.FileNode file)
-                throw new ArgumentException("Selected Elm source file not found: " + string.Join("/", path));
+                return "Selected Elm source file not found: " + string.Join("/", path);
 
             var text = Encoding.UTF8.GetString(file.Bytes.Span);
 
@@ -45,10 +52,10 @@ public static class ElmSourceCompilation
                 sourceParseCache?[text] = parsed;
             }
 
-            var syntax =
-                parsed
-                .Extract(
-                    error => throw new ArgumentException("Failed parsing " + string.Join("/", path) + ": " + error));
+            if (ElmSyntaxErrorRenderer.CollectErrors(parsed) is [var parseError, ..])
+                return "Failed parsing " + string.Join("/", path) + ": " + parseError;
+
+            var syntax = parsed.Extract(error => throw new InvalidOperationException(error.ToString()));
 
             var moduleName = Module.GetModuleName(syntax.ModuleDefinition.Value).Value;
 
@@ -60,7 +67,7 @@ public static class ElmSourceCompilation
                     DeclQualifiedName.Create(moduleName, declaration.Function.Declaration.Value.Name.Value)));
         }
 
-        return [.. roots.Distinct()];
+        return Result<string, IReadOnlyList<DeclQualifiedName>>.ok([.. roots.Distinct()]);
     }
 
     /// <summary>Enumerates selected prepared declarations using their owner-isolated compiler identities.</summary>
@@ -83,6 +90,9 @@ public static class ElmSourceCompilation
                 throw new ArgumentException("Selected prepared Elm source file not found: " + sourcePath);
             }
 
+            if (ElmSyntaxErrorRenderer.CollectErrors(Result<ParseError, File>.ok(syntax)) is [var error, ..])
+                throw new ArgumentException("Failed parsing " + sourcePath + ": " + error);
+
             roots.AddRange(
                 syntax.Declarations.Select(declaration => declaration.Value)
                 .OfType<Declaration.FunctionDeclaration>()
@@ -104,14 +114,17 @@ public static class ElmSourceCompilation
         bool includeBundledKernelModules = true,
         IDictionary<string, Result<ParseError, File>>? sourceParseCache = null,
         Canonicalization.DeclarationCache? canonicalizationCache = null) =>
-        ElmCompiler.CompileInteractiveEnvironment(
-            appCodeTree,
-            EnumerateRootDeclarations(appCodeTree, rootFilePaths, sourceParseCache),
-            syntaxOptimization,
-            disableGenericApplicationChainConsolidation,
-            includeBundledKernelModules: includeBundledKernelModules,
-            sourceParseCache: sourceParseCache,
-            canonicalizationCache: canonicalizationCache);
+        TryEnumerateRootDeclarations(appCodeTree, rootFilePaths, sourceParseCache)
+        .AndThen(
+            roots =>
+            ElmCompiler.CompileInteractiveEnvironment(
+                appCodeTree,
+                roots,
+                syntaxOptimization,
+                disableGenericApplicationChainConsolidation,
+                includeBundledKernelModules: includeBundledKernelModules,
+                sourceParseCache: sourceParseCache,
+                canonicalizationCache: canonicalizationCache));
 
     /// <summary>Executes zero-parameter exports on the caller's VM; other exports remain executable functions.</summary>
     public static Result<string, PineValue> EvaluateZeroParameterRoots(PineValue compiledEnvironment, IPineVM vm)

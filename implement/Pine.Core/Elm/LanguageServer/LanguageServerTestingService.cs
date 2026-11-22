@@ -97,7 +97,7 @@ public sealed class LanguageServerTestingService(
 
         public ElmTestSourceSnapshot Source { get; } = source;
 
-        public IReadOnlyDictionary<string, int> DocumentVersions = source.DocumentVersions;
+        public IReadOnlyDictionary<string, int> _documentVersions = source.DocumentVersions;
 
         public string TreeHash { get; } = TreeHashOf(source.Files);
 
@@ -105,13 +105,13 @@ public sealed class LanguageServerTestingService(
 
         public int ActiveOperations { get; set; }
 
-        public FileTree NavigationSources = source.Files;
+        public FileTree _navigationSources = source.Files;
 
         public SemaphoreSlim RunGate { get; } = new(1, 1);
 
         public SemaphoreSlim DiscoveryGate { get; } = new(1, 1);
 
-        public SnapshotDiscovery? Discovery;
+        public SnapshotDiscovery? _discovery;
     }
 
     private sealed record SnapshotDiscovery(
@@ -159,7 +159,7 @@ public sealed class LanguageServerTestingService(
                     items,
                     discovery.HasOnly,
                     discovery.HasSkipped,
-                    Volatile.Read(ref snapshot.DocumentVersions),
+                    Volatile.Read(ref snapshot._documentVersions),
                     discovery.ResolutionFingerprint,
                     DiscoveryId: retained.Id);
         }
@@ -177,7 +177,7 @@ public sealed class LanguageServerTestingService(
                     Items: null,
                     HasOnly: false,
                     HasSkipped: false,
-                    Volatile.Read(ref snapshot.DocumentVersions),
+                    Volatile.Read(ref snapshot._documentVersions),
                     ResolutionFingerprint: null,
                     new("discoveryFailed", exception.Message));
         }
@@ -455,7 +455,7 @@ public sealed class LanguageServerTestingService(
 
         var node =
             snapshot.Source.Files.GetNodeAtPath(path) ??
-            Volatile.Read(ref snapshot.NavigationSources).GetNodeAtPath(path);
+            Volatile.Read(ref snapshot._navigationSources).GetNodeAtPath(path);
 
         if (node is not FileTree.FileNode file)
         {
@@ -480,7 +480,7 @@ public sealed class LanguageServerTestingService(
 
         try
         {
-            if (snapshot.Discovery is { } existing)
+            if (snapshot._discovery is { } existing)
                 return existing;
 
             var manifestPath = RelativePath(snapshot.Source.RootUri, snapshot.ProjectUri).Append("elm.json").ToArray();
@@ -508,8 +508,8 @@ public sealed class LanguageServerTestingService(
                     token).ConfigureAwait(false);
 
             token.ThrowIfCancellationRequested();
-            Volatile.Write(ref snapshot.NavigationSources, discovery.Inventory.SourceFiles);
-            return snapshot.Discovery = discovery;
+            Volatile.Write(ref snapshot._navigationSources, discovery.Inventory.SourceFiles);
+            return snapshot._discovery = discovery;
         }
         finally
         {
@@ -723,7 +723,7 @@ public sealed class LanguageServerTestingService(
                     ++existing.ActiveOperations;
 
                 if (parameters.Version is null)
-                    Volatile.Write(ref existing.DocumentVersions, source.DocumentVersions);
+                    Volatile.Write(ref existing._documentVersions, source.DocumentVersions);
 
                 return existing;
             }
@@ -1045,7 +1045,7 @@ public sealed class LanguageServerTestingService(
 
         var hash = version.AsSpan(prefix.Length);
 
-        if ((prefix == "file-tree-" ? hash.Length != 64 : hash.Length is not (40 or 64)) ||
+        if ((prefix is "file-tree-" ? hash.Length is not 64 : hash.Length is not (40 or 64)) ||
             hash.ContainsAnyExcept("0123456789abcdef"))
         {
             throw new PineTestingProtocolException(

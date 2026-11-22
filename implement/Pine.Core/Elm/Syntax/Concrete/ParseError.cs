@@ -72,7 +72,8 @@ public abstract record ElmSyntaxProblem
     public sealed record AnnotationNameRepeated(string Name) : ElmSyntaxProblem;
 
     /// <summary>An invalid literal escape.</summary>
-    public sealed record Escape(EscapeProblem Problem, int DigitCount = 0, int? CodePoint = null) : ElmSyntaxProblem;
+    public sealed record Escape(
+        EscapeProblem Problem, int DigitCount = 0, int? CodePoint = null, int? PairedScalar = null) : ElmSyntaxProblem;
 
     /// <summary>An invalid numeric literal.</summary>
     public sealed record Number(NumberProblem Problem, string IntegerPrefix) : ElmSyntaxProblem;
@@ -136,7 +137,7 @@ public enum SyntaxErrorSite
 /// <summary>Escape validation stages.</summary>
 public enum EscapeProblem
 {
-    Unknown, UnicodeFormat, UnicodeShort, UnicodeLong, UnicodeCode
+    Unknown, UnicodeFormat, UnicodeShort, UnicodeLong, UnicodeCode, UnicodeSurrogate
 }
 
 /// <summary>Numeric validation stages.</summary>

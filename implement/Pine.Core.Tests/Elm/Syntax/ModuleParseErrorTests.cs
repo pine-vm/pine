@@ -598,7 +598,7 @@ public partial class ModuleParseErrorTests
     [Theory]
     [InlineData("", EscapeProblem.UnicodeShort, null)]
     [InlineData("7e", EscapeProblem.UnicodeShort, 0x7e)]
-    [InlineData("D800", EscapeProblem.UnicodeCode, 0xd800)]
+    [InlineData("D800", EscapeProblem.UnicodeSurrogate, 0xd800)]
     [InlineData("110000", EscapeProblem.UnicodeCode, 0x110000)]
     [InlineData("FFFFFF", EscapeProblem.UnicodeCode, 0xffffff)]
     [InlineData("0000041", EscapeProblem.UnicodeLong, 0x41)]
@@ -617,6 +617,36 @@ public partial class ModuleParseErrorTests
 
         diagnostic.Error.Region.Should().Be(new Range(new Location(2, 10), new Location(2, 14 + digits.Length)));
         diagnostic.Error.ContextRange.Should().BeNull();
+    }
+
+    [Theory]
+    [InlineData(""" "\u{D83D}\u{DE00}" """, 0, 16, "\\u{1F600}")]
+    [InlineData(""" '\u{DBFF}\u{DFFF}' """, 0, 16, "\\u{10FFFF}")]
+    [InlineData(""" "😀\u{D800}\u{DC00}" """, 2, 16, "\\u{10000}")]
+    [InlineData(""" "\u{DC00}\u{D800}" """, 0, 8, null)]
+    [InlineData(""" "\u{D83D} \u{DE00}" """, 0, 8, null)]
+    [InlineData(""" "\u{D83D}\u{00E9}" """, 0, 8, null)]
+    public void SyntaxError_surrogate_fix_only_combines_adjacent_high_and_low_escapes(
+        string literal, int prefixLength, int rangeLength, string? replacement)
+    {
+        var source = "module Test exposing (..)\r\nvalue = " + literal.Trim();
+        var result = ElmSyntaxParser.ParseModuleText(source);
+        var error = ElmSyntaxErrorRenderer.CollectErrors(result).Should().ContainSingle().Subject;
+
+        var start = 10 + prefixLength;
+        error.Region.Should().Be(new Range(new Location(2, start), new Location(2, start + rangeLength)));
+        ElmSyntaxErrorRenderer.UnicodeEscapeReplacement(error).Should().Be(replacement);
+
+        if (replacement is null)
+        {
+            ElmSyntaxErrorRenderer.RenderConcise(error).Should().Contain("not a character on its own");
+            return;
+        }
+
+        ElmSyntaxErrorRenderer.RenderConcise(error).Should().Contain(replacement);
+        var offset = source.IndexOf('\\');
+        var fixedSource = source[..offset] + replacement + source[(offset + rangeLength)..];
+        ElmSyntaxErrorRenderer.CollectErrors(ElmSyntaxParser.ParseModuleText(fixedSource)).Should().BeEmpty();
     }
 
     [Theory]

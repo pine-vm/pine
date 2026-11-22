@@ -301,7 +301,7 @@ public static class ElmValueEncoding
                 return ElmValue.StringInstance(ok);
 
             if (mapToStringResult.IsErrOrNull() is { } err)
-                return "Failed to convert value under String tag: " + err;
+                return "Cannot decode Elm String: " + err;
 
             throw new NotImplementedException("Unexpected result type: " + mapToStringResult.GetType().FullName);
         }

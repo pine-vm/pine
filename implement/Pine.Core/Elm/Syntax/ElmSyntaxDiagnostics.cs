@@ -1635,23 +1635,54 @@ internal static class ElmSyntaxDiagnostics
                 };
         }
 
-        if (escaped.Peek() is not '{')
+        var (after, digits, code, problem) = ReadUnicodeEscape(escaped);
+
+        if (literal.Error is null &&
+            problem is EscapeProblem.UnicodeSurrogate && code is >= 0xD800 and <= 0xDBFF &&
+            after.Peek() is '\\' && after.Peek(1) is 'u')
         {
-            return
-                counted with
-                {
-                    Cursor = escaped,
-                    Error =
-                    literal.Error ??
-                    Error(cursor.Here, escaped.Here, new ElmSyntaxProblem.Escape(EscapeProblem.UnicodeFormat))
-                };
+            var (pairEnd, _, low, lowProblem) = ReadUnicodeEscape(after.Advance().Advance());
+
+            if (lowProblem is EscapeProblem.UnicodeSurrogate && low is >= 0xDC00 and <= 0xDFFF)
+            {
+                var scalar = char.ConvertToUtf32((char)code.Value, (char)low.Value);
+
+                return
+                    counted with
+                    {
+                        Cursor = pairEnd,
+                        Error =
+                        Error(
+                            cursor.Here,
+                            pairEnd.Here,
+                            new ElmSyntaxProblem.Escape(EscapeProblem.UnicodeSurrogate, digits, code, scalar))
+                    };
+            }
         }
 
-        var digitsBegin = escaped.Advance();
+        return
+            counted with
+            {
+                Cursor = after,
+                Error =
+                literal.Error ??
+                (problem is { } p
+                ?
+                Error(cursor.Here, after.Here, new ElmSyntaxProblem.Escape(p, digits, code))
+                :
+                null)
+            };
+    }
+
+    private static (Lexer End, int Digits, int? CodePoint, EscapeProblem? Problem) ReadUnicodeEscape(Lexer afterU)
+    {
+        if (afterU.Peek() is not '{')
+            return (afterU, 0, null, EscapeProblem.UnicodeFormat);
+
+        var digitsBegin = afterU.Advance();
         var digitsEnd = digitsBegin.SkipAscii(s_hexDigits);
-        var digits = cursor.Source[digitsBegin.Offset..digitsEnd.Offset];
+        var digits = afterU.Source[digitsBegin.Offset..digitsEnd.Offset];
         var hasClose = digitsEnd.Peek() is '}';
-        var after = hasClose ? digitsEnd.Advance() : digitsEnd;
         var code = ParseHex(digits);
 
         EscapeProblem? problem =
@@ -1667,20 +1698,13 @@ internal static class ElmSyntaxDiagnostics
             ?
             EscapeProblem.UnicodeLong
             :
-            code is not (>= 0 and <= 0x10ffff and not (>= 0xd800 and <= 0xdfff)) ? EscapeProblem.UnicodeCode : null;
+            code is >= 0xD800 and <= 0xDFFF
+            ?
+            EscapeProblem.UnicodeSurrogate
+            :
+            code is >= 0 and <= 0x10FFFF ? null : EscapeProblem.UnicodeCode;
 
-        return
-            counted with
-            {
-                Cursor = after,
-                Error =
-                literal.Error ??
-                (problem is { } p
-                ?
-                Error(cursor.Here, after.Here, new ElmSyntaxProblem.Escape(p, digits.Length, code))
-                :
-                null)
-            };
+        return (hasClose ? digitsEnd.Advance() : digitsEnd, digits.Length, code, problem);
     }
 
     private static int? ParseHex(string digits)

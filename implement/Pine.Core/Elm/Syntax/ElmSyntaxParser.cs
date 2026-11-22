@@ -354,15 +354,15 @@ public class ElmSyntaxParser
         string elmModuleText)
     {
         var tokenizer = new Tokenizer(elmModuleText);
+        var tokens = tokenizer.TokenizePrefix(out var tokenizeError);
+        var header = new Parser(tokens).ParseModuleHeaderWithRecovery();
 
-        if (!TryUnwrap(tokenizer.Tokenize(), out var tokens, out var tokenizeErr))
-        {
-            return ParseError.RenderDisplayString(tokenizeErr);
-        }
-
-        var parser = new Parser(tokens);
-
-        return parser.ParseModuleHeaderWithRecovery();
+        return
+            header.IsErrOrNull() is not null && tokenizeError is { } error
+            ?
+            ParseError.RenderDisplayString(error)
+            :
+            header;
     }
 
     /// <summary>
@@ -831,7 +831,14 @@ public class ElmSyntaxParser
 
         public ParseResult<Token[]> Tokenize()
         {
+            var tokens = TokenizePrefix(out var error);
+            return error is { } failure ? failure : tokens;
+        }
+
+        public Token[] TokenizePrefix(out ParseError? error)
+        {
             var tokens = new List<Token>();
+            error = null;
 
             while (!IsAtEnd())
             {
@@ -844,7 +851,8 @@ public class ElmSyntaxParser
 
                 if (!TryUnwrap(NextToken(), out var token, out var err))
                 {
-                    return err;
+                    error = err;
+                    break;
                 }
 
                 tokens.Add(token);

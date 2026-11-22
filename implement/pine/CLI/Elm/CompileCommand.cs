@@ -84,9 +84,12 @@ public static class CompileCommand
                 source.Tree.GetNodeAtPath(source.FilePath) as FileTree.FileNode
                 ?? throw new IOException("Selected Elm module is not a file.");
 
-            var syntax =
-                ElmSyntaxParser.ParseModuleText(Encoding.UTF8.GetString(file.Bytes.Span))
-                .Extract(message => throw new ArgumentException("Cannot parse selected module: " + message));
+            var parsedSource = ElmSyntaxParser.ParseModuleText(Encoding.UTF8.GetString(file.Bytes.Span));
+
+            if (ElmSyntaxErrorRenderer.CollectErrors(parsedSource) is [var parseError, ..])
+                throw new ArgumentException("Cannot parse " + string.Join("/", source.FilePath) + ": " + parseError);
+
+            var syntax = parsedSource.Extract(message => throw new InvalidOperationException(message.ToString()));
 
             var declaration = source.Declaration;
 

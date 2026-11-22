@@ -18,7 +18,11 @@ public record ServerCapabilities(
     bool? ReferencesProvider = null,
     bool? RenameProvider = null,
     CodeLensOptions? CodeLensProvider = null,
-    PineServerExperimentalCapabilities? Experimental = null);
+    PineServerExperimentalCapabilities? Experimental = null)
+{
+    /// <summary>Whether the server provides code actions.</summary>
+    public bool? CodeActionProvider { get; init; }
+}
 
 /// <summary>
 /// https://microsoft.github.io/language-server-protocol/specifications/lsp/3.17/specification/#textDocumentSyncKind

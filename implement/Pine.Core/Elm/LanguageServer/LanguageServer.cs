@@ -393,6 +393,7 @@ public partial class LanguageServer(
                     },
 
                     DocumentFormattingProvider = true,
+                    CodeActionProvider = true,
                     HoverProvider = true,
 
                     CompletionProvider =
@@ -3193,38 +3194,32 @@ public partial class LanguageServer(
             .OrderBy(error => error.Region.Start.Row)
             .ThenBy(error => error.Region.Start.Column)
             .Select(
-                syntaxError =>
-                {
-                    // The Elm syntax parser uses 1-based rows/columns; LSP uses 0-based positions.
-                    var startLine = System.Math.Max(1, syntaxError.Region.Start.Row) - 1;
-                    var startChar = System.Math.Max(1, syntaxError.Region.Start.Column) - 1;
-
-                    var endLine = System.Math.Max(1, syntaxError.Region.End.Row) - 1;
-                    var endChar = System.Math.Max(1, syntaxError.Region.End.Column) - 1;
-
-                    // Guard against an end that precedes the start.
-                    if (endLine < startLine || (endLine == startLine && endChar < startChar))
-                    {
-                        endLine = startLine;
-                        endChar = startChar;
-                    }
-
-                    return
-                        new Diagnostic(
-                            Range:
-                            new Range(
-                                Start: new Position(Line: (uint)startLine, Character: (uint)startChar),
-                                End: new Position(Line: (uint)endLine, Character: (uint)endChar)),
-                            Severity: DiagnosticSeverity.Error,
-                            Code: null,
-                            Source: "elm syntax",
-                            Message: ElmSyntaxErrorRenderer.RenderPlainText(moduleText, syntaxError),
-                            CodeDescription: null,
-                            Tags: null,
-                            RelatedInformation: null);
-                })
+                syntaxError => new Diagnostic(
+                    Range: SyntaxDiagnosticRange(syntaxError),
+                    Severity: DiagnosticSeverity.Error,
+                    Code: null,
+                    Source: "elm syntax",
+                    Message: ElmSyntaxErrorRenderer.RenderPlainText(moduleText, syntaxError),
+                    CodeDescription: null,
+                    Tags: null,
+                    RelatedInformation: null))
             ];
     }
+
+    private static Range SyntaxDiagnosticRange(Syntax.Concrete.ParseError syntaxError)
+    {
+        var start = ToEditorPosition(syntaxError.Region.Start);
+        var end = ToEditorPosition(syntaxError.Region.End);
+
+        return new Range(start, ComparePositions(end, start) < 0 ? start : end);
+
+        // The diagnostics lexer and the editor protocol both count UTF-16 code units.
+        static Position ToEditorPosition(Syntax.Concrete.Location location) =>
+            new((uint)(System.Math.Max(1, location.Row) - 1), (uint)(System.Math.Max(1, location.Column) - 1));
+    }
+
+    private static int ComparePositions(Position left, Position right) =>
+        left.Line == right.Line ? left.Character.CompareTo(right.Character) : left.Line.CompareTo(right.Line);
 
     /// <summary>
     /// Merges files into a file tree.

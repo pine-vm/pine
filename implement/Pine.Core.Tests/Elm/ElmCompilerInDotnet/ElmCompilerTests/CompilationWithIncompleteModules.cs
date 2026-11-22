@@ -1,7 +1,9 @@
 using AwesomeAssertions;
 using Pine.Core.CodeAnalysis;
+using Pine.Core.Elm;
 using Pine.Core.Elm.ElmCompilerInDotnet;
 using Pine.Core.Encodings;
+using Pine.Core.Functional;
 using Pine.Core.PineLanguage;
 using Pine.Core.Tests.Elm.ElmCompilerTests;
 using System;
@@ -13,6 +15,25 @@ namespace Pine.Core.Tests.Elm.ElmCompilerInDotnet.ElmCompilerTests;
 
 public class CompilationWithIncompleteModules
 {
+    [Theory]
+    [InlineData("""'\u{D800}'""", "U+D800 is a UTF-16 surrogate")]
+    [InlineData("\"\\u{D83D}\\u{DE00}\"", "Replace them with the single escape \\u{1F600}")]
+    public void Selected_module_reports_invalid_escape_instead_of_losing_its_root(string literal, string message)
+    {
+        var source =
+            TestCase.FileTreeFromElmModulesWithoutPackages(
+                ["module Test exposing (main)\n\nmain = " + literal + "\n"]);
+
+        var byName = ElmCompiler.CompileInteractiveEnvironment(source, [DeclQualifiedName.Create(["Test"], "main")]);
+        var byFile = ElmSourceCompilation.CompileInteractiveEnvironmentFromFiles(source, [["src", "Test.elm"]]);
+
+        foreach (var error in new[] { byName.IsErrOrNull(), byFile.IsErrOrNull() })
+        {
+            error.Should().Contain("src/Test.elm").And.Contain("3:9:").And.Contain(message).And.NotContain(
+                "was not found");
+        }
+    }
+
     [Fact]
     public void Incomplete_module_not_imported_does_not_cause_failure()
     {

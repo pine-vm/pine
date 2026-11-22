@@ -44,6 +44,12 @@ public record LanguageServerRpcTarget(
 
     private bool shutdown;
 
+    [JsonRpcMethod("textDocument/codeAction", UseSingleObjectParameterDeserialization = true)]
+    public IReadOnlyList<CodeAction> TextDocument_codeAction(
+        CodeActionParams parameters,
+        CancellationToken cancellationToken) =>
+        Server.TextDocument_codeAction(parameters, cancellationToken);
+
     [JsonRpcMethod("pine/tests/discover", UseSingleObjectParameterDeserialization = true)]
     public Task<PineTestsDiscoverResult> TestsDiscover(
         PineTestsDiscoverParams parameters,

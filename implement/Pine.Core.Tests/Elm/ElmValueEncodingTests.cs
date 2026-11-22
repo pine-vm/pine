@@ -1,6 +1,7 @@
 using AwesomeAssertions;
 using Pine.Core.Elm;
 using Pine.Core.Encodings;
+using Pine.Core.Functional;
 using Pine.Core.Optimization;
 using Pine.Core.PineLanguage;
 using System;
@@ -12,6 +13,23 @@ namespace Pine.Core.Tests.Elm;
 
 public class ElmValueEncodingTests
 {
+    [Fact]
+    public void Decoding_an_elm_string_reports_the_surrogate_and_its_code_point_index()
+    {
+        var malformed =
+            PineValue.List(
+                [
+                ElmValue.ElmChoiceTypeTagNameAsValue,
+                ElmValue.ElmStringTypeTagNameAsValue,
+                PineValue.Blob([0, 1, 0xF6, 0, 0, 0, 0xD8, 0])
+                ]);
+
+        ElmValueEncoding.PineValueAsElmValue(malformed, null, null).IsErrOrNull()
+            .Should().Contain("Cannot decode Elm String")
+            .And.Contain("U+D800 at code-point index 1 (zero-based)")
+            .And.Contain("export its numeric value as an Int");
+    }
+
     [Theory]
     [InlineData(false, false)]
     [InlineData(false, true)]

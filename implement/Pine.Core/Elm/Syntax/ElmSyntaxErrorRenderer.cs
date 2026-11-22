@@ -14,7 +14,7 @@ namespace Pine.Core.Elm.Syntax;
 public enum SyntaxErrorVerbosity
 {
     /// <summary>
-    /// Just enough to identify the problem and its location. No hints or explanations are included.
+    /// Identifies the problem and, when available, provides a brief actionable hint.
     /// </summary>
     Concise,
 
@@ -41,7 +41,7 @@ public static partial class ElmSyntaxErrorRenderer
 {
     private readonly record struct Part(string? Text, StyledText? Styling, Func<RenderContext, string>? Compose = null);
 
-    private sealed class Presentation(string title, bool constructContext, Part[] parts)
+    private sealed class Presentation(string title, bool constructContext, Part[] parts, string? concise = null)
     {
         public string Title { get; } = title;
 
@@ -49,7 +49,7 @@ public static partial class ElmSyntaxErrorRenderer
 
         public Part[] Parts { get; } = parts;
 
-        public string[] ConciseMessage { get; } = [SentenceCase(title)];
+        public string[] ConciseMessage { get; } = [concise ?? SentenceCase(title)];
     }
 
     // Only message elements are heterogeneous: plain strings or styled text, with no discriminator.
@@ -227,6 +227,19 @@ public static partial class ElmSyntaxErrorRenderer
     public static string RenderConcise(ParseError error) =>
         GetPresentation(error).ConciseMessage[0];
 
+    /// <summary>Returns a replacement for the entire diagnostic range when it denotes a surrogate pair.</summary>
+    public static string? UnicodeEscapeReplacement(ParseError error) =>
+        error.Kind is ErrorKind.Parse
+        {
+            Problem: ElmSyntaxProblem.Escape { Problem: EscapeProblem.UnicodeSurrogate, PairedScalar: { } scalar }
+        }
+        ?
+        UnicodeEscape(scalar)
+        :
+        null;
+
+    private static string UnicodeEscape(int codePoint) => $"\\u{{{codePoint:X4}}}";
+
     /// <summary>
     /// Renders the reference explanation as plain text, without protocol serialization or styling.
     /// Source excerpts are optional; source-derived spellings are retained in either mode.
@@ -316,6 +329,32 @@ public static partial class ElmSyntaxErrorRenderer
 
             case ElmSyntaxProblem.AnnotationNameRepeated:
                 return ReferencePresentation(ReferenceMessage.DefNameRepeat);
+
+            case ElmSyntaxProblem.Escape { Problem: EscapeProblem.UnicodeSurrogate, PairedScalar: { } scalar }:
+                var replacement = UnicodeEscape(scalar);
+
+                var pairMessage =
+                    $"These two escapes form U+{scalar:X4}. Replace them with the single escape {replacement}.";
+
+                return new Presentation("BAD UNICODE ESCAPE", true, [T(pairMessage)], pairMessage);
+
+            case ElmSyntaxProblem.Escape { Problem: EscapeProblem.UnicodeSurrogate, CodePoint: { } codePoint }:
+                var surrogateMessage = $"U+{codePoint:X4} is a UTF-16 surrogate, not a character on its own.";
+
+                const string comparisonHint =
+                    "To detect surrogates in an existing value, compare Char.toCode against 0xD800 and 0xDFFF.";
+
+                return
+                    new Presentation(
+                        "BAD UNICODE ESCAPE",
+                        true,
+                        [
+                        T(surrogateMessage),
+                        T(
+                            "\n\nUse one escape for the complete character, such as \\u{1F600}. " + comparisonHint +
+                            " If you need to store raw UTF-16 units, represent them as integers.")
+                        ],
+                        surrogateMessage + " " + comparisonHint);
 
             case ElmSyntaxProblem.Escape escape:
                 return
