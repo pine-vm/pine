@@ -29,7 +29,7 @@
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
       <PrivateAssets>all</PrivateAssets>
     </PackageReference>
-    <PackageReference Include="SharpCompress" Version="0.50.9" />
+    <PackageReference Include="SharpCompress" Version="0.50.11" />
     <PackageReference Include="StbImageSharp" Version="2.30.16" />
     <PackageReference Include="StreamJsonRpc" Version="2.26.150" />
     <PackageReference Include="xunit.v3.core" Version="3.2.2" />
