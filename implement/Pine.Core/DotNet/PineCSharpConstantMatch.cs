@@ -6,42 +6,39 @@ using System.Text;
 
 namespace Pine.Core.DotNet;
 
-/// <summary>Decision lowering shared by exact equality and offset-based prefix matches.</summary>
+/// <summary>
+/// Decision lowering shared by exact equality and offset-based prefix matches.
+/// Matches of the same shape share common slot checks and combine alternatives that share a target.
+/// </summary>
 internal static class PineCSharpConstantMatch
 {
-    internal sealed record Case(PineValue Literal, Action<StringBuilder> Matched);
-
-    public static bool CanInline(IReadOnlyList<Case> cases, int limit)
+    public static bool CanInline(IReadOnlyList<PineValue> literals, int limit)
     {
-        if (limit == 0 || cases.Count == 0)
+        if (limit == 0 || literals.Count == 0)
             return false;
 
-        var first = cases[0].Literal;
+        var first = literals[0];
 
         if (first is PineValue.BlobValue blob)
         {
             return
                 blob.Bytes.Length > 0 &&
-                cases.All(
-                    item =>
-                    item.Literal is PineValue.BlobValue other && other.Bytes.Length == blob.Bytes.Length) &&
+                literals.All(item => item is PineValue.BlobValue other && other.Bytes.Length == blob.Bytes.Length) &&
                 Enumerable.Range(0, blob.Bytes.Length).Count(
-                    index => cases.Any(
+                    index => literals.Any(
                         item =>
-                        ((PineValue.BlobValue)item.Literal).Bytes.Span[index] != blob.Bytes.Span[index])) <= limit;
+                        ((PineValue.BlobValue)item).Bytes.Span[index] != blob.Bytes.Span[index])) <= limit;
         }
 
         if (first is PineValue.ListValue list)
         {
             return
                 list.Items.Length > 0 &&
-                cases.All(
-                    item =>
-                    item.Literal is PineValue.ListValue other && other.Items.Length == list.Items.Length) &&
+                literals.All(item => item is PineValue.ListValue other && other.Items.Length == list.Items.Length) &&
                 Enumerable.Range(0, list.Items.Length).Count(
-                    index => cases.Any(
+                    index => literals.Any(
                         item =>
-                        !((PineValue.ListValue)item.Literal).Items.Span[index].Equals(list.Items.Span[index]))) <=
+                        !((PineValue.ListValue)item).Items.Span[index].Equals(list.Items.Span[index]))) <=
                 limit;
         }
 
@@ -58,33 +55,33 @@ internal static class PineCSharpConstantMatch
             throw new NotImplementedException("Shape does not handle: " + literal.GetType().Name)
         };
 
-    public static void Emit(
+    public static void Emit<TTarget>(
         StringBuilder text,
-        IReadOnlyList<Case> cases,
+        IReadOnlyList<(PineValue Literal, TTarget Target)> cases,
         string memory,
         string offset,
         string suffix,
         Func<PineValue, string> canonicalLiteral,
-        Action<StringBuilder>? noMatch = null)
+        Action<TTarget> matched,
+        Action? noMatch = null)
     {
         var shape = Shape(cases[0].Literal);
         string Slot(int index) => memory + ".Span[" + offset + (index == 0 ? "" : " + " + index) + "]";
 
-        string Constant(Case item, int index) =>
+        string Constant(PineValue literal, int index) =>
             shape.Blob
             ?
-            ((PineValue.BlobValue)item.Literal).Bytes.Span[index].ToString(
+            ((PineValue.BlobValue)literal).Bytes.Span[index].ToString(
                 System.Globalization.CultureInfo.InvariantCulture)
             :
-            canonicalLiteral(((PineValue.ListValue)item.Literal).Items.Span[index]);
+            canonicalLiteral(((PineValue.ListValue)literal).Items.Span[index]);
 
-        bool Same(Case a, Case b, int index) =>
+        bool Same(PineValue a, PineValue b, int index) =>
             shape.Blob
             ?
-            ((PineValue.BlobValue)a.Literal).Bytes.Span[index] == ((PineValue.BlobValue)b.Literal).Bytes.Span[index]
+            ((PineValue.BlobValue)a).Bytes.Span[index] == ((PineValue.BlobValue)b).Bytes.Span[index]
             :
-            ((PineValue.ListValue)a.Literal).Items.Span[index].Equals(
-                ((PineValue.ListValue)b.Literal).Items.Span[index]);
+            ((PineValue.ListValue)a).Items.Span[index].Equals(((PineValue.ListValue)b).Items.Span[index]);
 
         string Test(string slot, string constant) =>
             shape.Blob
@@ -94,9 +91,10 @@ internal static class PineCSharpConstantMatch
             slot + ".Equals(" + constant + ")";
 
         var positions = Enumerable.Range(0, shape.Length).ToArray();
-        var common = positions.Where(index => cases.All(item => Same(item, cases[0], index))).ToArray();
+        var first = cases[0].Literal;
+        var common = positions.Where(index => cases.All(item => Same(item.Literal, first, index))).ToArray();
         var varying = positions.Except(common).ToArray();
-        var commonTests = common.Select(index => Test(Slot(index), Constant(cases[0], index))).ToArray();
+        var commonTests = common.Select(index => Test(Slot(index), Constant(first, index))).ToArray();
         string? commonCondition = null;
 
         if (commonTests.Length > 3)
@@ -118,7 +116,7 @@ internal static class PineCSharpConstantMatch
             {
                 text.AppendLine("if (" + string.Join(" || ", mismatch) + ")");
                 text.AppendLine("{");
-                noMatch(text);
+                noMatch();
                 text.AppendLine("}");
                 text.AppendLine("else");
             }
@@ -134,32 +132,39 @@ internal static class PineCSharpConstantMatch
                 (shape.Blob ? "byte " : "PineValue ") + "item_" + suffix + "_" + index + " = " + Slot(index) + ";");
         }
 
-        foreach (var item in cases)
+        if (varying.Length is 0)
         {
-            if (varying.Length > 0)
+            matched(cases[0].Target);
+        }
+        else
+        {
+            // Distinct literals of the same shape cannot overlap.
+            foreach (var group in cases.GroupBy(item => item.Target))
             {
-                text.AppendLine(
-                    "if (" +
-                    string.Join(
-                        " && ",
-                        varying.Select(
-                            index =>
-                            Test("item_" + suffix + "_" + index, Constant(item, index)))) + ")");
+                var composite = varying.Length > 1 && group.Count() > 1;
+
+                var alternatives =
+                    group.Select(
+                        item =>
+                        {
+                            var tests =
+                                varying.Select(
+                                    index => Test("item_" + suffix + "_" + index, Constant(item.Literal, index)));
+
+                            var condition = string.Join(" && ", tests);
+                            return composite ? "(" + condition + ")" : condition;
+                        });
+
+                // Break long OR chains up front instead of relying on repeated formatting passes.
+                text.AppendLine("if (" + string.Join(" ||\n", alternatives) + ")");
 
                 text.AppendLine("{");
+                matched(group.Key);
+                text.AppendLine("}");
             }
 
-            item.Matched(text);
-
-            if (varying.Length > 0)
-                text.AppendLine("}");
-
-            if (varying.Length == 0)
-                break;
+            noMatch?.Invoke();
         }
-
-        if (varying.Length > 0)
-            noMatch?.Invoke(text);
 
         if (mismatch.Length > 0)
             text.AppendLine("}");

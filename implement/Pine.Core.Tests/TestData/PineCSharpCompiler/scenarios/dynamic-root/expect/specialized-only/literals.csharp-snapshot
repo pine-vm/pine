@@ -5,8 +5,7 @@ using PineValueInProcess = global::Pine.Core.Internal.PineValueInProcess;
 public static class PineLiterals
 {
     public static readonly PineValue Materialized_Value_string_Builtin_4e5c7c99ca =
-        PineValue.Blob(
-            new byte[] { 0, 0, 0, 66, 0, 0, 0, 117, 0, 0, 0, 105, 0, 0, 0, 108, 0, 0, 0, 116, 0, 0, 0, 105, 0, 0, 0, 110 });
+        global::Pine.Core.Encodings.StringEncoding.ValueFromString("Builtin");
 
     public static PineValueInProcess Value_string_Builtin_4e5c7c99ca => Literal_Value_string_Builtin_4e5c7c99ca.Value;
 
@@ -17,8 +16,7 @@ public static class PineLiterals
     }
 
     public static readonly PineValue Materialized_Value_string_int_add_5db289c132 =
-        PineValue.Blob(
-            new byte[] { 0, 0, 0, 105, 0, 0, 0, 110, 0, 0, 0, 116, 0, 0, 0, 95, 0, 0, 0, 97, 0, 0, 0, 100, 0, 0, 0, 100 });
+        global::Pine.Core.Encodings.StringEncoding.ValueFromString("int_add");
 
     public static PineValueInProcess Value_string_int_add_5db289c132 => Literal_Value_string_int_add_5db289c132.Value;
 
@@ -29,7 +27,7 @@ public static class PineLiterals
     }
 
     public static readonly PineValue Materialized_Value_string_List_94ba7400e6 =
-        PineValue.Blob(new byte[] { 0, 0, 0, 76, 0, 0, 0, 105, 0, 0, 0, 115, 0, 0, 0, 116 });
+        global::Pine.Core.Encodings.StringEncoding.ValueFromString("List");
 
     public static PineValueInProcess Value_string_List_94ba7400e6 => Literal_Value_string_List_94ba7400e6.Value;
 
@@ -40,7 +38,7 @@ public static class PineLiterals
     }
 
     public static readonly PineValue Materialized_Value_string_head_9b5af12fe0 =
-        PineValue.Blob(new byte[] { 0, 0, 0, 104, 0, 0, 0, 101, 0, 0, 0, 97, 0, 0, 0, 100 });
+        global::Pine.Core.Encodings.StringEncoding.ValueFromString("head");
 
     public static PineValueInProcess Value_string_head_9b5af12fe0 => Literal_Value_string_head_9b5af12fe0.Value;
 
@@ -51,8 +49,7 @@ public static class PineLiterals
     }
 
     public static readonly PineValue Materialized_Value_string_Environment_50b3ab1bfd =
-        PineValue.Blob(
-            new byte[] { 0, 0, 0, 69, 0, 0, 0, 110, 0, 0, 0, 118, 0, 0, 0, 105, 0, 0, 0, 114, 0, 0, 0, 111, 0, 0, 0, 110, 0, 0, 0, 109, 0, 0, 0, 101, 0, 0, 0, 110, 0, 0, 0, 116 });
+        global::Pine.Core.Encodings.StringEncoding.ValueFromString("Environment");
 
     public static PineValueInProcess Value_string_Environment_50b3ab1bfd =>
         Literal_Value_string_Environment_50b3ab1bfd.Value;
@@ -101,7 +98,7 @@ public static class PineLiterals
     }
 
     public static readonly PineValue Materialized_Value_string_Litral_f8cc3baa2e =
-        PineValue.Blob(new byte[] { 0, 0, 0, 76, 0, 0, 0, 105, 0, 0, 0, 116, 0, 0, 0, 114, 0, 0, 0, 97, 0, 0, 0, 108 });
+        global::Pine.Core.Encodings.StringEncoding.ValueFromString("Litral");
 
     public static PineValueInProcess Value_string_Litral_f8cc3baa2e => Literal_Value_string_Litral_f8cc3baa2e.Value;
 

@@ -206,14 +206,21 @@ internal sealed record PineCSharpCursorPlan(
                     offsetParameter = cursor.Index;
                     multiplier = choice.SkipCountMultiplier;
                     var cases = ImmutableArray.CreateBuilder<(PineValue, Decision)>();
+                    var decisions = new Dictionary<PineBlockId, Decision>();
 
                     foreach (var item in choice.Cases)
                     {
                         minimumLength = Math.Min(minimumLength, ((PineValue.BlobValue)item.Literal).Bytes.Length);
-                        var next = Edge(item.Target, [.. choice.Arguments.Select(argument => values[argument])]);
 
-                        if (next is null)
-                            return null;
+                        if (!decisions.TryGetValue(item.Target, out var next))
+                        {
+                            next = Edge(item.Target, [.. choice.Arguments.Select(argument => values[argument])]);
+
+                            if (next is null)
+                                return null;
+
+                            decisions.Add(item.Target, next);
+                        }
 
                         cases.Add((item.Literal, next));
                     }
@@ -310,16 +317,12 @@ internal sealed record PineCSharpCursorPlan(
                     {
                         supported &=
                             PineCSharpConstantMatch.CanInline(
-                                [
-                                    .. group.Select(
-                                        item =>
-                                        new PineCSharpConstantMatch.Case(item.Literal, _ => { }))
-                                ],
+                                [.. group.Select(item => item.Literal)],
                                 matchLimit);
                     }
 
-                    foreach (var item in match.Cases)
-                        Check(item.Next);
+                    foreach (var next in match.Cases.Select(item => item.Next).Distinct())
+                        Check(next);
 
                     Check(match.Otherwise);
                     break;

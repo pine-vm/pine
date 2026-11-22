@@ -564,21 +564,19 @@ internal sealed partial class PineCSharpEmitter
                 break;
 
             case PineControlFlowTerminator.Switch choice:
+                void EmitSwitchMatch(string source, string? offset = null) =>
+                    EmitMatchCases(
+                        text,
+                        source,
+                        [.. choice.Cases.Select(item => (item.Literal, item.Target))],
+                        target => Edge(text, function, block.Id, target, choice.Arguments.Select(V)),
+                        offset);
+
                 if (choice.Kind == PineSwitchKind.Equal)
                 {
                     if (CanInlineCases([.. choice.Cases.Select(item => item.Literal)]))
                     {
-                        EmitMatchCases(
-                            text,
-                            stack[^1],
-                            [
-                                .. choice.Cases.Select(
-                                    item =>
-                                    new PineCSharpConstantMatch.Case(
-                                        item.Literal,
-                                        destination =>
-                                        Edge(destination, function, block.Id, item.Target, choice.Arguments.Select(V))))
-                            ]);
+                        EmitSwitchMatch(stack[^1]);
 
                         Edge(text, function, block.Id, choice.FallThrough, choice.Arguments.Select(V));
                         break;
@@ -640,18 +638,7 @@ internal sealed partial class PineCSharpEmitter
 
                     text.AppendLine("{");
 
-                    EmitMatchCases(
-                        text,
-                        stack[^2],
-                        [
-                            .. choice.Cases.Select(
-                                item =>
-                                new PineCSharpConstantMatch.Case(
-                                    item.Literal,
-                                    destination =>
-                                    Edge(destination, function, block.Id, item.Target, choice.Arguments.Select(V))))
-                        ],
-                        offset);
+                    EmitSwitchMatch(stack[^2], offset);
 
                     text.AppendLine("}");
 
@@ -1109,15 +1096,11 @@ internal sealed partial class PineCSharpEmitter
                 text.AppendLine("{");
                 WriteValue(text, results[0], "false", LocalType.Boolean);
 
-                EmitMatchCases(
+                EmitMatchCases<string>(
                     text,
                     inputs[0],
-                    [
-                        new(
-                            instruction.Literal!.Evaluate(),
-                            destination =>
-                            WriteValue(destination, results[0], "true", LocalType.Boolean))
-                    ],
+                    [(instruction.Literal!.Evaluate(), results[0])],
+                    target => WriteValue(text, target, "true", LocalType.Boolean),
                     offset);
 
                 text.AppendLine("}");
@@ -1221,7 +1204,14 @@ internal sealed partial class PineCSharpEmitter
             StackInstructionKind.Int_Add_Binary => Math("+", Input(1)),
             StackInstructionKind.Int_Add_Const => Math("+", Constant()),
             StackInstructionKind.Int_Mul_Binary => Math("*", Input(1)),
+
+            StackInstructionKind.Int_Mul_Const when instruction.IntegerLiteral == BigInteger.MinusOne =>
+            ("-" + Numeric(inputs[0]), LocalType.OptionalInteger),
+
             StackInstructionKind.Int_Mul_Const => Math("*", Constant()),
+
+            StackInstructionKind.Int_Mul_Const_Add_Binary when instruction.IntegerLiteral == BigInteger.MinusOne =>
+            Math("-", Input(1)),
 
             StackInstructionKind.Int_Mul_Const_Add_Binary =>
             Math("+", Input(1), BigIntegerConstant(instruction.IntegerLiteral!.Value)),
@@ -1680,6 +1670,12 @@ internal sealed partial class PineCSharpEmitter
                 value switch
                 {
                     PineValue.BlobValue blob =>
+                    blob.Bytes.Length % 4 is 0 &&
+                    Encodings.StringEncoding.StringFromBlobValue(blob.Bytes).IsOkOrNull() is { } stringValue
+                    ?
+                    "global::Pine.Core.Encodings.StringEncoding.ValueFromString(" +
+                    SymbolDisplay.FormatLiteral(stringValue, quote: true) + ")"
+                    :
                     "PineValue.Blob(new byte[] { " + string.Join(", ", blob.Bytes.ToArray()) + " })",
 
                     PineValue.ListValue list =>

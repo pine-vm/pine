@@ -139,7 +139,8 @@ internal sealed partial class PineCSharpEmitter
             while (end < literals.Count && PineCSharpConstantMatch.Shape(literals[end]) == shape)
                 ++end;
 
-            if (!PineCSharpConstantMatch.CanInline([.. literals.Skip(index).Take(end - index).Select(literal => new PineCSharpConstantMatch.Case(literal, _ => { }))],
+            if (!PineCSharpConstantMatch.CanInline(
+                [.. literals.Skip(index).Take(end - index)],
                 _options.MaximumInlineMatchDifferingPositions))
             {
                 return false;
@@ -278,8 +279,8 @@ internal sealed partial class PineCSharpEmitter
                     break;
 
                 case CursorDecision.Match match:
-                    foreach (var item in match.Cases)
-                        CollectParameters(item.Next);
+                    foreach (var next in match.Cases.Select(item => item.Next).Distinct())
+                        CollectParameters(next);
 
                     CollectParameters(match.Otherwise);
                     break;
@@ -436,11 +437,6 @@ internal sealed partial class PineCSharpEmitter
                             ++end;
                         }
 
-                        var cases =
-                            match.Cases[position..end].Select(
-                                item =>
-                                new PineCSharpConstantMatch.Case(item.Literal, _ => EmitDecision(item.Next))).ToArray();
-
                         var directMiss =
                             position == 0 && end == match.Cases.Length &&
                             match.Otherwise is CursorDecision.Return;
@@ -459,12 +455,13 @@ internal sealed partial class PineCSharpEmitter
 
                         PineCSharpConstantMatch.Emit(
                             text,
-                            cases,
+                            match.Cases[position..end],
                             "sourceBytes",
                             "byteOffset",
                             "cursor_" + suffix++,
                             MaterializedLiteral,
-                            directMiss ? _ => EmitDecision(match.Otherwise) : null);
+                            EmitDecision,
+                            directMiss ? () => EmitDecision(match.Otherwise) : null);
 
                         if (!directMiss)
                             text.AppendLine("}");
@@ -484,10 +481,11 @@ internal sealed partial class PineCSharpEmitter
         }
     }
 
-    private void EmitMatchCases(
+    private void EmitMatchCases<TTarget>(
         StringBuilder text,
         string source,
-        IReadOnlyList<PineCSharpConstantMatch.Case> cases,
+        IReadOnlyList<(PineValue Literal, TTarget Target)> cases,
+        Action<TTarget> matched,
         string? offset = null)
     {
         var position = 0;
@@ -502,7 +500,9 @@ internal sealed partial class PineCSharpEmitter
 
             var group = cases.Skip(position).Take(end - position).ToArray();
 
-            if (!PineCSharpConstantMatch.CanInline(group, _options.MaximumInlineMatchDifferingPositions))
+            if (!PineCSharpConstantMatch.CanInline(
+                [.. group.Select(item => item.Literal)],
+                _options.MaximumInlineMatchDifferingPositions))
             {
                 foreach (var item in group)
                 {
@@ -516,7 +516,7 @@ internal sealed partial class PineCSharpEmitter
                         ")") +
                         ") {");
 
-                    item.Matched(text);
+                    matched(item.Target);
                     text.AppendLine("}");
                 }
 
@@ -543,7 +543,8 @@ internal sealed partial class PineCSharpEmitter
                 memory,
                 offset ?? "0",
                 suffix,
-                MaterializedLiteral);
+                MaterializedLiteral,
+                matched);
 
             text.AppendLine("}");
             text.AppendLine("}");

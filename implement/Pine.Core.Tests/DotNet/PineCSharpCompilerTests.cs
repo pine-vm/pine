@@ -1,4 +1,5 @@
 using AwesomeAssertions;
+using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
 using Pine.Core.CodeAnalysis;
@@ -110,6 +111,40 @@ public class PineCSharpCompilerTests
 
         var mismatches = PineCSharpScenarios.CompareSnapshots(scenario.ExpectationDirectory(variantName), outputs);
         mismatches.Should().BeEmpty(string.Join("\n", mismatches));
+    }
+
+    [Fact]
+    public void Pine_CSharp_blob_literals_emit_strings_when_the_bytes_are_valid_UTF32()
+    {
+        string[] strings = ["", "<Record>", "\"\\\r\n\0\t\u0085\u2028\u2029\U0001F600"];
+
+        PineValue[] blobs =
+            [
+                .. strings.Select(StringEncoding.ValueFromString),
+                PineValue.Blob([0, 0, 65]),
+                PineValue.Blob([0, 0, 216, 0]),
+                PineValue.Blob([0, 17, 0, 0])
+            ];
+
+        var value = PineValue.List(blobs);
+
+        var compilation =
+            PineCSharpCompiler.Compile(Expression.LitralInst(value))
+            .Extract(error => throw new Exception(error.Describe()));
+
+        var calls =
+            SyntaxFactory.ParseCompilationUnit(compilation.LiteralsSource)
+            .DescendantNodes().OfType<InvocationExpressionSyntax>().ToArray();
+
+        calls.Where(
+            call => call.Expression.ToString().EndsWith(".StringEncoding.ValueFromString", StringComparison.Ordinal))
+            .Select(call => ((LiteralExpressionSyntax)call.ArgumentList.Arguments.Single().Expression).Token.ValueText)
+            .Should().BeEquivalentTo(strings);
+
+        calls.Count(call => call.Expression.ToString() == "PineValue.Blob").Should().Be(blobs.Length - strings.Length);
+
+        using var loaded = Load(compilation);
+        loaded.Evaluate(PineValueInProcess.EmptyList)!.Evaluate().Should().Be(value);
     }
 
     [Fact]
@@ -387,8 +422,49 @@ public class PineCSharpCompilerTests
         }
     }
 
+    [Theory]
+    [InlineData(false, SyntaxKind.UnaryMinusExpression)]
+    [InlineData(true, SyntaxKind.SubtractExpression)]
+    public void Pine_CSharp_multiplication_by_minus_one_emits_a_minus_operator(bool add, SyntaxKind expectedOperator)
+    {
+        var fragment =
+            PineControlFlowFragment.Empty.AppendOperation(StackInstruction.Local_Get_Skip_Head_Const(0, 0));
+
+        fragment =
+            add
+            ?
+            fragment.AppendOperations(
+                [
+                    StackInstruction.Local_Get_Skip_Head_Const(0, 1),
+                    StackInstruction.Int_Mul_Const_Add_Binary(BigInteger.MinusOne)
+                ])
+            :
+            fragment.AppendOperation(StackInstruction.Int_Mul_Const(BigInteger.MinusOne));
+
+        var graph = PineControlFlowGraph.FromFragment(fragment);
+        var compilation = EmitGraph(graph);
+        var syntax = SyntaxFactory.ParseCompilationUnit(compilation.MethodsSource);
+
+        syntax.DescendantNodes().Should().Contain(node => node.IsKind(expectedOperator));
+        syntax.DescendantNodes().Should().NotContain(node => node.IsKind(SyntaxKind.MultiplyExpression));
+
+        using var assembly = Load(compilation);
+        var large = IntegerEncoding.EncodeSignedInteger(BigInteger.One << 80);
+
+        foreach (var input in new[]
+        {
+            PineValue.List([NumberValue(-4), large]),
+            PineValue.List([large, NumberValue(-4)]),
+            PineValue.List([NumberValue(4), PineValue.EmptyList]),
+            PineValue.List([PineValue.EmptyList, NumberValue(4)])
+        })
+        {
+            assembly.Evaluate(PineValueInProcess.Create(input))!.Evaluate().Should().Be(EvaluateGraph(graph, input));
+        }
+    }
+
     [Fact]
-    public void Pine_CSharp_slice_switch_supports_multiple_literals_with_the_same_target()
+    public void Pine_CSharp_slice_switch_combines_conditions_that_share_a_target()
     {
         var fragment =
             PineControlFlowFragment.Empty
@@ -402,19 +478,39 @@ public class PineCSharpCompilerTests
                     PineSwitchKind.SliceSkipVarEqual,
                     [
                         new(PineValue.Blob([1, 2]), 0),
+                        new(PineValue.Blob([5, 6]), 1),
                         new(PineValue.Blob([3, 4]), 0)
                     ],
                     PineControlFlowFragment.Empty.AppendOperation(StackInstruction.Push_Literal(NumberValue(0))),
-                    [PineControlFlowFragment.Empty.AppendOperation(StackInstruction.Push_Literal(NumberValue(1)))],
+                    [
+                        PineControlFlowFragment.Empty.AppendOperation(StackInstruction.Push_Literal(NumberValue(1))),
+                        PineControlFlowFragment.Empty.AppendOperation(StackInstruction.Push_Literal(NumberValue(2)))
+                    ],
                     SkipCountMultiplier: BigInteger.One,
                     ResultCount: 1));
 
-        using var loaded = Load(EmitGraph(PineControlFlowGraph.FromFragment(fragment)));
+        var compilation = EmitGraph(PineControlFlowGraph.FromFragment(fragment));
+        var methodSyntax = SyntaxFactory.ParseCompilationUnit(compilation.MethodsSource);
 
-        foreach (var bytes in new byte[][] { [1, 2, 9], [3, 4, 9], [5, 6, 9] })
+        var combined =
+            methodSyntax.DescendantNodes().OfType<IfStatementSyntax>().Select(branch => branch.Condition)
+            .OfType<BinaryExpressionSyntax>().Single(condition => condition.IsKind(SyntaxKind.LogicalOrExpression));
+
+        combined.Left.Should().BeOfType<ParenthesizedExpressionSyntax>().Which.Expression
+            .Kind().Should().Be(SyntaxKind.LogicalAndExpression);
+
+        combined.Right.Should().BeOfType<ParenthesizedExpressionSyntax>().Which.Expression
+            .Kind().Should().Be(SyntaxKind.LogicalAndExpression);
+
+        using var loaded = Load(compilation);
+
+        (byte[] Bytes, int Expected)[] inputs =
+            [([1, 2, 9], 1), ([3, 4, 9], 1), ([5, 6, 9], 2), ([1, 4, 9], 0), ([7, 8, 9], 0)];
+
+        foreach (var (bytes, expected) in inputs)
         {
             loaded.Evaluate(PineValueInProcess.Create(PineValue.List([PineValue.Blob(bytes), NumberValue(0)])))!
-                .Evaluate().Should().Be(NumberValue(bytes[0] == 5 ? 0 : 1));
+                .Evaluate().Should().Be(NumberValue(expected));
         }
     }
 
@@ -1166,6 +1262,13 @@ public class PineCSharpCompilerTests
         var graph = CursorGraph([StringEncoding.ValueFromString("a"), StringEncoding.ValueFromString("b")], 1);
         var parameters = StaticFunctionInterface.FromPathsSorted([[0], [1], [2]]);
         var compilation = EmitGraph(graph, enableCancellation: true, parameters: parameters);
+
+        SyntaxFactory.ParseCompilationUnit(compilation.MethodsSource).DescendantNodes().OfType<BinaryExpressionSyntax>()
+            .Should().Contain(
+            condition => condition.IsKind(SyntaxKind.LogicalOrExpression) &&
+                condition.Left.ToString() == "item_cursor_0_3 == 97" &&
+                condition.Right.ToString() == "item_cursor_0_3 == 98");
+
         using var assembly = Load(compilation);
 
         var worker =
