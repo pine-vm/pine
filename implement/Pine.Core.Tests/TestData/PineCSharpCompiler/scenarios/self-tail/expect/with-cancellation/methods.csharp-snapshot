@@ -1,6 +1,7 @@
 #nullable enable
+using global::System.Numerics;
+
 using PineValueInProcess = global::Pine.Core.Internal.PineValueInProcess;
-using NativeValue = global::Pine.Core.DotNet.PineCSharpValue;
 
 public static class CompiledPine
 {
@@ -9,11 +10,7 @@ public static class CompiledPine
         global::System.Threading.CancellationToken cancellationToken)
     {
         cancellationToken.ThrowIfCancellationRequested();
-
-        PineValueInProcess result_0 =
-            Expr_da2d7c14b7_constraint_61f0e0538f(environment.GetElementAt(0), environment.GetElementAt(1), cancellationToken);
-
-        return result_0;
+        return Expr_da2d7c14b7_constraint_61f0e0538f(environment.GetElementAt(0), environment.GetElementAt(1), cancellationToken);
     }
 
     /// <summary>Function 0; unconstrained environment. Arguments: 0 = [0]; 1 = [1].</summary>
@@ -22,10 +19,8 @@ public static class CompiledPine
         PineValueInProcess argument_1,
         global::System.Threading.CancellationToken cancellationToken)
     {
-        PineValueInProcess state_0 = argument_0;
-        PineValueInProcess state_1 = argument_1;
         cancellationToken.ThrowIfCancellationRequested();
-        return Expr_da2d7c14b7_constraint_61f0e0538f(state_0, state_1, cancellationToken);
+        return Expr_da2d7c14b7_constraint_61f0e0538f(argument_0, argument_1, cancellationToken);
     }
 
     /// <summary>Function 1; specialized environment. Arguments: 0 = [1]; 1 = [2].</summary>
@@ -34,24 +29,26 @@ public static class CompiledPine
         PineValueInProcess argument_1,
         global::System.Threading.CancellationToken cancellationToken)
     {
-        NativeValue state_0 = NativeValue.FromValue(argument_0);
-        NativeValue state_1 = NativeValue.FromValue(argument_1);
+        (PineValueInProcess? Original, BigInteger? Number) state_0 = (argument_0, null);
+        (PineValueInProcess? Original, BigInteger? Number) state_1 = (argument_1, null);
 
         while (true)
         {
             cancellationToken.ThrowIfCancellationRequested();
 
-            NativeValue value_1_1 =
-                NativeValue.FromBoolean(NativeValue.LessThanOrEqual(state_0, NativeValue.FromInt64(0L)));
-
-            if (value_1_1.IsTrue())
+            if ((state_0.Original?.AsInteger() ?? state_0.Number) <= BigInteger.Zero)
             {
-                return state_1.ToPineValue();
+                return
+                    (state_1.Original ??
+                    (state_1.Number is { } scalar_0
+                    ?
+                    PineValueInProcess.CreateInteger(scalar_0)
+                    :
+                    PineValueInProcess.EmptyList));
             }
 
-            state_0 = NativeValue.Add(state_0, NativeValue.FromInt64(-1L));
-            state_1 = NativeValue.Add(state_1, NativeValue.FromInt64(1L));
-            continue;
+            state_0 = (null, (state_0.Original?.AsInteger() ?? state_0.Number) + BigInteger.MinusOne);
+            state_1 = (null, (state_1.Original?.AsInteger() ?? state_1.Number) + BigInteger.One);
         }
     }
 }

@@ -5,8 +5,7 @@ public static class CompiledPine
 {
     public static PineValueInProcess Expr_65eb76d7b1_dispatch(PineValueInProcess environment)
     {
-        PineValueInProcess result_0 = Expr_65eb76d7b1_constraint_generic(environment.GetElementAt(0));
-        return result_0;
+        return Expr_65eb76d7b1_constraint_generic(environment.GetElementAt(0));
     }
 
     /// <summary>Function 0; unconstrained environment. Arguments: 0 = [0].</summary>

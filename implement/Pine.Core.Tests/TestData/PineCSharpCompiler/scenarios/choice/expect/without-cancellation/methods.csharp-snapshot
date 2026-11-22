@@ -1,6 +1,7 @@
 #nullable enable
+using global::System.Numerics;
+
 using PineValueInProcess = global::Pine.Core.Internal.PineValueInProcess;
-using NativeValue = global::Pine.Core.DotNet.PineCSharpValue;
 using Return_3 = (global::Pine.Core.Internal.PineValueInProcess item0, global::Pine.Core.Internal.PineValueInProcess item1, global::Pine.Core.Internal.PineValueInProcess item2);
 using PineLiteralsModule = global::PineLiterals;
 
@@ -35,30 +36,14 @@ public static class CompiledPine
         PineValueInProcess argument_1,
         PineValueInProcess argument_2)
     {
-        NativeValue value_0_6 = default;
-        NativeValue value_0_16 = default;
-        PineValueInProcess value_0_17 = PineValueInProcess.EmptyList;
-        PineValueInProcess state_2 = argument_2;
-
-        if (PineValueInProcess.AreEqual(state_2, PineValueInProcess.KernelTrueValue))
+        if (PineValueInProcess.AreEqual(argument_2, PineValueInProcess.KernelTrueValue))
         {
-            goto function_0_block_4;
+            return (PineValueInProcess.CreateInteger(BigInteger.One), argument_0, argument_1);
         }
 
-        NativeValue value_0_3 = NativeValue.FromInt64(0L);
-        value_0_6 = value_0_3;
+        BigInteger value_0_3 = BigInteger.Zero;
         PineValueInProcess value_0_7 = PineValueInProcess.EmptyList;
-        value_0_16 = value_0_6;
-        value_0_17 = value_0_7;
         PineValueInProcess value_0_18 = PineValueInProcess.EmptyList;
-        return (value_0_16.ToPineValue(), value_0_17, value_0_18);
-
-function_0_block_4:
-        {
-            PineValueInProcess state_0 = argument_0;
-            PineValueInProcess state_1 = argument_1;
-            NativeValue value_0_27 = NativeValue.FromInt64(1L);
-            return (value_0_27.ToPineValue(), state_0, state_1);
-        }
+        return (PineValueInProcess.CreateInteger(value_0_3), value_0_7, value_0_18);
     }
 }

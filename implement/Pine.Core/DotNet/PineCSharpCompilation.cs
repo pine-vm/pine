@@ -432,7 +432,7 @@ public static class PineCSharpCompiler
     {
         ValidateIdentifier(name, "class");
 
-        if (name is "Pine" or "System" or "PineValue" or "PineValueInProcess" or "NativeValue" or "SliceOffset" or "BigInteger" or
+        if (name is "Pine" or "System" or "PineValue" or "PineValueInProcess" or "SliceOffset" or "BigInteger" or
             "BlobMemory" or "ListMemory" or "Kernel" or "Specialized" or "Evaluate" ||
             name.StartsWith("Function_", StringComparison.Ordinal) ||
             name.StartsWith("Loop_", StringComparison.Ordinal) ||

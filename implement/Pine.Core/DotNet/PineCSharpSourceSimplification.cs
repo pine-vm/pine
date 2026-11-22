@@ -126,9 +126,12 @@ internal static class PineCSharpSourceSimplification
             var declarations =
                 body.Statements.OfType<LocalDeclarationStatementSyntax>()
                 .Where(
-                    statement => statement.Declaration.Type is IdentifierNameSyntax
-                    { Identifier.ValueText: "PineValueInProcess" or "NativeValue" } ||
-                        statement.Declaration.Type is PredefinedTypeSyntax { Keyword.RawKind: (int)SyntaxKind.LongKeyword })
+                    statement => statement.Declaration.Type is
+                    IdentifierNameSyntax { Identifier.ValueText: "PineValueInProcess" or "BigInteger" } or
+                    NullableTypeSyntax { ElementType: IdentifierNameSyntax { Identifier.ValueText: "BigInteger" } } or
+                    NullableTypeSyntax { ElementType: PredefinedTypeSyntax { Keyword.RawKind: (int)SyntaxKind.BoolKeyword } } or
+                    PredefinedTypeSyntax { Keyword.RawKind: (int)SyntaxKind.BoolKeyword or (int)SyntaxKind.LongKeyword } or
+                    TupleTypeSyntax)
                 .ToDictionary(statement => statement.Declaration.Variables.Single().Identifier.ValueText);
 
             var scopes = new Dictionary<string, BlockSyntax>();
@@ -195,6 +198,8 @@ internal static class PineCSharpSourceSimplification
             var rewritten = (BlockSyntax)scopeRewriter.Visit(body)!;
             rewritten = (BlockSyntax)new DeadCopyRewriter(scopeRewriter.DeadCopies).Visit(rewritten)!;
             rewritten = StructureLoops(SimplifyFlow(rewritten));
+            rewritten = ForwardInvariantCopies(rewritten, node.ParameterList.Parameters, types);
+            rewritten = HoistInvariantLoopExits(rewritten, types);
             return node.WithBody(rewritten);
         }
     }
@@ -234,15 +239,14 @@ internal static class PineCSharpSourceSimplification
                 {
                     _locals[method] =
                         locals =
-                            method.ParameterList
-                            .Parameters.Select(parameter => parameter.Identifier.ValueText)
-                            .Concat(
-                                method.DescendantNodes().OfType<VariableDeclaratorSyntax>().Select(
-                                    variable => variable.Identifier.ValueText))
-                            .Concat(
-                                method.DescendantNodes().OfType<SingleVariableDesignationSyntax>().Select(
-                                    variable => variable.Identifier.ValueText))
-                            .ToHashSet();
+                            [
+                                .. method.ParameterList
+                                .Parameters.Select(parameter => parameter.Identifier.ValueText),
+                                .. method.DescendantNodes().OfType<VariableDeclaratorSyntax>().Select(
+                                    variable => variable.Identifier.ValueText),
+                                .. method.DescendantNodes().OfType<SingleVariableDesignationSyntax>().Select(
+                                    variable => variable.Identifier.ValueText),
+                            ];
                 }
 
                 shadows = locals.Contains(name);
@@ -398,12 +402,120 @@ internal static class PineCSharpSourceSimplification
         expression is IdentifierNameSyntax || expression.IsKind(SyntaxKind.DefaultLiteralExpression) ||
         expression.ToString() == "PineValueInProcess.EmptyList";
 
-    private sealed class Substitution(IReadOnlyDictionary<string, ExpressionSyntax> values) : CSharpSyntaxRewriter
+    private static BlockSyntax ForwardInvariantCopies(
+        BlockSyntax body, SeparatedSyntaxList<ParameterSyntax> parameters, IReadOnlyDictionary<string, string> types)
     {
+        var prefix =
+            body.Statements.TakeWhile(
+                statement => statement is not LabeledStatementSyntax && !ActiveGotos(statement).Any()).ToArray();
+
+        if (prefix.Length == 0)
+            return body;
+
+        var writes =
+            body.DescendantNodes().OfType<IdentifierNameSyntax>().Where(IsWrite)
+            .ToLookup(identifier => identifier.Identifier.ValueText);
+
+        var firstUse =
+            prefix.SelectMany(
+                statement => statement.DescendantNodes().OfType<IdentifierNameSyntax>()
+                .Select(identifier => (Name: identifier.Identifier.ValueText, Statement: statement)))
+            .ToLookup(use => use.Name, use => use.Statement);
+
+        var stable =
+            parameters.Where(
+                parameter => parameter.Modifiers.Count == 0 && !writes.Contains(parameter.Identifier.ValueText))
+            .Select(parameter => parameter.Identifier.ValueText).ToHashSet();
+
+        var pending = new HashSet<string>();
+        var copies = new Dictionary<string, ExpressionSyntax>();
+
+        foreach (var statement in prefix)
+        {
+            if (statement is LocalDeclarationStatementSyntax declaration && declaration.Modifiers.Count == 0 &&
+                declaration.Declaration.Variables.Count == 1 &&
+                declaration.Declaration.Variables[0] is { Initializer.Value: { } initializer } variable)
+            {
+                var name = variable.Identifier.ValueText;
+
+                if (!writes.Contains(name))
+                {
+                    if (initializer is IdentifierNameSyntax source && Source(name, source) is { } replacement)
+                        copies.Add(name, replacement);
+
+                    else
+                        stable.Add(name);
+                }
+                else if (IsCopy(initializer) || initializer is DefaultExpressionSyntax)
+                    pending.Add(name);
+            }
+
+            if (statement is ExpressionStatementSyntax
+                { Expression: AssignmentExpressionSyntax { Left: IdentifierNameSyntax target, Right: IdentifierNameSyntax input } })
+            {
+                var name = target.Identifier.ValueText;
+
+                // The first assignment must dominate every read, including paths that enter a loop.
+                if (pending.Remove(name) && firstUse[name].FirstOrDefault() == statement &&
+                    Source(name, input) is { } replacement &&
+                    writes[name].All(
+                        write =>
+                        write.Parent is AssignmentExpressionSyntax { Right: IdentifierNameSyntax other } assignment &&
+                        assignment.IsKind(SyntaxKind.SimpleAssignmentExpression) && assignment.Left == write &&
+                        assignment.Parent is ExpressionStatementSyntax { Parent: BlockSyntax } &&
+                        Source(name, other)?.ToString() == replacement.ToString()))
+                {
+                    copies.Add(name, replacement);
+                }
+            }
+        }
+
+        return
+            copies.Count == 0
+            ?
+            body
+            :
+            (BlockSyntax)new InvariantCopyRewriter(copies).Visit(body)!;
+
+        ExpressionSyntax? Source(string target, IdentifierNameSyntax source) =>
+            types.TryGetValue(target, out var type) && type is not "var" &&
+            !type.StartsWith("ref ", StringComparison.Ordinal) &&
+            types.GetValueOrDefault(source.Identifier.ValueText) == type
+            ?
+            copies.GetValueOrDefault(source.Identifier.ValueText) ??
+            (stable.Contains(source.Identifier.ValueText) ? source : null)
+            :
+            null;
+    }
+
+    private sealed class InvariantCopyRewriter(IReadOnlyDictionary<string, ExpressionSyntax> copies)
+        : Substitution(copies)
+    {
+        public override SyntaxNode? VisitLocalDeclarationStatement(LocalDeclarationStatementSyntax node) =>
+            node.Declaration.Variables.Count == 1 &&
+            Values.ContainsKey(node.Declaration.Variables[0].Identifier.ValueText)
+            ?
+            null
+            :
+            base.VisitLocalDeclarationStatement(node);
+
+        public override SyntaxNode? VisitExpressionStatement(ExpressionStatementSyntax node) =>
+            node.Expression is AssignmentExpressionSyntax { Left: IdentifierNameSyntax target } &&
+            Values.ContainsKey(target.Identifier.ValueText)
+            ?
+            null
+            :
+            base.VisitExpressionStatement(node);
+    }
+
+    private class Substitution(IReadOnlyDictionary<string, ExpressionSyntax> values) : CSharpSyntaxRewriter
+    {
+        protected IReadOnlyDictionary<string, ExpressionSyntax> Values { get; } = values;
+
         public override SyntaxNode? VisitIdentifierName(IdentifierNameSyntax node) =>
             !IsWrite(node) && node.Parent is not QualifiedNameSyntax and not AliasQualifiedNameSyntax &&
             !(node.Parent is MemberAccessExpressionSyntax member && member.Name == node) &&
-            values.TryGetValue(node.Identifier.ValueText, out var value)
+            Values.TryGetValue(node.Identifier.ValueText, out var value)
             ?
             value.WithTriviaFrom(node)
             :
@@ -472,6 +584,13 @@ internal static class PineCSharpSourceSimplification
                         assignment.Left is IdentifierNameSyntax target)
                     {
                         var name = target.Identifier.ValueText;
+
+                        if (assignment.Right is IdentifierNameSyntax source && source.Identifier.ValueText == name &&
+                            types.TryGetValue(name, out var type) && !type.StartsWith("ref ", StringComparison.Ordinal))
+                        {
+                            continue;
+                        }
+
                         var right = Bind(name, types.GetValueOrDefault(name), assignment.Right, true);
                         statement = ((ExpressionStatementSyntax)statement).WithExpression(assignment.WithRight(right));
                     }
@@ -555,7 +674,7 @@ internal static class PineCSharpSourceSimplification
                 InvocationExpressionSyntax call =>
                 IsPureCall(call) &&
                 ((MemberAccessExpressionSyntax)call.Expression).Expression is { } receiver &&
-                (receiver.ToString() is "NativeValue" or "PineValueInProcess" or "BigInteger" || IsPure(receiver)) &&
+                (receiver.ToString() is "PineValueInProcess" or "BigInteger" || IsPure(receiver)) &&
                 call.ArgumentList.Arguments.All(
                     argument => argument.RefKindKeyword.IsKind(SyntaxKind.None) && IsPure(argument.Expression)),
 
@@ -590,13 +709,6 @@ internal static class PineCSharpSourceSimplification
 
             var receiver = member.Expression.ToString();
 
-            if (receiver == "NativeValue")
-            {
-                return
-                    member.Name.Identifier.ValueText is "FromValue" or "FromInt64" or "FromInteger" or "FromBoolean" or
-                    "Add" or "Multiply" or "MultiplyAdd" or "LessThan" or "LessThanOrEqual";
-            }
-
             if (receiver == "PineValueInProcess")
                 return member.Name.Identifier.ValueText is "AreEqual" or "CreateBool";
 
@@ -604,13 +716,13 @@ internal static class PineCSharpSourceSimplification
                 return member.Name.Identifier.ValueText == "Abs";
 
             return
-                member.Name.Identifier.ValueText is "AsInteger" or "ToPineValue" or "GetElementAt" or
+                member.Name.Identifier.ValueText is "AsInteger" or "GetElementAt" or
                 "GetLength" or "LengthEqual" or "Evaluate" or "EvaluateIfBlob" or "EvaluateIfList" or
-                "IsBlob" or "IsList" or "IsTrue" or "Equals" &&
+                "IsBlob" or "IsList" or "Equals" &&
                 member.Expression.DescendantNodesAndSelf().OfType<IdentifierNameSyntax>().Any(
                     identifier =>
                     types.TryGetValue(identifier.Identifier.ValueText, out var type) &&
-                    type is "PineValueInProcess" or "NativeValue" or "PineValue" or
+                    type is "PineValueInProcess" or "PineValue" or
                         "PineValue.BlobValue" or "PineValue.ListValue" or "BigInteger" or "BigInteger?");
         }
     }
@@ -741,7 +853,9 @@ internal static class PineCSharpSourceSimplification
             if (item is LocalDeclarationStatementSyntax declaration &&
                 declaration.Declaration.Variables.All(
                     variable => variable.Initializer?.Value is { } initial &&
-                        (IsCopy(initial) || initial is DefaultExpressionSyntax)))
+                        (IsCopy(initial) || initial is DefaultExpressionSyntax ||
+                        declaration.Declaration.Type is IdentifierNameSyntax { Identifier.ValueText: "BigInteger" } &&
+                        IsBigIntegerConstant(initial))))
             {
                 foreach (var variable in declaration.Declaration.Variables)
                 {
@@ -782,6 +896,13 @@ internal static class PineCSharpSourceSimplification
             :
             node;
     }
+
+    private static bool IsBigIntegerConstant(ExpressionSyntax expression) =>
+        expression is MemberAccessExpressionSyntax
+        {
+            Expression: IdentifierNameSyntax { Identifier.ValueText: "BigInteger" },
+            Name.Identifier.ValueText: "Zero" or "One" or "MinusOne"
+        };
 
     private static BlockSyntax StructureLoops(BlockSyntax body)
     {
@@ -848,6 +969,9 @@ internal static class PineCSharpSourceSimplification
                     loopBody.WithStatements(loopBody.Statements.Replace(loopBody.Statements[0], header.Statement));
             }
 
+            if (loopBody.Statements.LastOrDefault() is ContinueStatementSyntax)
+                loopBody = loopBody.WithStatements(loopBody.Statements.RemoveAt(loopBody.Statements.Count - 1));
+
             StatementSyntax loop =
                 SyntaxFactory.WhileStatement(
                     SyntaxFactory.LiteralExpression(SyntaxKind.TrueLiteralExpression),
@@ -860,6 +984,39 @@ internal static class PineCSharpSourceSimplification
         }
 
         return body.WithStatements(statements);
+    }
+
+    private static BlockSyntax HoistInvariantLoopExits(BlockSyntax body, IReadOnlyDictionary<string, string> types)
+    {
+        return body.WithStatements(SyntaxFactory.List(body.Statements.SelectMany(Hoist)));
+
+        IEnumerable<StatementSyntax> Hoist(StatementSyntax statement)
+        {
+            if (statement is not WhileStatementSyntax { Statement: BlockSyntax loopBody } loop ||
+                !loop.Condition.IsKind(SyntaxKind.TrueLiteralExpression) ||
+                loopBody.Statements.FirstOrDefault() is not IfStatementSyntax { Else: null } guard ||
+                TryExit(guard.Statement) is null ||
+                guard.Condition is not BinaryExpressionSyntax comparison ||
+                comparison.Kind() is not (
+                    SyntaxKind.LessThanExpression or SyntaxKind.LessThanOrEqualExpression or
+                    SyntaxKind.GreaterThanExpression or SyntaxKind.GreaterThanOrEqualExpression or
+                    SyntaxKind.EqualsExpression or SyntaxKind.NotEqualsExpression) ||
+                !StableOperand(comparison.Left) || !StableOperand(comparison.Right))
+            {
+                yield return statement;
+                yield break;
+            }
+
+            yield return guard;
+            yield return loop.WithStatement(loopBody.WithStatements(loopBody.Statements.RemoveAt(0)));
+
+            bool StableOperand(ExpressionSyntax operand) =>
+                IsBigIntegerConstant(operand) ||
+                operand is IdentifierNameSyntax identifier &&
+                types.GetValueOrDefault(identifier.Identifier.ValueText) == "BigInteger" &&
+                !loopBody.DescendantNodes().OfType<IdentifierNameSyntax>().Any(
+                    reference => reference.Identifier.ValueText == identifier.Identifier.ValueText && IsWrite(reference));
+        }
     }
 
     private sealed class ContinueRewriter(string target) : CSharpSyntaxRewriter

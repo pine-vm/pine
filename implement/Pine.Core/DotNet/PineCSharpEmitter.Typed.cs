@@ -1,3 +1,4 @@
+using Pine.Core.Functional;
 using Pine.Core.PineLanguage;
 using Pine.Core.Runtime.IntermediateVM;
 using System;
@@ -9,15 +10,13 @@ using System.Text;
 using Function = Pine.Core.DotNet.PineCSharpCompiler.Function;
 using CursorValue = Pine.Core.DotNet.PineCSharpCursorPlan.Value;
 using CursorDecision = Pine.Core.DotNet.PineCSharpCursorPlan.Decision;
+using Kind = Pine.Core.DotNet.PineCSharpLocalPlan.Kind;
+using LocalType = Pine.Core.DotNet.PineCSharpLocalType;
 
 namespace Pine.Core.DotNet;
 
 internal sealed partial class PineCSharpEmitter
 {
-    private PineCSharpExpressionScope _expressionScope = new();
-
-    private IReadOnlySet<string> _lengthVariables = new HashSet<string>();
-
     private IReadOnlyDictionary<(int Local, int Skip), string> _projectionCaches =
         new Dictionary<(int, int), string>();
 
@@ -71,13 +70,6 @@ internal sealed partial class PineCSharpEmitter
             projection;
     }
 
-    private string Numeric(string variable) =>
-        _lengthVariables.Contains(variable)
-        ?
-        "new BigInteger(" + variable + ")"
-        :
-        variable + ".AsInteger()";
-
     private string LengthEqual(string source, BigInteger length) =>
         length >= 0 && length <= int.MaxValue
         ?
@@ -85,16 +77,36 @@ internal sealed partial class PineCSharpEmitter
         :
         "false";
 
-    private static PineControlFlowOperation? LengthCondition(PineBasicBlock block) =>
-        block.Operations.LastOrDefault() is { Instruction.Kind: StackInstructionKind.Length_Equal_Const } operation &&
-        block.Terminator is PineControlFlowTerminator.ConditionalJump branch &&
-        (branch.Literal.Equals(PineKernelValues.TrueValue) || branch.Literal.Equals(PineKernelValues.FalseValue)) &&
-        !branch.BranchArguments.Contains(operation.Results[0]) &&
-        !branch.FallThroughArguments.Contains(operation.Results[0])
-        ?
-        operation
-        :
-        null;
+    private (PineControlFlowOperation Operation, string Code)? BranchCondition(Function function, PineBasicBlock block)
+    {
+        if (block.Operations.LastOrDefault() is not { Results.Length: 1 } operation ||
+            block.Terminator is not PineControlFlowTerminator.ConditionalJump branch ||
+            branch.BranchArguments.Contains(operation.Results[0]) ||
+            branch.FallThroughArguments.Contains(operation.Results[0]))
+        {
+            return null;
+        }
+
+        var matchFalse = branch.Literal.Equals(PineKernelValues.FalseValue);
+
+        if (!matchFalse && !branch.Literal.Equals(PineKernelValues.TrueValue))
+            return null;
+
+        var inputs = operation.Inputs.Select(value => Value(function, value)).ToArray();
+
+        if (operation.Instruction.Kind == StackInstructionKind.Length_Equal_Const)
+        {
+            return
+                (operation,
+                (matchFalse ? "!" : "") +
+                LengthEqual(inputs[0], operation.Instruction.IntegerLiteral!.Value));
+        }
+
+        var comparison =
+            IntegerComparison(operation.Instruction, inputs, Value(function, operation.Results[0]), matchFalse);
+
+        return comparison is { } predicate ? (operation, predicate.Code) : null;
+    }
 
     private string BinaryEquality(string left, string right, bool negated)
     {
@@ -104,10 +116,11 @@ internal sealed partial class PineCSharpEmitter
         if (ConstantValue(left) is { } leftLiteral)
             return Equal(right, leftLiteral, negated);
 
-        if (_expressionScope.Integer(left) is { } leftInteger &&
-            _expressionScope.Integer(right) is { } rightInteger)
+        if ((Storage(left), Storage(right)) is
+            (LocalType.Integer or LocalType.OptionalInteger, LocalType.Integer or LocalType.OptionalInteger) or
+            (LocalType.Boolean or LocalType.OptionalBoolean, LocalType.Boolean or LocalType.OptionalBoolean))
         {
-            return PineCSharpExpressionScope.Equality(leftInteger, rightInteger, negated);
+            return left + (negated ? " != " : " == ") + right;
         }
 
         var fallback = "PineValueInProcess.AreEqual(" + Pine(left) + ", " + Pine(right) + ")";
@@ -126,8 +139,7 @@ internal sealed partial class PineCSharpEmitter
             while (end < literals.Count && PineCSharpConstantMatch.Shape(literals[end]) == shape)
                 ++end;
 
-            if (!PineCSharpConstantMatch.CanInline(literals.Skip(index).Take(end - index)
-                .Select(literal => new PineCSharpConstantMatch.Case(literal, _ => { })).ToArray(),
+            if (!PineCSharpConstantMatch.CanInline([.. literals.Skip(index).Take(end - index).Select(literal => new PineCSharpConstantMatch.Case(literal, _ => { }))],
                 _options.MaximumInlineMatchDifferingPositions))
             {
                 return false;
@@ -159,19 +171,27 @@ internal sealed partial class PineCSharpEmitter
         EmitMiss();
         text.AppendLine("}");
         text.AppendLine("BlobMemory sourceBytes = sourceBlob.Bytes;");
-        var scope = new PineCSharpExpressionScope();
-        scope.SetValue("source", new("sourceBytes", PineCSharpExpressionType.BlobMemory));
-        scope.SetInteger("offset", new("offset", PineCSharpExpressionType.BigInteger));
+        _retainedLocals.Add("offsetChanged");
         text.AppendLine("bool offsetChanged = false;");
         var stateParameters = new HashSet<int>();
+        var plan = new PineCSharpLocalPlan();
+
+        for (var index = 0; index < count; index++)
+            plan.Seed("cursor_" + index, index == offsetParameter ? Kind.Pine | Kind.Integer : Kind.Pine);
+
         CollectParameters(cursor.Body);
+        _localTypes = plan.Finish();
 
         for (var index = 0; index < count; index++)
         {
             if (index != offsetParameter && stateParameters.Contains(index))
             {
                 _retainedLocals.Add("cursor_" + index);
-                text.AppendLine("NativeValue cursor_" + index + " = NativeValue.FromValue(argument_" + index + ");");
+                var variable = "cursor_" + index;
+
+                text.AppendLine(
+                    TypeOf(variable) + " " + variable + " = " +
+                    ConvertValue(variable, "argument_" + index, LocalType.Pine) + ";");
             }
         }
 
@@ -227,6 +247,31 @@ internal sealed partial class PineCSharpEmitter
                         {
                             stateParameters.Add(index);
                             CollectValue(next.Arguments[index]);
+
+                            var target = "cursor_" + index;
+
+                            switch (next.Arguments[index])
+                            {
+                                case CursorValue.Parameter parameter:
+                                    plan.Copy(target, "cursor_" + parameter.Index);
+                                    break;
+
+                                case CursorValue.Add:
+                                    plan.Seed(target, Kind.Integer | Kind.Empty);
+                                    break;
+
+                                case CursorValue.Constant constant:
+                                    plan.Seed(target, PineCSharpLocalPlan.LiteralKind(constant.Literal));
+                                    break;
+
+                                case CursorValue.Projection:
+                                    plan.Seed(target, Kind.Pine);
+                                    break;
+
+                                default:
+                                    throw new NotImplementedException(
+                                        "CollectParameters does not handle: " + next.Arguments[index].GetType().Name);
+                            }
                         }
                     }
 
@@ -277,35 +322,58 @@ internal sealed partial class PineCSharpEmitter
                 throw new NotImplementedException("Number does not handle: " + value.GetType().Name)
             };
 
-        string Native(CursorValue value) =>
+        (string Code, LocalType Type) Scalar(CursorValue value) =>
             value switch
             {
-                CursorValue.Parameter parameter =>
-                parameter.Index == offsetParameter
-                ?
-                "NativeValue.FromInteger(offset)"
-                :
-                "cursor_" + parameter.Index,
+                CursorValue.Parameter parameter when parameter.Index == offsetParameter =>
+                ("offset", LocalType.Integer),
 
-                CursorValue.Constant constant => "NativeValue.FromValue(" + Literal(constant.Literal) + ")",
+                CursorValue.Parameter parameter => ("cursor_" + parameter.Index, Storage("cursor_" + parameter.Index)),
+
+                CursorValue.Constant constant when Encodings.IntegerEncoding.ParseSignedIntegerStrict(constant.Literal).IsOkOrNullable() is { } integer =>
+                (BigIntegerConstant(integer), LocalType.Integer),
+
+                CursorValue.Constant constant => (Literal(constant.Literal), LocalType.Pine),
 
                 CursorValue.Add add =>
-                "NativeValue.Add(" + Native(add.Operand) + ", " + NativeInteger(add.Amount) + ")",
+                (AddScalar(add), LocalType.OptionalInteger),
 
                 CursorValue.Projection projection =>
-                "NativeValue.FromValue((" + Native(projection.Source) +
-                ").ToPineValue().GetElementAt(" + projection.Index + "))",
+                (PineResult(projection.Source) + ".GetElementAt(" + projection.Index + ")", LocalType.Pine),
 
                 _ =>
-                throw new NotImplementedException("Native does not handle: " + value.GetType().Name)
+                throw new NotImplementedException("Scalar does not handle: " + value.GetType().Name)
             };
 
-        string PineResult(CursorValue value) =>
-            value is CursorValue.Parameter parameter && parameter.Index == offsetParameter
-            ?
-            "(offsetChanged ? PineValueInProcess.CreateInteger(offset) : argument_" + offsetParameter + ")"
-            :
-            "(" + Native(value) + ").ToPineValue()";
+        string AddScalar(CursorValue.Add add)
+        {
+            var operand = Scalar(add.Operand);
+            return "(" + AsNumber(operand.Code, operand.Type) + " + " + BigIntegerConstant(add.Amount) + ")";
+        }
+
+        string PineResult(CursorValue value)
+        {
+            if (value is CursorValue.Parameter parameter && parameter.Index == offsetParameter)
+                return "(offsetChanged ? PineValueInProcess.CreateInteger(offset) : argument_" + offsetParameter + ")";
+
+            if (value is CursorValue.Constant constant)
+                return Literal(constant.Literal);
+
+            var scalar = Scalar(value);
+            return AsPine(scalar.Code, scalar.Type);
+        }
+
+        string CursorAssignment(string target, CursorValue value)
+        {
+            if (Storage(target) == LocalType.Pine)
+                return PineResult(value);
+
+            if (value is CursorValue.Parameter parameter && parameter.Index == offsetParameter)
+                return "(offsetChanged ? null : argument_" + offsetParameter + ", offset)";
+
+            var scalar = Scalar(value);
+            return ConvertValue(target, scalar.Code, scalar.Type);
+        }
 
         void EmitReturn(IEnumerable<CursorValue> values) =>
             text.AppendLine("return " + Tuple(values.Select(PineResult)) + ";");
@@ -327,19 +395,26 @@ internal sealed partial class PineCSharpEmitter
                         if (next.Arguments[index] == new CursorValue.Parameter(index))
                             continue;
 
-                        destinations.Add(index == offsetParameter ? "offset" : "cursor_" + index);
+                        var target = index == offsetParameter ? "offset" : "cursor_" + index;
+                        destinations.Add(target);
 
                         arguments.Add(
-                            index == offsetParameter ? Number(next.Arguments[index]) : Native(next.Arguments[index]));
+                            index == offsetParameter
+                            ?
+                            Number(next.Arguments[index])
+                            :
+                            CursorAssignment(target, next.Arguments[index]));
                     }
 
                     EmitAssignments(
                         text,
-                        destinations.Zip(arguments).Select(
-                            pair =>
-                            (Target: pair.First,
-                            Expression: pair.Second,
-                            Type: pair.First == "offset" ? "BigInteger" : "NativeValue")).ToArray());
+                        [
+                            .. destinations.Zip(arguments).Select(
+                                pair =>
+                                (Target: pair.First,
+                                Expression: pair.Second,
+                                Type: pair.First == "offset" ? "BigInteger" : TypeOf(pair.First)))
+                        ]);
 
                     if (next.Arguments[offsetParameter] != new CursorValue.Parameter(offsetParameter))
                         text.AppendLine("offsetChanged = true;");
@@ -385,7 +460,7 @@ internal sealed partial class PineCSharpEmitter
                         PineCSharpConstantMatch.Emit(
                             text,
                             cases,
-                            scope.Value("source")!,
+                            "sourceBytes",
                             "byteOffset",
                             "cursor_" + suffix++,
                             MaterializedLiteral,
@@ -452,14 +527,6 @@ internal sealed partial class PineCSharpEmitter
             var suffix = "match_" + _lookupIndex++;
             var localSource = "source_" + suffix;
             var memory = "memory_" + suffix;
-            var branchScope = new PineCSharpExpressionScope(_expressionScope);
-
-            var view =
-                new PineCSharpExpression(
-                    memory,
-                    shape.Blob ? PineCSharpExpressionType.BlobMemory : PineCSharpExpressionType.ListMemory);
-
-            branchScope.SetValue(source, view);
             text.AppendLine("{");
             var items = localSource + (shape.Blob ? ".Bytes" : ".Items");
 
@@ -473,7 +540,7 @@ internal sealed partial class PineCSharpEmitter
             PineCSharpConstantMatch.Emit(
                 text,
                 group,
-                branchScope.Value(source)!,
+                memory,
                 offset ?? "0",
                 suffix,
                 MaterializedLiteral);

@@ -14,9 +14,9 @@ public struct PineCSharpSliceOffset
     private int _offset;
 
     /// <summary>Derives the clamped byte offset on first demand; invalid counts remain invalid.</summary>
-    public int? Get(PineCSharpValue count, BigInteger multiplier)
+    public int? Get(BigInteger? count, BigInteger multiplier)
     {
-        if (count.AsInteger() is not { } integer)
+        if (count is not { } integer)
             return null;
 
         if (!_hasValue || _count != integer || _multiplier != multiplier)

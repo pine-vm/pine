@@ -1,7 +1,7 @@
 #nullable enable
+using global::System.Numerics;
+
 using PineValueInProcess = global::Pine.Core.Internal.PineValueInProcess;
-using NativeValue = global::Pine.Core.DotNet.PineCSharpValue;
-using PineLiteralsModule = global::PineLiterals;
 
 public static class CompiledPine
 {
@@ -11,14 +11,12 @@ public static class CompiledPine
     {
         cancellationToken.ThrowIfCancellationRequested();
 
-        PineValueInProcess result_0 =
+        return
             Expr_e97e990551_constraint_a115150f97(
                 environment.GetElementAt(0),
                 environment.GetElementAt(1),
                 environment.GetElementAt(2),
                 cancellationToken);
-
-        return result_0;
     }
 
     /// <summary>Function 0; unconstrained environment. Arguments: 0 = [0]; 1 = [1]; 2 = [2].</summary>
@@ -28,11 +26,8 @@ public static class CompiledPine
         PineValueInProcess argument_2,
         global::System.Threading.CancellationToken cancellationToken)
     {
-        PineValueInProcess state_0 = argument_0;
-        PineValueInProcess state_1 = argument_1;
-        PineValueInProcess state_2 = argument_2;
         cancellationToken.ThrowIfCancellationRequested();
-        return Expr_e97e990551_constraint_a115150f97(state_0, state_1, state_2, cancellationToken);
+        return Expr_e97e990551_constraint_a115150f97(argument_0, argument_1, argument_2, cancellationToken);
     }
 
     /// <summary>Function 1; specialized environment. Arguments: 0 = [1]; 1 = [2]; 2 = [3].</summary>
@@ -42,48 +37,34 @@ public static class CompiledPine
         PineValueInProcess argument_2,
         global::System.Threading.CancellationToken cancellationToken)
     {
-        NativeValue state_0 = NativeValue.FromValue(argument_0);
-        PineValueInProcess state_1 = argument_1;
-        NativeValue state_2 = NativeValue.FromValue(argument_2);
-        NativeValue local_1_3 = default;
-        NativeValue value_1_15 = default;
+        (PineValueInProcess? Original, BigInteger? Number) state_0 = (argument_0, null);
+        (PineValueInProcess? Original, BigInteger? Number) state_2 = (argument_2, null);
         cancellationToken.ThrowIfCancellationRequested();
-        long value_1_1 = state_1.GetLength();
-        local_1_3 = NativeValue.FromInt64(value_1_1);
-        value_1_15 = local_1_3;
+        BigInteger value_1_1 = new BigInteger(argument_1.GetLength());
+
+        if (value_1_1 <= BigInteger.Zero)
+        {
+            return PineValueInProcess.CreateInteger(BigInteger.Zero);
+        }
 
         while (true)
         {
-            NativeValue value_1_2 =
-                NativeValue.FromBoolean(NativeValue.LessThanOrEqual(value_1_15, NativeValue.FromInt64(0L)));
-
-            if (value_1_2.IsTrue())
+            if ((state_0.Original?.AsInteger() ?? state_0.Number) <= BigInteger.Zero)
             {
-                goto function_1_block_6;
+                return
+                    (state_2.Original ??
+                    (state_2.Number is { } scalar_0
+                    ?
+                    PineValueInProcess.CreateInteger(scalar_0)
+                    :
+                    PineValueInProcess.EmptyList));
             }
 
-            NativeValue value_1_4 =
-                NativeValue.FromBoolean(NativeValue.LessThanOrEqual(state_0, NativeValue.FromInt64(0L)));
-
-            if (value_1_4.IsTrue())
-            {
-                return state_2.ToPineValue();
-            }
-
-            NativeValue value_1_6 = NativeValue.Add(state_0, NativeValue.FromInt64(-1L));
-            NativeValue value_1_10 = NativeValue.Add(state_2, local_1_3);
-            state_2 = value_1_10;
-            state_1 = state_1;
-            state_0 = value_1_6;
+            BigInteger? value_1_6 = (state_0.Original?.AsInteger() ?? state_0.Number) + BigInteger.MinusOne;
+            BigInteger? value_1_10 = (state_2.Original?.AsInteger() ?? state_2.Number) + value_1_1;
+            state_2 = (null, value_1_10);
+            state_0 = (null, value_1_6);
             cancellationToken.ThrowIfCancellationRequested();
-            value_1_15 = local_1_3;
-            continue;
-        }
-
-function_1_block_6:
-        {
-            PineValueInProcess value_1_13 = PineLiteralsModule.Value_int_pos_0;
-            return value_1_13;
         }
     }
 }

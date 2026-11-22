@@ -65,6 +65,29 @@ in the rendering path and is not prepared during ordinary compilation or executi
 For `Select_Value_Const`, the stack effect describes fall-through; a missing-key
 jump consumes the key without pushing a value.
 
+## Lowering Pine values to C# locals
+
+Generated workers take and return `PineValueInProcess`. Within a worker,
+canonical integers and kernel predicates can stay in `BigInteger` and `bool`
+locals. Nullable scalars represent operations that can return Pine's empty list
+instead of a number or predicate.
+
+When a loop slot can hold either an input Pine value or a computed integer, it
+retains the original reference until the slot is assigned a scalar. Numeric
+consumers decode the original only on demand. Structural equality and
+pass-through must not replace a noncanonical integer blob with its numeric
+interpretation. Values that escape through a Pine consumer, such as a list
+constructor, keep shared Pine storage instead of separately wrapping aliases.
+
+Specialized entry guards compare descendants of materialized environments
+directly, without allocating in-process wrappers for the comparison.
+
+The C# emitter forwards invariant copies only when their first assignment
+dominates their reads and every later assignment supplies the same value.
+A leading loop exit that compares invariant integers can then run once before
+the loop. Cancellation checks remain at their original entry and backedge
+positions.
+
 ## Evaluation work counters
 
 `EvalWorkCounters` contains execution work, excluding cached metadata derivations.

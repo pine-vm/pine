@@ -126,6 +126,34 @@ public class PineCSharpEmissionTests
     }
 
     [Fact]
+    public void Pine_CSharp_does_not_hoist_a_loop_exit_whose_operand_changes_on_a_backedge()
+    {
+        var source =
+            TestMethod(
+                """
+                BigInteger length = new BigInteger(source.GetLength());
+                BigInteger current = length;
+                start:
+                {
+                    if (current <= BigInteger.Zero)
+                        return PineValueInProcess.CreateInteger(length);
+
+                    current -= BigInteger.One;
+                    goto start;
+                }
+                """);
+
+        var optimized = PineCSharpSourceSimplification.Format(source, new HashSet<string> { "current" });
+
+        var loop =
+            SyntaxFactory.ParseCompilationUnit(optimized).DescendantNodes().OfType<WhileStatementSyntax>()
+            .Should().ContainSingle().Subject;
+
+        loop.Statement.DescendantNodes().OfType<IfStatementSyntax>().Should().ContainSingle();
+        AssertEquivalent(source, optimized, PineValueInProcess.Create(PineValue.Blob([1, 2])));
+    }
+
+    [Fact]
     public void Pine_CSharp_common_subexpressions_share_numeric_and_memory_derivations()
     {
         var source =
@@ -311,38 +339,46 @@ public class PineCSharpEmissionTests
     }
 
     [Fact]
-    public void Pine_CSharp_numeric_views_preserve_overflow_invalid_results_and_original_encodings()
+    public void Pine_CSharp_typed_arithmetic_preserves_arbitrary_precision_and_invalid_results()
     {
-        BigInteger[] values = [long.MinValue, long.MaxValue, -1, 0, 1, 2, BigInteger.One << 80];
+        var compilation = Compile("arithmetic");
+        compilation.MethodsSource.Should().Contain("BigInteger?");
+        using var assembly = Load(compilation);
 
-        foreach (var x in values)
-        {
-            foreach (var y in values)
-            {
-                var left = PineCSharpValue.FromInteger(x);
-                var right = PineCSharpValue.FromInteger(y);
-                PineCSharpValue.Add(left, right).AsInteger().Should().Be(x + y);
-                PineCSharpValue.Multiply(left, right).AsInteger().Should().Be(x * y);
-                PineCSharpValue.LessThan(left, right).Should().Be(x < y);
-                PineCSharpValue.LessThanOrEqual(left, right).Should().Be(x <= y);
-            }
-        }
+        var worker =
+            assembly.CreateWorkerDelegate<Func<PineValueInProcess, PineValueInProcess, PineValueInProcess>>(
+                compilation.Methods.Last());
+
+        var huge = BigInteger.One << 80;
+
+        worker(PineValueInProcess.CreateInteger(huge), PineValueInProcess.CreateInteger(long.MaxValue))
+            .AsInteger().Should().Be(huge + long.MaxValue);
 
         var original = PineValueInProcess.Create(PineValue.Blob([4, 0, 1]));
-        var view = PineCSharpValue.FromValue(original);
-        view.AsInteger().Should().Be(BigInteger.One);
-        view.ToPineValue().Should().BeSameAs(original);
 
-        PineCSharpValue.Add(view, PineCSharpValue.FromInt64(0)).ToPineValue().Evaluate()
+        worker(original, PineValueInProcess.CreateInteger(0)).Evaluate()
             .Should().Be(IntegerEncoding.EncodeSignedInteger(1));
 
-        var invalid = PineCSharpValue.FromValue(PineValueInProcess.EmptyList);
-        var unevaluable = PineCSharpValue.FromValue(PineValueInProcess.CreateList([null!]));
+        worker(PineValueInProcess.EmptyList, PineValueInProcess.CreateList([null!]))
+            .Should().BeSameAs(PineValueInProcess.EmptyList);
+    }
 
-        PineCSharpValue.MultiplyAdd(invalid, unevaluable, 2).ToPineValue().Should().BeSameAs(
-            PineValueInProcess.EmptyList);
+    [Fact]
+    public void Pine_CSharp_mutual_tail_loop_does_not_wrap_integers_on_each_backedge()
+    {
+        using var assembly = Load(Compile("mutual-tail"));
 
-        PineCSharpValue.Add(invalid, unevaluable).ToPineValue().Should().BeSameAs(PineValueInProcess.EmptyList);
+        var environment =
+            PineValueInProcess.CreateList(
+                [PineValueInProcess.CreateInteger(100000), PineValueInProcess.CreateInteger(10)]);
+
+        assembly.Evaluate(environment)!.AsInteger().Should().Be(new BigInteger(150010));
+        var before = GC.GetAllocatedBytesForCurrentThread();
+        var result = assembly.Evaluate(environment);
+        var allocated = GC.GetAllocatedBytesForCurrentThread() - before;
+
+        result!.AsInteger().Should().Be(new BigInteger(150010));
+        allocated.Should().BeLessThan(4096, "conversions must not wrap loop-carried integers on each mutual tail call");
     }
 
     [Fact]
@@ -417,14 +453,14 @@ public class PineCSharpEmissionTests
     public void Pine_CSharp_slice_offset_view_reuses_counts_and_preserves_clamping_and_overflow()
     {
         var offset = new PineCSharpSliceOffset();
-        offset.Get(PineCSharpValue.FromInt64(2), 4).Should().Be(8);
-        offset.Get(PineCSharpValue.FromInt64(2), 4).Should().Be(8);
-        offset.Get(PineCSharpValue.FromInt64(3), 4).Should().Be(12);
-        offset.Get(PineCSharpValue.FromInt64(-2), 4).Should().Be(0);
-        offset.Get(PineCSharpValue.FromValue(PineValueInProcess.EmptyList), 4).Should().BeNull();
-        Action overflow = () => offset.Get(PineCSharpValue.FromInteger(BigInteger.One << 80), 4);
+        offset.Get(2, 4).Should().Be(8);
+        offset.Get(2, 4).Should().Be(8);
+        offset.Get(3, 4).Should().Be(12);
+        offset.Get(-2, 4).Should().Be(0);
+        offset.Get(null, 4).Should().BeNull();
+        Action overflow = () => offset.Get(BigInteger.One << 80, 4);
         overflow.Should().Throw<OverflowException>();
-        offset.Get(PineCSharpValue.FromInt64(3), 4).Should().Be(12);
+        offset.Get(3, 4).Should().Be(12);
     }
 
     [Fact]
@@ -476,8 +512,7 @@ public class PineCSharpEmissionTests
         var original =
             PineValueInProcess.Create(
                 PineValue.List(
-                    Enumerable.Range(0, 100)
-                    .Select(value => IntegerEncoding.EncodeSignedInteger(value)).ToArray<PineValue>()));
+                    [.. Enumerable.Range(0, 100).Select(value => IntegerEncoding.EncodeSignedInteger(value))]));
 
         var item = PineValueInProcess.CreateInteger(1);
         Measure(50);

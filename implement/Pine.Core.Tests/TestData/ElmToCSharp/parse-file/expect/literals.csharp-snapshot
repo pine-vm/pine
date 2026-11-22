@@ -1,7 +1,6 @@
 #nullable enable
 
 namespace Pine.Generated.ElmParserRegression;
-
 using PineValue = global::Pine.Core.PineLanguage.PineValue;
 using PineValueInProcess = global::Pine.Core.Internal.PineValueInProcess;
 
@@ -622,6 +621,36 @@ public static class PineLiterals
             PineValueInProcess.CreateFullyRepresented(Materialized_Value_string_message_d1054b7088);
     }
 
+    public static readonly PineValue Materialized_Value_int_pos_3 = PineValue.Blob(new byte[] { 4, 3 });
+
+    public static PineValueInProcess Value_int_pos_3 => Literal_Value_int_pos_3.Value;
+
+    private static class Literal_Value_int_pos_3
+    {
+        internal static readonly PineValueInProcess Value =
+            PineValueInProcess.CreateFullyRepresented(Materialized_Value_int_pos_3);
+    }
+
+    public static readonly PineValue Materialized_Value_int_pos_2 = PineValue.Blob(new byte[] { 4, 2 });
+
+    public static PineValueInProcess Value_int_pos_2 => Literal_Value_int_pos_2.Value;
+
+    private static class Literal_Value_int_pos_2
+    {
+        internal static readonly PineValueInProcess Value =
+            PineValueInProcess.CreateFullyRepresented(Materialized_Value_int_pos_2);
+    }
+
+    public static readonly PineValue Materialized_Value_int_pos_5 = PineValue.Blob(new byte[] { 4, 5 });
+
+    public static PineValueInProcess Value_int_pos_5 => Literal_Value_int_pos_5.Value;
+
+    private static class Literal_Value_int_pos_5
+    {
+        internal static readonly PineValueInProcess Value =
+            PineValueInProcess.CreateFullyRepresented(Materialized_Value_int_pos_5);
+    }
+
     public static readonly PineValue Materialized_Value_40141e6c38 =
         PineValue.Blob(
             new byte[] { 0, 0, 0, 69, 0, 0, 0, 120, 0, 0, 0, 112, 0, 0, 0, 101, 0, 0, 0, 99, 0, 0, 0, 116, 0, 0, 0, 101, 0, 0, 0, 100, 0, 0, 0, 32, 0, 0, 0, 39 });
@@ -712,16 +741,6 @@ public static class PineLiterals
                 Value_string_String_3327373b34,
                 Value_string_where_52ab59669b
                 ]);
-    }
-
-    public static readonly PineValue Materialized_Value_int_pos_5 = PineValue.Blob(new byte[] { 4, 5 });
-
-    public static PineValueInProcess Value_int_pos_5 => Literal_Value_int_pos_5.Value;
-
-    private static class Literal_Value_int_pos_5
-    {
-        internal static readonly PineValueInProcess Value =
-            PineValueInProcess.CreateFullyRepresented(Materialized_Value_int_pos_5);
     }
 
     public static readonly PineValue Materialized_Value_79b5db3e70 =
@@ -1154,16 +1173,6 @@ public static class PineLiterals
                 ]);
     }
 
-    public static readonly PineValue Materialized_Value_int_pos_3 = PineValue.Blob(new byte[] { 4, 3 });
-
-    public static PineValueInProcess Value_int_pos_3 => Literal_Value_int_pos_3.Value;
-
-    private static class Literal_Value_int_pos_3
-    {
-        internal static readonly PineValueInProcess Value =
-            PineValueInProcess.CreateFullyRepresented(Materialized_Value_int_pos_3);
-    }
-
     public static readonly PineValue Materialized_Value_string_Non_83eb707829 =
         PineValue.Blob(new byte[] { 0, 0, 0, 78, 0, 0, 0, 111, 0, 0, 0, 110 });
 
@@ -1189,16 +1198,6 @@ public static class PineLiterals
                 Value_ffbe408830,
                 Value_string_Non_83eb707829
                 ]);
-    }
-
-    public static readonly PineValue Materialized_Value_int_pos_2 = PineValue.Blob(new byte[] { 4, 2 });
-
-    public static PineValueInProcess Value_int_pos_2 => Literal_Value_int_pos_2.Value;
-
-    private static class Literal_Value_int_pos_2
-    {
-        internal static readonly PineValueInProcess Value =
-            PineValueInProcess.CreateFullyRepresented(Materialized_Value_int_pos_2);
     }
 
     public static readonly PineValue Materialized_Value_string_Left_cba173e98a =

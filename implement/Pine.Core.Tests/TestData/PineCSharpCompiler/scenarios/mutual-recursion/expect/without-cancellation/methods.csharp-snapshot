@@ -1,15 +1,13 @@
 #nullable enable
+using global::System.Numerics;
+
 using PineValueInProcess = global::Pine.Core.Internal.PineValueInProcess;
-using NativeValue = global::Pine.Core.DotNet.PineCSharpValue;
 
 public static class CompiledPine
 {
     public static PineValueInProcess Expr_db88847ce4_dispatch(PineValueInProcess environment)
     {
-        PineValueInProcess result_0 =
-            Expr_a0c121d063_constraint_fdf930c12f(environment.GetElementAt(0), environment.GetElementAt(1));
-
-        return result_0;
+        return Expr_a0c121d063_constraint_fdf930c12f(environment.GetElementAt(0), environment.GetElementAt(1));
     }
 
     /// <summary>Function 0; unconstrained environment. Arguments: 0 = [0]; 1 = [1].</summary>
@@ -25,29 +23,28 @@ public static class CompiledPine
         PineValueInProcess argument_0,
         PineValueInProcess argument_1)
     {
-        PineValueInProcess state_0 = argument_0;
-        PineValueInProcess state_1 = argument_1;
-        PineValueInProcess value_1_7 = PineValueInProcess.EmptyList;
-
-        NativeValue value_1_1 =
-            NativeValue.FromBoolean(
-                NativeValue.LessThanOrEqual(NativeValue.FromValue(state_0), NativeValue.FromInt64(0L)));
-
-        if (value_1_1.IsTrue())
+        if ((argument_0).AsInteger() <= BigInteger.Zero)
         {
-            return state_1;
+            return argument_1;
         }
 
         PineValueInProcess value_1_3 =
-            (NativeValue.Add(NativeValue.FromValue(state_0), NativeValue.FromInt64(-1L))).ToPineValue();
+            ((argument_0).AsInteger() + BigInteger.MinusOne is { } scalar_0
+            ?
+            PineValueInProcess.CreateInteger(scalar_0)
+            :
+            PineValueInProcess.EmptyList);
 
         PineValueInProcess value_1_5 =
-            (NativeValue.Add(NativeValue.FromValue(state_1), NativeValue.FromInt64(1L))).ToPineValue();
+            ((argument_1).AsInteger() + BigInteger.One is { } scalar_1
+            ?
+            PineValueInProcess.CreateInteger(scalar_1)
+            :
+            PineValueInProcess.EmptyList);
 
         PineValueInProcess call_1_1 = Expr_e808cf0dee_constraint_fdf930c12f(value_1_3, value_1_5);
-        value_1_7 = call_1_1;
-        NativeValue value_1_8 = NativeValue.Add(NativeValue.FromValue(value_1_7), NativeValue.FromInt64(3L));
-        return value_1_8.ToPineValue();
+        BigInteger? value_1_8 = (call_1_1).AsInteger() + new BigInteger(3);
+        return (value_1_8 is { } scalar_2 ? PineValueInProcess.CreateInteger(scalar_2) : PineValueInProcess.EmptyList);
     }
 
     /// <summary>Function 2; specialized environment. Arguments: 0 = [1]; 1 = [2].</summary>
@@ -55,28 +52,27 @@ public static class CompiledPine
         PineValueInProcess argument_0,
         PineValueInProcess argument_1)
     {
-        PineValueInProcess state_0 = argument_0;
-        PineValueInProcess state_1 = argument_1;
-        PineValueInProcess value_2_7 = PineValueInProcess.EmptyList;
-
-        NativeValue value_2_1 =
-            NativeValue.FromBoolean(
-                NativeValue.LessThanOrEqual(NativeValue.FromValue(state_0), NativeValue.FromInt64(0L)));
-
-        if (value_2_1.IsTrue())
+        if ((argument_0).AsInteger() <= BigInteger.Zero)
         {
-            return state_1;
+            return argument_1;
         }
 
         PineValueInProcess value_2_3 =
-            (NativeValue.Add(NativeValue.FromValue(state_0), NativeValue.FromInt64(-1L))).ToPineValue();
+            ((argument_0).AsInteger() + BigInteger.MinusOne is { } scalar_3
+            ?
+            PineValueInProcess.CreateInteger(scalar_3)
+            :
+            PineValueInProcess.EmptyList);
 
         PineValueInProcess value_2_5 =
-            (NativeValue.Add(NativeValue.FromValue(state_1), NativeValue.FromInt64(2L))).ToPineValue();
+            ((argument_1).AsInteger() + new BigInteger(2) is { } scalar_4
+            ?
+            PineValueInProcess.CreateInteger(scalar_4)
+            :
+            PineValueInProcess.EmptyList);
 
         PineValueInProcess call_2_1 = Expr_a0c121d063_constraint_fdf930c12f(value_2_3, value_2_5);
-        value_2_7 = call_2_1;
-        NativeValue value_2_8 = NativeValue.Add(NativeValue.FromValue(value_2_7), NativeValue.FromInt64(3L));
-        return value_2_8.ToPineValue();
+        BigInteger? value_2_8 = (call_2_1).AsInteger() + new BigInteger(3);
+        return (value_2_8 is { } scalar_5 ? PineValueInProcess.CreateInteger(scalar_5) : PineValueInProcess.EmptyList);
     }
 }

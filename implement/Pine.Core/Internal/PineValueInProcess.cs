@@ -2159,6 +2159,30 @@ public class PineValueInProcess
         PineValueInProcess root,
         ReadOnlySpan<int> path)
     {
+        var (inProcess, concrete) = ResolvePath(root, path);
+        return concrete is null ? inProcess : Create(concrete);
+    }
+
+    /// <summary>Tests a path guard without wrapping an already materialized descendant.</summary>
+    public static bool ValueAtPathEquals(
+        PineValueInProcess root,
+        ReadOnlySpan<int> path,
+        PineValueInProcess expected)
+    {
+        var (inProcess, concrete) = ResolvePath(root, path);
+
+        return
+            concrete is not null
+            ?
+            AreEqual(expected, concrete)
+            :
+            inProcess is not null && AreEqual(inProcess, expected);
+    }
+
+    private static (PineValueInProcess? InProcess, PineValue? Concrete) ResolvePath(
+        PineValueInProcess root,
+        ReadOnlySpan<int> path)
+    {
         var current = root;
 
         for (var i = 0; i < path.Length; i++)
@@ -2169,7 +2193,7 @@ public class PineValueInProcess
 
                 if (directItems.Count <= index)
                 {
-                    return null;
+                    return default;
                 }
 
                 current = directItems[index];
@@ -2178,23 +2202,18 @@ public class PineValueInProcess
 
             if (current._evaluated is { } currentMaterialized)
             {
-                var concreteValue =
-                    PineValueExtension.ValueFromPathOrNull(
-                        currentMaterialized,
-                        path[i..]);
-
-                return concreteValue is null ? null : Create(concreteValue);
+                return (null, PineValueExtension.ValueFromPathOrNull(currentMaterialized, path[i..]));
             }
 
             if (!current.IsList())
             {
-                return null;
+                return default;
             }
 
             current = current.GetElementAt(path[i]);
         }
 
-        return current;
+        return (current, null);
     }
 
     /// <summary>

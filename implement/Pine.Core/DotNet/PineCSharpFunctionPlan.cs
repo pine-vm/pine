@@ -17,17 +17,13 @@ internal sealed class PineCSharpFunctionPlan
 
     public IReadOnlyDictionary<PineBlockId, Function> Calls { get; }
 
-    public HashSet<string> ScalarVariables { get; } = [];
-
     public bool IsNoOp { get; }
 
     public bool HasCycles { get; }
 
     public PineCSharpFunctionPlan(
         Function function,
-        IReadOnlySet<PineBlockId> tailCalls,
-        Func<int, string> localName,
-        Func<PineVirtualValueId, string> valueName)
+        IReadOnlySet<PineBlockId> tailCalls)
     {
         var reachable = new HashSet<PineBlockId>();
         var pending = new Stack<PineBlockId>();
@@ -65,7 +61,7 @@ internal sealed class PineCSharpFunctionPlan
                 pending.Push(target);
         }
 
-        Blocks = blocks.Values.OrderBy(block => block.Id.Value).ToArray();
+        Blocks = [.. blocks.Values.OrderBy(block => block.Id.Value)];
         Calls = calls;
 
         var edges =
@@ -75,18 +71,18 @@ internal sealed class PineCSharpFunctionPlan
                 tailCalls.Contains(block.Id) ||
                 block.Operations.Any(
                     operation =>
-                    operation.Instruction.Kind == StackInstructionKind.Parse_Error_Const)
+                    operation.Instruction.Kind is StackInstructionKind.Parse_Error_Const)
                 ?
                 Array.Empty<PineBlockId>()
                 :
-                Successors(block.Terminator).ToArray());
+                [.. Successors(block.Terminator)]);
 
         var incoming = Blocks.ToDictionary(block => block.Id, _ => 0);
 
         foreach (var target in edges.Values.SelectMany(targets => targets))
             ++incoming[target];
 
-        var ready = new Queue<PineBlockId>(incoming.Where(item => item.Value == 0).Select(item => item.Key));
+        var ready = new Queue<PineBlockId>(incoming.Where(item => item.Value is 0).Select(item => item.Key));
         var processed = 0;
 
         while (ready.TryDequeue(out var id))
@@ -95,7 +91,7 @@ internal sealed class PineCSharpFunctionPlan
 
             foreach (var target in edges[id])
             {
-                if (--incoming[target] == 0)
+                if (--incoming[target] is 0)
                     ready.Enqueue(target);
             }
         }
@@ -106,104 +102,6 @@ internal sealed class PineCSharpFunctionPlan
             Blocks.Count == 1 && Blocks[0].Operations.IsEmpty &&
             Blocks[0].Terminator is PineControlFlowTerminator.Return { ValueCount: 0 };
 
-        var aliases = new List<(string Left, string Right)>();
-        var pineConsumers = new HashSet<string>();
-
-        foreach (var block in Blocks)
-        {
-            var stack = block.Parameters.ToList();
-
-            foreach (var operation in block.Operations)
-            {
-                var instruction = operation.Instruction;
-
-                if (IsScalarProducer(instruction.Kind))
-                    ScalarVariables.UnionWith(operation.Results.Select(valueName));
-
-                if (instruction.Kind == StackInstructionKind.Local_Int_Add_Const)
-                    ScalarVariables.UnionWith(instruction.LocalIndices.Select(localName));
-
-                for (var index = 0; index < operation.Inputs.Length; index++)
-                {
-                    if (NeedsPineInput(instruction.Kind, index))
-                        pineConsumers.Add(valueName(operation.Inputs[index]));
-                }
-
-                if (instruction.Kind == StackInstructionKind.Local_Get)
-                {
-                    aliases.AddRange(
-                        operation.Results.Select(
-                            (result, index) =>
-                            (valueName(result), localName(instruction.LocalIndices[index]))));
-                }
-
-                if (instruction.Kind == StackInstructionKind.Local_Set)
-                {
-                    aliases.AddRange(
-                        instruction.LocalIndices.Select(
-                            (index, depth) =>
-                            (localName(index), valueName(stack[stack.Count - depth - 1]))));
-                }
-
-                stack.RemoveRange(stack.Count - operation.Inputs.Length, operation.Inputs.Length);
-                stack.AddRange(operation.Results);
-            }
-
-            foreach (var (target, arguments) in Edges(block.Terminator))
-            {
-                aliases.AddRange(
-                    function.Graph.Blocks[target.Value].Parameters.Zip(arguments)
-                    .Select(pair => (valueName(pair.First), valueName(pair.Second))));
-            }
-
-            if (block.Terminator is PineControlFlowTerminator.Return returned)
-            {
-                foreach (var (value, index) in stack.TakeLast(returned.ValueCount).Select((value, index) => (value, index)))
-                {
-                    if (function.Prepared.Returns.Slots[index].Values.Length > 0)
-                        ScalarVariables.Add(valueName(value));
-                }
-            }
-
-            if (block.Terminator is PineControlFlowTerminator.Invoke invoke && !tailCalls.Contains(block.Id))
-                pineConsumers.UnionWith(invoke.Inputs.Select(valueName));
-
-            if (block.Terminator is PineControlFlowTerminator.ValueMap map)
-                pineConsumers.Add(valueName(map.Input));
-        }
-
-        var adjacent = new Dictionary<string, List<string>>();
-
-        foreach (var (left, right) in aliases)
-        {
-            if (!adjacent.TryGetValue(left, out var leftEdges))
-                adjacent[left] = leftEdges = [];
-
-            if (!adjacent.TryGetValue(right, out var rightEdges))
-                adjacent[right] = rightEdges = [];
-
-            leftEdges.Add(right);
-            rightEdges.Add(left);
-        }
-
-        Propagate(ScalarVariables);
-        Propagate(pineConsumers);
-        // Escaping aliases need one shared Pine object, not independently materialized struct copies.
-        ScalarVariables.ExceptWith(pineConsumers);
-
-        void Propagate(HashSet<string> values)
-        {
-            var queue = new Queue<string>(values);
-
-            while (queue.TryDequeue(out var value))
-            {
-                foreach (var next in adjacent.GetValueOrDefault(value) ?? [])
-                {
-                    if (values.Add(next))
-                        queue.Enqueue(next);
-                }
-            }
-        }
     }
 
     private static PineBasicBlock FuseLengthPredicates(PineBasicBlock block)
@@ -214,13 +112,13 @@ internal sealed class PineCSharpFunctionPlan
         {
             var operation = block.Operations[index];
 
-            if (operation.Instruction.Kind == StackInstructionKind.Length && index + 1 < block.Operations.Length &&
+            if (operation.Instruction.Kind is StackInstructionKind.Length && index + 1 < block.Operations.Length &&
                 block.Operations[index + 1] is { } comparison &&
                 comparison.Instruction.Kind is StackInstructionKind.Equal_Binary_Const or StackInstructionKind.Not_Equal_Binary_Const &&
                 comparison.Inputs.SequenceEqual(operation.Results) &&
                 IntegerEncoding.ParseSignedIntegerStrict(comparison.Instruction.Literal!.Evaluate()).IsOkOrNullable() is { } length)
             {
-                var negate = comparison.Instruction.Kind == StackInstructionKind.Not_Equal_Binary_Const;
+                var negate = comparison.Instruction.Kind is StackInstructionKind.Not_Equal_Binary_Const;
 
                 operations.Add(
                     operation with
@@ -296,46 +194,10 @@ internal sealed class PineCSharpFunctionPlan
         return block with { Operations = [.. operations], Terminator = terminator };
     }
 
-    private static bool NeedsPineInput(StackInstructionKind kind, int index) =>
-        kind switch
-        {
-            StackInstructionKind.Local_Set or StackInstructionKind.Pop => false,
-
-            StackInstructionKind.Int_Add_Binary or StackInstructionKind.Int_Add_Const or
-            StackInstructionKind.Int_Mul_Binary or StackInstructionKind.Int_Mul_Const or
-            StackInstructionKind.Int_Mul_Const_Add_Binary or
-            StackInstructionKind.Int_Less_Than_Binary or StackInstructionKind.Int_Less_Than_Or_Equal_Binary or
-            StackInstructionKind.Int_Less_Than_Const or StackInstructionKind.Int_Less_Than_Or_Equal_Const or
-            StackInstructionKind.Int_Greater_Than_Or_Equal_Const =>
-            false,
-
-            StackInstructionKind.Skip_Binary or StackInstructionKind.Take_Binary or StackInstructionKind.Skip_Head_Binary or
-            StackInstructionKind.Slice_Skip_Var_Take_Const or StackInstructionKind.Slice_Skip_Var_Take_Var or
-            StackInstructionKind.Slice_Skip_Var_Equal_Const =>
-            index == 0,
-
-            _ =>
-            true
-        };
-
-    private static bool IsScalarProducer(StackInstructionKind kind) =>
-        kind is
-        StackInstructionKind.Length or StackInstructionKind.Length_Equal_Const or
-        StackInstructionKind.Int_Add_Binary or StackInstructionKind.Int_Add_Const or
-        StackInstructionKind.Int_Mul_Binary or StackInstructionKind.Int_Mul_Const or
-        StackInstructionKind.Int_Mul_Const_Add_Binary or
-        StackInstructionKind.Int_Less_Than_Binary or StackInstructionKind.Int_Less_Than_Or_Equal_Binary or
-        StackInstructionKind.Int_Less_Than_Const or StackInstructionKind.Int_Less_Than_Or_Equal_Const or
-        StackInstructionKind.Int_Greater_Than_Or_Equal_Const or
-        StackInstructionKind.Equal_Binary or StackInstructionKind.Not_Equal_Binary or
-        StackInstructionKind.Equal_Binary_Const or StackInstructionKind.Not_Equal_Binary_Const or
-        StackInstructionKind.Is_List_Value or StackInstructionKind.Is_Blob_Value or
-        StackInstructionKind.Logical_And_Binary;
-
     public static IEnumerable<PineBlockId> Successors(PineControlFlowTerminator terminator) =>
         Edges(terminator).Select(edge => edge.Target).Distinct();
 
-    private static IEnumerable<(PineBlockId Target, IReadOnlyList<PineVirtualValueId> Arguments)> Edges(
+    public static IEnumerable<(PineBlockId Target, IReadOnlyList<PineVirtualValueId> Arguments)> Edges(
         PineControlFlowTerminator terminator)
     {
         switch (terminator)

@@ -1,15 +1,13 @@
 #nullable enable
+using global::System.Numerics;
+
 using PineValueInProcess = global::Pine.Core.Internal.PineValueInProcess;
-using NativeValue = global::Pine.Core.DotNet.PineCSharpValue;
 
 public static class CompiledPine
 {
     public static PineValueInProcess Expr_8cc9e8192d_dispatch(PineValueInProcess environment)
     {
-        PineValueInProcess result_0 =
-            Expr_8cc9e8192d_constraint_generic(environment.GetElementAt(0), environment.GetElementAt(1));
-
-        return result_0;
+        return Expr_8cc9e8192d_constraint_generic(environment.GetElementAt(0), environment.GetElementAt(1));
     }
 
     /// <summary>Function 0; unconstrained environment. Arguments: 0 = [0]; 1 = [1].</summary>
@@ -17,9 +15,13 @@ public static class CompiledPine
         PineValueInProcess argument_0,
         PineValueInProcess argument_1)
     {
-        PineValueInProcess state_0 = argument_0;
-        PineValueInProcess state_1 = argument_1;
-        NativeValue value_0_2 = NativeValue.Add(NativeValue.FromValue(state_0), NativeValue.FromValue(state_1));
-        return value_0_2.ToPineValue();
+        BigInteger? value_0_2 =
+            ((argument_0).AsInteger() is { } left_value_0_2 && (argument_1).AsInteger() is { } right_value_0_2
+            ?
+            (BigInteger?)(left_value_0_2 + right_value_0_2)
+            :
+            null);
+
+        return (value_0_2 is { } scalar_0 ? PineValueInProcess.CreateInteger(scalar_0) : PineValueInProcess.EmptyList);
     }
 }

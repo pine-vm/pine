@@ -61,14 +61,14 @@ internal static class PineCSharpConstantMatch
     public static void Emit(
         StringBuilder text,
         IReadOnlyList<Case> cases,
-        PineCSharpExpression memory,
+        string memory,
         string offset,
         string suffix,
         Func<PineValue, string> canonicalLiteral,
         Action<StringBuilder>? noMatch = null)
     {
         var shape = Shape(cases[0].Literal);
-        string Slot(int index) => memory.Code + ".Span[" + offset + (index == 0 ? "" : " + " + index) + "]";
+        string Slot(int index) => memory + ".Span[" + offset + (index == 0 ? "" : " + " + index) + "]";
 
         string Constant(Case item, int index) =>
             shape.Blob

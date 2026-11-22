@@ -1,15 +1,13 @@
 #nullable enable
+using global::System.Numerics;
+
 using PineValueInProcess = global::Pine.Core.Internal.PineValueInProcess;
-using NativeValue = global::Pine.Core.DotNet.PineCSharpValue;
 
 public static class CompiledPine
 {
     public static PineValueInProcess Expr_44a20a026b_dispatch(PineValueInProcess environment)
     {
-        PineValueInProcess result_0 =
-            Expr_da2d7c14b7_constraint_61f0e0538f(environment.GetElementAt(0), environment.GetElementAt(1));
-
-        return result_0;
+        return Expr_da2d7c14b7_constraint_61f0e0538f(environment.GetElementAt(0), environment.GetElementAt(1));
     }
 
     /// <summary>Function 0; unconstrained environment. Arguments: 0 = [0]; 1 = [1].</summary>
@@ -17,8 +15,6 @@ public static class CompiledPine
         PineValueInProcess argument_0,
         PineValueInProcess argument_1)
     {
-        PineValueInProcess state_0 = argument_0;
-        PineValueInProcess state_1 = argument_1;
         return Expr_da2d7c14b7_constraint_61f0e0538f(argument_0, argument_1);
     }
 
@@ -27,22 +23,24 @@ public static class CompiledPine
         PineValueInProcess argument_0,
         PineValueInProcess argument_1)
     {
-        NativeValue state_0 = NativeValue.FromValue(argument_0);
-        NativeValue state_1 = NativeValue.FromValue(argument_1);
+        (PineValueInProcess? Original, BigInteger? Number) state_0 = (argument_0, null);
+        (PineValueInProcess? Original, BigInteger? Number) state_1 = (argument_1, null);
 
         while (true)
         {
-            NativeValue value_1_1 =
-                NativeValue.FromBoolean(NativeValue.LessThanOrEqual(state_0, NativeValue.FromInt64(0L)));
-
-            if (value_1_1.IsTrue())
+            if ((state_0.Original?.AsInteger() ?? state_0.Number) <= BigInteger.Zero)
             {
-                return state_1.ToPineValue();
+                return
+                    (state_1.Original ??
+                    (state_1.Number is { } scalar_0
+                    ?
+                    PineValueInProcess.CreateInteger(scalar_0)
+                    :
+                    PineValueInProcess.EmptyList));
             }
 
-            state_0 = NativeValue.Add(state_0, NativeValue.FromInt64(-1L));
-            state_1 = NativeValue.Add(state_1, NativeValue.FromInt64(1L));
-            continue;
+            state_0 = (null, (state_0.Original?.AsInteger() ?? state_0.Number) + BigInteger.MinusOne);
+            state_1 = (null, (state_1.Original?.AsInteger() ?? state_1.Number) + BigInteger.One);
         }
     }
 }

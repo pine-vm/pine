@@ -152,6 +152,55 @@ public class PineCSharpCompilerTests
     }
 
     [Fact]
+    public void Pine_CSharp_hoists_the_invariant_length_guard_and_retains_cancellation()
+    {
+        var scenario = PineCSharpScenarios.Load("loop-invariant-length");
+        var compilation = Compile(scenario, "with-cancellation");
+
+        var worker =
+            SyntaxFactory.ParseCompilationUnit(compilation.MethodsSource).DescendantNodes()
+            .OfType<MethodDeclarationSyntax>().Last();
+
+        var loop = worker.Body!.Statements.OfType<WhileStatementSyntax>().Should().ContainSingle().Subject;
+        var guard = worker.Body.Statements.OfType<IfStatementSyntax>().Should().ContainSingle().Subject;
+
+        guard.SpanStart.Should().BeLessThan(loop.SpanStart);
+        guard.Condition.ToString().Should().Contain("BigInteger.Zero");
+        worker.ToString().Should().NotContain("goto ").And.NotContain("bool?").And.NotContain("state_1");
+        loop.ToString().Should().Contain("ThrowIfCancellationRequested()").And.NotContain("GetLength()");
+
+        using var assembly = Load(compilation);
+        var empty = PineValueInProcess.Create(scenario.Evaluation("empty-data").Environment);
+        using var cancelled = new CancellationTokenSource();
+        cancelled.Cancel();
+        Action evaluate = () => assembly.Evaluate(empty, cancelled.Token);
+        evaluate.Should().Throw<OperationCanceledException>();
+    }
+
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public void Pine_CSharp_branches_on_comparison_without_matching_invalid_as_false(bool matchTrue)
+    {
+        var graph =
+            PineControlFlowGraph.FromFragment(
+                PineControlFlowFragment.Empty
+                .AppendOperations([StackInstruction.Local_Get(0), StackInstruction.Int_Less_Than_Or_Equal_Const(0)])
+                .Append(
+                    new PineControlFlowNode.Conditional(
+                        matchTrue ? PineKernelValues.TrueValue : PineKernelValues.FalseValue,
+                        PineControlFlowFragment.Empty.AppendOperation(StackInstruction.Push_Literal(NumberValue(1))),
+                        PineControlFlowFragment.Empty.AppendOperation(StackInstruction.Push_Literal(NumberValue(2))))));
+
+        var compilation = EmitGraph(graph);
+        compilation.MethodsSource.Should().NotContain("bool?");
+        using var assembly = Load(compilation);
+
+        foreach (var input in new[] { NumberValue(-1), NumberValue(1), PineValue.EmptyList })
+            assembly.Evaluate(PineValueInProcess.Create(input))!.Evaluate().Should().Be(EvaluateGraph(graph, input));
+    }
+
+    [Fact]
     public void Pine_CSharp_cancellation_interrupts_a_running_tail_loop()
     {
         var scenario = PineCSharpScenarios.Load("mutual-tail");
@@ -185,6 +234,41 @@ public class PineCSharpCompilerTests
         vm.EvaluateExpression(caller, mismatching)
             .Extract(error => throw new Exception(error)).Should().Be(
             PineCSharpScenarios.ExpectedValue(scenario, "generic-and-specialized", "mismatching"));
+    }
+
+    [Fact]
+    public void Pine_CSharp_specialization_guards_compare_materialized_paths_without_wrapping_them()
+    {
+        var noncanonical = PineValue.Blob([4, 0, 1]);
+        var constraint = PineValueClass.Create([new KeyValuePair<IReadOnlyList<int>, PineValue>([0, 0], noncanonical)]);
+
+        var compilation =
+            Compile(Number(2), [constraint], new(IncludeGenericEntry: false, EnableCancellation: false));
+
+        using var assembly = Load(compilation);
+        var matching = PineValueInProcess.Create(PineValue.List([PineValue.List([noncanonical])]));
+        var mismatching = PineValueInProcess.Create(PineValue.List([PineValue.List([NumberValue(1)])]));
+        var mixed = PineValueInProcess.CreateList([PineValueInProcess.Create(PineValue.List([noncanonical]))]);
+
+        assembly.Evaluate(matching)!.Evaluate().Should().Be(NumberValue(2));
+
+        using var profile = new PineVMWorkProfile(referenceCapacity: 0);
+        PineValueInProcess? match;
+        PineValueInProcess? mismatch;
+        PineValueInProcess? mixedMatch;
+
+        using (profile.Enter())
+        {
+            match = assembly.Evaluate(matching);
+            mismatch = assembly.Evaluate(mismatching);
+            mixedMatch = assembly.Evaluate(mixed);
+        }
+
+        match!.Evaluate().Should().Be(NumberValue(2));
+        mismatch.Should().BeNull();
+        mixedMatch.Should().BeSameAs(match);
+        profile[PineVMWorkProfile.Metric.CreateCalls].Should().Be(0);
+        profile[PineVMWorkProfile.Metric.WrapperAllocations].Should().Be(0);
     }
 
     [Fact]
@@ -246,9 +330,17 @@ public class PineCSharpCompilerTests
                 (StackInstruction.Slice_Skip_Var_Take_Var, [blob, NumberValue(-1), NumberValue(2)]),
                 (StackInstruction.Slice_Skip_Var_Take_Const(2), [list, PineValue.EmptyBlob]),
                 (StackInstruction.Int_Mul_Const_Add_Binary(3), [NumberValue(4), NumberValue(5)]),
+                (StackInstruction.Int_Mul_Const_Add_Binary(3), [NumberValue(4), PineValue.EmptyList]),
                 (StackInstruction.Int_Add_Const(BigInteger.One << 80), [NumberValue(4)]),
                 (StackInstruction.Int_Unsigned_Add_Const(2), [blob]),
                 (StackInstruction.Int_Mul_Binary, [PineValue.EmptyList, NumberValue(2)]),
+                (StackInstruction.Int_Mul_Binary,
+                [
+                IntegerEncoding.EncodeSignedInteger(long.MaxValue),
+                IntegerEncoding.EncodeSignedInteger(long.MaxValue)
+                ]),
+                (StackInstruction.Int_Less_Than_Binary, [PineValue.EmptyList, NumberValue(2)]),
+                (StackInstruction.Int_Less_Than_Binary, [NumberValue(2), NumberValue(1)]),
                 (StackInstruction.Prepend_List_Items(2), [NumberValue(5), NumberValue(6), list]),
                 (StackInstruction.Append_List_Items(2), [list, NumberValue(5), NumberValue(6)]),
                 (StackInstruction.Build_List_With_Prefix(list, 2), [NumberValue(5), NumberValue(6)]),
@@ -342,9 +434,11 @@ public class PineCSharpCompilerTests
                         PineSwitchKind.SliceSkipVarEqual,
                         [new(PineValue.Blob([1, 2]), 0), new(PineValue.Blob([3, 4]), 1), new(PineValue.EmptyList, 2)],
                         PineControlFlowFragment.Empty.AppendOperation(StackInstruction.Push_Literal(NumberValue(0))),
-                        Enumerable.Range(1, 3).Select(
-                            value => PineControlFlowFragment.Empty
-                            .AppendOperation(StackInstruction.Push_Literal(NumberValue(value)))).ToImmutableArray(),
+                        [
+                            .. Enumerable.Range(1, 3).Select(
+                                value => PineControlFlowFragment.Empty
+                                .AppendOperation(StackInstruction.Push_Literal(NumberValue(value))))
+                        ],
                         SkipCountMultiplier: 4,
                         ResultCount: 1)));
 
@@ -856,7 +950,7 @@ public class PineCSharpCompilerTests
             PineValue.List(
                 [
                 PineValue.EmptyList,
-                PineValue.List(Enumerable.Range(0, 11).Select(index => NumberValue(index)).ToArray())
+                PineValue.List([.. Enumerable.Range(0, 11).Select(index => NumberValue(index))])
                 ]);
 
         assembly.Evaluate(PineValueInProcess.Create(input))!.Evaluate().Should().Be(EvaluateGraph(graph, input));
@@ -868,12 +962,14 @@ public class PineCSharpCompilerTests
     public void Pine_CSharp_shared_blob_and_list_matches_preserve_exact_values_and_source_kinds(bool lists)
     {
         PineValue[] literals =
-            Enumerable.Range(1, 3).Select(
+            [
+            .. Enumerable.Range(1, 3).Select(
                 index => lists
                 ?
                 (PineValue)PineValue.List([NumberValue(99), NumberValue(index), NumberValue(100)])
                 :
-                PineValue.Blob([0, (byte)index, 0])).ToArray();
+                PineValue.Blob([0, (byte)index, 0]))
+            ];
 
         var graph =
             PineControlFlowGraph.FromFragment(
@@ -1124,6 +1220,42 @@ public class PineCSharpCompilerTests
         run.Should().Throw<OperationCanceledException>();
     }
 
+    [Fact]
+    public void Pine_CSharp_cursor_counts_without_allocating_per_character()
+    {
+        var graph = CursorGraph([StringEncoding.ValueFromString("a"), StringEncoding.ValueFromString("b")], 1);
+        var parameters = StaticFunctionInterface.FromPathsSorted([[0], [1], [2]]);
+        using var assembly = Load(EmitGraph(graph, parameters: parameters));
+
+        const int length = 100000;
+
+        var source =
+            PineValueInProcess.CreateList(
+                [
+                    PineValueInProcess.EmptyList, PineValueInProcess.EmptyList,
+                    PineValueInProcess.Create(StringEncoding.ValueFromString(new string('a', length)))
+                ]);
+
+        var environment =
+            PineValueInProcess.CreateList(
+                [
+                source,
+                PineValueInProcess.CreateInteger(0),
+                PineValueInProcess.CreateInteger(10)
+                ]);
+
+        assembly.Evaluate(environment)!.AsInteger().Should().Be(new BigInteger(length + 10));
+        var before = GC.GetAllocatedBytesForCurrentThread();
+        var result = assembly.Evaluate(environment);
+        var allocated = GC.GetAllocatedBytesForCurrentThread() - before;
+
+        result!.AsInteger().Should().Be(new BigInteger(length + 10));
+
+        allocated.Should().BeLessThan(
+            4096,
+            "the cursor and its accumulator should not allocate wrappers per character");
+    }
+
     private static PineControlFlowGraph CursorGraph(PineValue[] literals, int step) =>
         PineControlFlowGraph.FromFragment(
             PineControlFlowFragment.Empty
@@ -1167,6 +1299,39 @@ public class PineCSharpCompilerTests
         var result = assembly.Evaluate(PineValueInProcess.CreateInteger(19999))!;
         result.GetElementAt(0).Should().BeSameAs(result.GetElementAt(1));
         result.GetElementAt(0).AsInteger().Should().Be(new BigInteger(119999));
+    }
+
+    [Theory]
+    [InlineData(3)]
+    [InlineData(4)]
+    [InlineData(5)]
+    public void Pine_CSharp_list_construction_keeps_deferred_children(int arity)
+    {
+        var graph =
+            PineControlFlowGraph.FromFragment(
+                PineControlFlowFragment.Empty.AppendOperations(
+                    [
+                        .. Enumerable.Range(0, arity)
+                        .Select(index => StackInstruction.Local_Get_Skip_Head_Const(0, index)),
+                        StackInstruction.Build_List(arity),
+                    ]));
+
+        using var assembly = Load(EmitGraph(graph));
+        var items = Enumerable.Range(123456, arity).Select(value => PineValueInProcess.CreateInteger(value)).ToArray();
+        var input = PineValueInProcess.CreateList(items);
+        var result = assembly.Evaluate(input)!;
+        result.GetLength().Should().Be(arity);
+
+        for (var index = 0; index < arity; ++index)
+            result.GetElementAt(index).Should().BeSameAs(items[index]);
+
+        PineValueInProcess.AreEqual(result, input).Should().BeTrue();
+        PineValueInProcess.Slice(1, 2, result).GetElementAt(0).Should().BeSameAs(items[1]);
+        result.EvaluatedOrNull.Should().BeNull();
+        items.Should().OnlyContain(item => item.EvaluatedOrNull == null);
+
+        var concreteInput = input.Evaluate();
+        result.Evaluate().Should().Be(EvaluateGraph(graph, concreteInput));
     }
 
     [Fact]

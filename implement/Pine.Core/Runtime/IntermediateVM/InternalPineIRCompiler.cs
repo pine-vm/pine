@@ -370,7 +370,7 @@ internal class InternalPineIRCompiler
                     CompileProducer(
                         list.Items[child],
                         depth + 1,
-                        slots.Where(index => layout.Slots[index].Path[depth] == child).ToArray());
+                        [.. slots.Where(index => layout.Slots[index].Path[depth] == child)]);
                 }
 
                 return;

@@ -12,6 +12,7 @@ using System.Numerics;
 using System.Text;
 
 using Function = Pine.Core.DotNet.PineCSharpCompiler.Function;
+using LocalType = Pine.Core.DotNet.PineCSharpLocalType;
 
 namespace Pine.Core.DotNet;
 
@@ -49,8 +50,6 @@ internal sealed partial class PineCSharpEmitter
 
     private readonly Dictionary<Function, PineCSharpFunctionPlan> _plans = [];
 
-    private IReadOnlySet<string> _activeScalars = new HashSet<string>();
-
     private readonly HashSet<string> _retainedLocals = [];
 
     private readonly List<List<Function>> _groups;
@@ -81,7 +80,7 @@ internal sealed partial class PineCSharpEmitter
             PineCSharpCompiler.ValidateIdentifier(name, "method");
 
             if (name == options.ClassName ||
-                name is "PineValue" or "PineValueInProcess" or "NativeValue" or "SliceOffset" or "BigInteger" or
+                name is "PineValue" or "PineValueInProcess" or "SliceOffset" or "BigInteger" or
                 "BlobMemory" or "ListMemory" or "Kernel" or "Specialized" ||
                 name.StartsWith("Loop_", StringComparison.Ordinal))
             {
@@ -98,16 +97,12 @@ internal sealed partial class PineCSharpEmitter
 
         foreach (var function in functions)
         {
-            _tailCalls.Add(function, function.Calls.Keys.Where(block => IsTailCall(function, block)).ToHashSet());
+            _tailCalls.Add(function, [.. function.Calls.Keys.Where(block => IsTailCall(function, block))]);
             _loops.Add(function, function.Graph.AnalyzeLoops());
 
             _plans.Add(
                 function,
-                new(
-                    function,
-                    _tailCalls[function],
-                    index => Local(function, index),
-                    value => Value(function, value)));
+                new(function, _tailCalls[function]));
         }
 
         var reachable = new HashSet<Function>();
@@ -122,7 +117,7 @@ internal sealed partial class PineCSharpEmitter
             }
         }
 
-        _functions = functions.Where(reachable.Contains).ToArray();
+        _functions = [.. functions.Where(reachable.Contains)];
 
         foreach (var function in _functions)
         {
@@ -174,7 +169,7 @@ internal sealed partial class PineCSharpEmitter
 
                 methods.AppendLine("{");
                 var arguments = new List<string> { function.Identity.Index.ToString(CultureInfo.InvariantCulture) };
-                var scalars = GroupScalars(group);
+                var types = PlanLocals(group);
 
                 arguments.AddRange(
                     Enumerable.Range(0, group.Max(member => member.Prepared.Parameters.ParamsPaths.Count))
@@ -188,7 +183,7 @@ internal sealed partial class PineCSharpEmitter
                                 :
                                 "PineValueInProcess.EmptyList";
 
-                            return scalars.Contains("state_" + index) ? "NativeValue.FromValue(" + input + ")" : input;
+                            return ConvertValue(types.GetValueOrDefault("state_" + index), input, LocalType.Pine);
                         }));
 
                 arguments.AddRange(TokenArgument());
@@ -263,9 +258,7 @@ internal sealed partial class PineCSharpEmitter
 
     private void EmitEntry(StringBuilder text)
     {
-        _activeScalars = new HashSet<string>();
-        _lengthVariables = new HashSet<string>();
-        _expressionScope = new();
+        _localTypes = new Dictionary<string, LocalType>();
 
         text.AppendLine(
             "public static PineValueInProcess" +
@@ -284,11 +277,9 @@ internal sealed partial class PineCSharpEmitter
             {
                 var tests =
                     constraint.ParsedItems.Select(
-                        (item, index) =>
-                        "PineValueInProcess.ValueInProcessFromPathOrNull(environment, [" +
-                        string.Join(", ", item.Key) + "]) is { } guard_" + root.Identity.Index + "_" + index +
-                        " && PineValueInProcess.AreEqual(guard_" + root.Identity.Index + "_" + index + ", " +
-                        Literal(item.Value) + ")");
+                        item =>
+                        "PineValueInProcess.ValueAtPathEquals(environment, [" +
+                        string.Join(", ", item.Key) + "], " + Literal(item.Value) + ")");
 
                 text.AppendLine("if (" + string.Join(" && ", tests.DefaultIfEmpty("true")) + ")");
                 text.AppendLine("{");
@@ -316,12 +307,19 @@ internal sealed partial class PineCSharpEmitter
                 continue;
             }
 
-            text.AppendLine(ReturnType(root.Prepared.Returns) + " result_" + root.Identity.Index + " = " + call + ";");
+            if (root.Prepared.Returns.Equals(ReturnValueLayout.Canonical))
+                text.AppendLine("return " + call + ";");
 
-            EmitReconstructedReturn(
-                text,
-                root.Prepared.Returns,
-                index => Component("result_" + root.Identity.Index, root.Prepared.Returns, index));
+            else
+            {
+                text.AppendLine(
+                    ReturnType(root.Prepared.Returns) + " result_" + root.Identity.Index + " = " + call + ";");
+
+                EmitReconstructedReturn(
+                    text,
+                    root.Prepared.Returns,
+                    index => Component("result_" + root.Identity.Index, root.Prepared.Returns, index));
+            }
 
             if (root.Identity.EnvironmentConstraint is not null)
                 text.AppendLine("}");
@@ -336,22 +334,17 @@ internal sealed partial class PineCSharpEmitter
     private void EmitBody(StringBuilder text, List<Function> group, string name, Function? entry)
     {
         var returns = group[0].Prepared.Returns;
-        _activeScalars = GroupScalars(group);
-
-        _lengthVariables =
-            group.SelectMany(
-                function => _plans[function].Blocks.SelectMany(
-                    block =>
-                    block.Operations.Where(operation => operation.Instruction.Kind == StackInstructionKind.Length)
-                    .SelectMany(operation => operation.Results).Select(value => Value(function, value)))).ToHashSet();
+        _localTypes = PlanLocals(group);
 
         var parameters =
             entry is not null
             ?
             Parameters(entry).ToList()
             :
-            Enumerable.Range(0, group.Max(function => function.Prepared.Parameters.ParamsPaths.Count))
-            .Select(index => TypeOf("state_" + index) + " state_" + index).ToList();
+            [
+            .. Enumerable.Range(0, group.Max(function => function.Prepared.Parameters.ParamsPaths.Count)).Select(
+                index => TypeOf("state_" + index) + " state_" + index)
+            ];
 
         if (entry is null)
             parameters.Insert(0, "int entry");
@@ -390,7 +383,7 @@ internal sealed partial class PineCSharpEmitter
             {
                 text.AppendLine(
                     TypeOf(Local(entry, index)) + " " + Local(entry, index) + " = " +
-                    ConvertValue(Local(entry, index), "argument_" + index) + ";");
+                    ConvertValue(Local(entry, index), "argument_" + index, LocalType.Pine) + ";");
             }
         }
 
@@ -452,10 +445,6 @@ internal sealed partial class PineCSharpEmitter
             foreach (var block in _plans[function].Blocks)
             {
                 _constantValues.Clear();
-                _expressionScope = new();
-
-                foreach (var length in _lengthVariables)
-                    _expressionScope.SetInteger(length, new(length, PineCSharpExpressionType.Int64));
 
                 text.AppendLine(Label(function, block.Id) + ":");
                 text.AppendLine("{");
@@ -464,7 +453,7 @@ internal sealed partial class PineCSharpEmitter
                     Cancellation(text);
 
                 var stack = block.Parameters.Select(value => Value(function, value)).ToList();
-                var lengthCondition = LengthCondition(block);
+                var branchCondition = BranchCondition(function, block);
 
                 for (var operationIndex = 0; operationIndex < block.Operations.Length; operationIndex++)
                 {
@@ -473,7 +462,7 @@ internal sealed partial class PineCSharpEmitter
 
                     var operation = block.Operations[operationIndex];
 
-                    if (operation != lengthCondition)
+                    if (operation != branchCondition?.Operation)
                         EmitOperation(text, function, block.Id, operationIndex, operation, stack);
 
                     if (operation.Instruction.Kind == StackInstructionKind.Parse_Error_Const)
@@ -484,7 +473,7 @@ internal sealed partial class PineCSharpEmitter
                 }
 
                 if (!block.Operations.Any(operation => operation.Instruction.Kind == StackInstructionKind.Parse_Error_Const))
-                    EmitTerminator(text, function, block, stack);
+                    EmitTerminator(text, function, block, stack, branchCondition?.Code);
 
                 text.AppendLine("}");
             }
@@ -539,14 +528,25 @@ internal sealed partial class PineCSharpEmitter
         return true;
     }
 
-    private void EmitTerminator(StringBuilder text, Function function, PineBasicBlock block, List<string> stack)
+    private void EmitTerminator(
+        StringBuilder text, Function function, PineBasicBlock block, List<string> stack, string? branchCondition)
     {
         string V(PineVirtualValueId value) => Value(function, value);
 
         switch (block.Terminator)
         {
             case PineControlFlowTerminator.Return returned:
-                text.AppendLine("return " + Tuple(stack.TakeLast(returned.ValueCount).Select(Pine)) + ";");
+                text.AppendLine(
+                    "return " +
+                    Tuple(
+                        stack.TakeLast(returned.ValueCount).Select(
+                            variable =>
+                            Storage(variable) != LocalType.Pine && ConstantValue(variable) is { } literal
+                            ?
+                            Literal(literal)
+                            :
+                            Pine(variable))) + ";");
+
                 break;
 
             case PineControlFlowTerminator.Jump jump:
@@ -554,13 +554,7 @@ internal sealed partial class PineCSharpEmitter
                 break;
 
             case PineControlFlowTerminator.ConditionalJump branch:
-                var condition =
-                    LengthCondition(block) is { } lengthCondition
-                    ?
-                    (branch.Literal.Equals(PineKernelValues.FalseValue) ? "!" : "") +
-                    LengthEqual(V(lengthCondition.Inputs[0]), lengthCondition.Instruction.IntegerLiteral!.Value)
-                    :
-                    Equal(stack[^1], branch.Literal);
+                var condition = branchCondition ?? Equal(stack[^1], branch.Literal);
 
                 text.AppendLine("if (" + condition + ")");
                 text.AppendLine("{");
@@ -572,17 +566,19 @@ internal sealed partial class PineCSharpEmitter
             case PineControlFlowTerminator.Switch choice:
                 if (choice.Kind == PineSwitchKind.Equal)
                 {
-                    if (CanInlineCases(choice.Cases.Select(item => item.Literal).ToArray()))
+                    if (CanInlineCases([.. choice.Cases.Select(item => item.Literal)]))
                     {
                         EmitMatchCases(
                             text,
                             stack[^1],
-                            choice.Cases.Select(
-                                item =>
-                                new PineCSharpConstantMatch.Case(
-                                    item.Literal,
-                                    destination =>
-                                    Edge(destination, function, block.Id, item.Target, choice.Arguments.Select(V)))).ToArray());
+                            [
+                                .. choice.Cases.Select(
+                                    item =>
+                                    new PineCSharpConstantMatch.Case(
+                                        item.Literal,
+                                        destination =>
+                                        Edge(destination, function, block.Id, item.Target, choice.Arguments.Select(V))))
+                            ]);
 
                         Edge(text, function, block.Id, choice.FallThrough, choice.Arguments.Select(V));
                         break;
@@ -639,7 +635,7 @@ internal sealed partial class PineCSharpEmitter
                     var offset = "offset_" + suffix;
 
                     text.AppendLine(
-                        "if (sliceOffset.Get(" + View(stack[^1]) + ", " +
+                        "if (sliceOffset.Get(" + Numeric(stack[^1]) + ", " +
                         Integer(choice.SkipCountMultiplier) + ") is { } " + offset + ")");
 
                     text.AppendLine("{");
@@ -647,12 +643,14 @@ internal sealed partial class PineCSharpEmitter
                     EmitMatchCases(
                         text,
                         stack[^2],
-                        choice.Cases.Select(
-                            item =>
-                            new PineCSharpConstantMatch.Case(
-                                item.Literal,
-                                destination =>
-                                Edge(destination, function, block.Id, item.Target, choice.Arguments.Select(V)))).ToArray(),
+                        [
+                            .. choice.Cases.Select(
+                                item =>
+                                new PineCSharpConstantMatch.Case(
+                                    item.Literal,
+                                    destination =>
+                                    Edge(destination, function, block.Id, item.Target, choice.Arguments.Select(V))))
+                        ],
                         offset);
 
                     text.AppendLine("}");
@@ -728,7 +726,7 @@ internal sealed partial class PineCSharpEmitter
                     function,
                     function.Calls[block.Id],
                     tail.InvokeInstruction,
-                    stack.TakeLast(StackInstruction.GetStackEffect(tail.InvokeInstruction).PopCount).ToArray());
+                    [.. stack.TakeLast(StackInstruction.GetStackEffect(tail.InvokeInstruction).PopCount)]);
 
                 break;
 
@@ -747,7 +745,7 @@ internal sealed partial class PineCSharpEmitter
         var arguments =
             instruction.Kind == StackInstructionKind.Eval_Const
             ?
-            callee.Prepared.Parameters.ParamsPaths.Select(path => Project(inputs[0], path)).ToArray()
+            [.. callee.Prepared.Parameters.ParamsPaths.Select(path => Project(Pine(inputs[0]), path))]
             :
             inputs;
 
@@ -854,25 +852,25 @@ internal sealed partial class PineCSharpEmitter
 
         var assignments = targets.Zip(values).Where(pair => pair.First != pair.Second).ToArray();
         var constants = assignments.Select(pair => ConstantValue(pair.Second)).ToArray();
-        var integerViews = assignments.Select(pair => _expressionScope.Integer(pair.Second)).ToArray();
 
         for (var index = 0; index < assignments.Length; index++)
         {
             _constantValues.Remove(assignments[index].First);
-            _expressionScope.Forget(assignments[index].First);
 
             if (constants[index] is { } constant)
                 _constantValues[assignments[index].First] = constant;
 
-            if (integerViews[index] is { } integer)
-                SetIntegerView(assignments[index].First, integer.Type == PineCSharpExpressionType.NullableBigInteger);
         }
 
         EmitAssignments(
             text,
-            assignments.Select(
-                pair =>
-                (Target: pair.First, Expression: ConvertValue(pair.First, pair.Second), Type: TypeOf(pair.First))).ToArray());
+            [
+                .. assignments.Select(
+                    pair =>
+                    (Target: pair.First,
+                    Expression: ConvertValue(pair.First, pair.Second, Storage(pair.Second)),
+                    Type: TypeOf(pair.First)))
+            ]);
     }
 
     private void EmitAssignments(
@@ -914,127 +912,62 @@ internal sealed partial class PineCSharpEmitter
         }
     }
 
-    private HashSet<string> GroupScalars(IEnumerable<Function> group)
-    {
-        var functions = group.ToArray();
-        var variables = functions.SelectMany(function => _plans[function].ScalarVariables).ToHashSet();
-
-        for (var index = 0; index < functions.Max(function => function.Prepared.Parameters.ParamsPaths.Count); index++)
-        {
-            if (functions.Any(
-                function => index < function.Prepared.Parameters.ParamsPaths.Count &&
-                    !_plans[function].ScalarVariables.Contains("state_" + index)))
-            {
-                variables.Remove("state_" + index);
-            }
-        }
-
-        return variables;
-    }
-
-    private string TypeOf(string variable) =>
-        _lengthVariables.Contains(variable)
-        ?
-        "long"
-        :
-        _activeScalars.Contains(variable) ? "NativeValue" : "PineValueInProcess";
-
-    private string Empty(string variable) =>
-        _lengthVariables.Contains(variable)
-        ?
-        "0L"
-        :
-        _activeScalars.Contains(variable) ? "default" : "PineValueInProcess.EmptyList";
-
-    private string Pine(string variable) =>
-        _lengthVariables.Contains(variable)
-        ?
-        "PineValueInProcess.CreateInteger(" + variable + ")"
-        :
-        _activeScalars.Contains(variable) ? variable + ".ToPineValue()" : variable;
-
-    private string View(string variable) =>
-        _lengthVariables.Contains(variable)
-        ?
-        "NativeValue.FromInt64(" + variable + ")"
-        :
-        _activeScalars.Contains(variable) ? variable : "NativeValue.FromValue(" + variable + ")";
-
-    private string ConvertValue(string destination, string source, bool native = false) =>
-        _activeScalars.Contains(destination)
-        ?
-        _lengthVariables.Contains(source)
-        ?
-        View(source)
-        :
-        native || _activeScalars.Contains(source) ? source : "NativeValue.FromValue(" + source + ")"
-        :
-        native ? "(" + source + ").ToPineValue()" : Pine(source);
-
-    private void WriteValue(StringBuilder text, string destination, string source, bool native = false)
+    private void WriteValue(StringBuilder text, string destination, string source, LocalType type = LocalType.Pine)
     {
         var constant = ConstantValue(source);
         _constantValues.Remove(destination);
-        _expressionScope.Forget(destination);
 
         if (constant is not null)
             _constantValues[destination] = constant;
 
-        text.AppendLine(destination + " = " + ConvertValue(destination, source, native) + ";");
+        text.AppendLine(destination + " = " + ConvertValue(destination, source, type) + ";");
     }
 
     private PineValue? ConstantValue(string expression) =>
-        _literalValues.GetValueOrDefault(expression) ??
-        _constantValues.GetValueOrDefault(expression) ??
-        (expression.EndsWith(".ToPineValue()", StringComparison.Ordinal)
-        ?
-        _constantValues.GetValueOrDefault(expression[..^14])
-        :
-        null);
+        _literalValues.GetValueOrDefault(expression) ?? _constantValues.GetValueOrDefault(expression);
 
     private string Equal(string input, PineValue literal, bool negated = false)
     {
-        var candidates =
-            new List<(string Code, int Cost)>
-            {
-                ((negated ? "!" : "") + "PineValueInProcess.AreEqual(" + Pine(input) + ", " + Literal(literal) + ")", 100)
-            };
+        var type = Storage(input);
+        var op = negated ? " != " : " == ";
+        var empty = literal.Equals(PineValue.EmptyList);
+        var matchTrue = literal.Equals(PineKernelValues.TrueValue);
+        var matchFalse = literal.Equals(PineKernelValues.FalseValue);
+        var mismatch = negated ? "true" : "false";
 
-        if (_activeScalars.Contains(input) && !_lengthVariables.Contains(input) &&
-            literal.Equals(PineKernelValues.TrueValue))
-        {
-            candidates.Add(((negated ? "!" : "") + input + ".IsTrue()", 0));
-        }
+        string Structural(string value) =>
+            (negated ? "!" : "") + "PineValueInProcess.AreEqual(" + value + ", " + Literal(literal) + ")";
 
-        if (_expressionScope.Integer(input) is { } integer &&
-            Encodings.IntegerEncoding.ParseSignedIntegerStrict(literal).IsOkOrNullable() is { } number)
-        {
-            candidates.Add(
-                (PineCSharpExpressionScope.Equality(
-                    integer,
-                    new(Integer(number), PineCSharpExpressionType.BigInteger),
-                    negated),
-                integer.Cost));
-        }
-
-        return PineCSharpExpressionScope.Cheapest(candidates);
-    }
-
-    private void SetIntegerView(string variable, bool nullable) =>
-        _expressionScope.SetInteger(
-            variable,
-            _lengthVariables.Contains(variable)
+        string CompareNumber(string number, bool optional) =>
+            empty && optional
             ?
-            new(variable, PineCSharpExpressionType.Int64)
+            number + op + "null"
             :
-            new(
-                variable + ".AsInteger()",
-                nullable
-                ?
-                PineCSharpExpressionType.NullableBigInteger
-                :
-                PineCSharpExpressionType.BigInteger,
-                2));
+            Encodings.IntegerEncoding.ParseSignedIntegerStrict(literal).IsOkOrNullable() is { } value
+            ?
+            number + op + Integer(value)
+            :
+            mismatch;
+
+        return type switch
+        {
+            LocalType.Integer or LocalType.OptionalInteger => CompareNumber(input, type == LocalType.OptionalInteger),
+
+            LocalType.IntegerWithOriginal =>
+            "(" + input + ".Original is null ? " + CompareNumber(input + ".Number", optional: true) +
+            " : " + Structural(input + ".Original") + ")",
+
+            LocalType.Boolean or LocalType.OptionalBoolean =>
+            matchTrue || matchFalse
+            ?
+            input + op + (matchTrue ? "true" : "false")
+            :
+            empty && type == LocalType.OptionalBoolean ? input + op + "null" : mismatch,
+
+            _ =>
+            Structural(input)
+        };
+    }
 
     private void EmitContract(StringBuilder text, Function function)
     {
@@ -1112,31 +1045,19 @@ internal sealed partial class PineCSharpEmitter
                 return;
 
             case StackInstructionKind.Local_Set_Literal:
-                WriteValue(
+                WriteLiteral(
                     text,
                     Local(function, instruction.SingleLocalIndex),
-                    Literal(instruction.Literal!.Evaluate()));
+                    instruction.Literal!.Evaluate());
 
                 return;
 
             case StackInstructionKind.Push_Literal:
-                if (_activeScalars.Contains(results[0]) &&
-                    BuiltinFunction.SignedIntegerFromValueRelaxed(instruction.Literal!.Evaluate()) is { } integer &&
-                    Encodings.IntegerEncoding.EncodeSignedInteger(integer).Equals(instruction.Literal.Evaluate()))
-                {
-                    WriteValue(text, results[0], NativeInteger(integer), native: true);
-                }
-                else
-                    WriteValue(text, results[0], Literal(instruction.Literal!.Evaluate()));
-
-                if (Encodings.IntegerEncoding.ParseSignedIntegerStrict(instruction.Literal!.Evaluate()).IsOkOrNullable() is not null)
-                    SetIntegerView(results[0], false);
-
+                WriteLiteral(text, results[0], instruction.Literal!.Evaluate());
                 return;
 
             case StackInstructionKind.Length:
-                text.AppendLine(results[0] + " = " + Pine(inputs[0]) + ".GetLength();");
-                SetIntegerView(results[0], false);
+                WriteValue(text, results[0], "new BigInteger(" + Pine(inputs[0]) + ".GetLength())", LocalType.Integer);
                 return;
 
             case StackInstructionKind.Local_Get:
@@ -1161,9 +1082,8 @@ internal sealed partial class PineCSharpEmitter
                     WriteValue(
                         text,
                         local,
-                        "NativeValue.Add(" + View(local) + ", " +
-                        NativeInteger(instruction.IntegerLiteral!.Value) + ")",
-                        native: true);
+                        Numeric(local) + " + " + BigIntegerConstant(instruction.IntegerLiteral!.Value),
+                        LocalType.OptionalInteger);
                 }
 
                 return;
@@ -1182,9 +1102,12 @@ internal sealed partial class PineCSharpEmitter
             case StackInstructionKind.Slice_Skip_Var_Equal_Const:
                 var sliceSuffix = results[0];
                 var offset = "offset_" + sliceSuffix;
-                text.AppendLine("if (sliceOffset.Get(" + View(inputs[1]) + ", 1L) is { } " + offset + ")");
+
+                text.AppendLine(
+                    "if (sliceOffset.Get(" + Numeric(inputs[1]) + ", BigInteger.One) is { } " + offset + ")");
+
                 text.AppendLine("{");
-                WriteValue(text, results[0], "PineValueInProcess.KernelFalseValue");
+                WriteValue(text, results[0], "false", LocalType.Boolean);
 
                 EmitMatchCases(
                     text,
@@ -1193,7 +1116,7 @@ internal sealed partial class PineCSharpEmitter
                         new(
                             instruction.Literal!.Evaluate(),
                             destination =>
-                            WriteValue(destination, results[0], "PineValueInProcess.KernelTrueValue"))
+                            WriteValue(destination, results[0], "true", LocalType.Boolean))
                     ],
                     offset);
 
@@ -1204,12 +1127,11 @@ internal sealed partial class PineCSharpEmitter
                 WriteValue(
                     text,
                     results[0],
-                    "PineValueInProcess.CreateBool(" +
-                    (instruction.Literal!.Evaluate().Equals(PineValue.EmptyList) ? "true" : "false") + ")");
+                    instruction.Literal!.Evaluate().Equals(PineValue.EmptyList) ? "true" : "false",
+                    LocalType.Boolean);
 
                 text.AppendLine("}");
                 _constantValues.Remove(results[0]);
-                _expressionScope.Forget(results[0]);
                 return;
 
             case StackInstructionKind.Blob_Trim_Leading_Zeros:
@@ -1247,125 +1169,86 @@ internal sealed partial class PineCSharpEmitter
                 if (results.Length != 1)
                     throw new InvalidOperationException("Ordinary operation must produce one value.");
 
-                var scalar = ScalarExpression(instruction, inputs);
+                if (ScalarExpression(instruction, inputs, results[0]) is { } scalar)
+                    WriteValue(text, results[0], scalar.Code, scalar.Type);
 
-                WriteValue(
-                    text,
-                    results[0],
-                    scalar ??
-                    OperationExpression(
-                        instruction,
-                        inputs,
-                        results[0]),
-                    native: scalar is not null);
-
-                if (instruction.Kind == StackInstructionKind.Length_Equal_Const)
-                {
-                    _expressionScope.SetPredicate(
-                        results[0],
-                        View(results[0]) + ".IsTrue()",
-                        "!" + View(results[0]) + ".IsTrue()",
-                        inputs);
-                }
-
-                if (instruction.Kind is StackInstructionKind.Equal_Binary or StackInstructionKind.Not_Equal_Binary)
-                {
-                    _expressionScope.SetPredicate(
-                        results[0],
-                        BinaryEquality(inputs[0], inputs[1], instruction.Kind == StackInstructionKind.Not_Equal_Binary),
-                        BinaryEquality(
-                            inputs[0],
-                            inputs[1],
-                            instruction.Kind != StackInstructionKind.Not_Equal_Binary),
-                        inputs);
-                }
-
-                if (instruction.Kind is StackInstructionKind.Equal_Binary_Const or StackInstructionKind.Not_Equal_Binary_Const)
-                {
-                    _expressionScope.SetPredicate(
-                        results[0],
-                        Equal(
-                            inputs[0],
-                            instruction.Literal!.Evaluate(),
-                            instruction.Kind == StackInstructionKind.Not_Equal_Binary_Const),
-                        Equal(
-                            inputs[0],
-                            instruction.Literal!.Evaluate(),
-                            instruction.Kind != StackInstructionKind.Not_Equal_Binary_Const),
-                        inputs);
-                }
-
-                if (instruction.Kind is StackInstructionKind.Int_Add_Binary or StackInstructionKind.Int_Add_Const or
-                    StackInstructionKind.Int_Mul_Binary or StackInstructionKind.Int_Mul_Const or
-                    StackInstructionKind.Int_Mul_Const_Add_Binary)
-                {
-                    SetIntegerView(results[0], true);
-                }
+                else
+                    WriteValue(text, results[0], OperationExpression(instruction, inputs, results[0]));
 
                 return;
         }
     }
 
-    private string NativeInteger(BigInteger integer) =>
-        integer >= long.MinValue && integer <= long.MaxValue
+    private string BigIntegerConstant(BigInteger integer) =>
+        integer.IsZero
         ?
-        "NativeValue.FromInt64(" + Integer(integer) + ")"
+        "BigInteger.Zero"
         :
-        "NativeValue.FromInteger(" + Integer(integer) + ")";
+        integer.IsOne
+        ?
+        "BigInteger.One"
+        :
+        integer == BigInteger.MinusOne
+        ?
+        "BigInteger.MinusOne"
+        :
+        integer >= int.MinValue && integer <= int.MaxValue
+        ?
+        "new BigInteger(" + Integer(integer) + ")"
+        :
+        Integer(integer);
 
-    private string? ScalarExpression(StackInstruction instruction, string[] inputs)
+    private (string Code, LocalType Type)? ScalarExpression(
+        StackInstruction instruction,
+        string[] inputs,
+        string result)
     {
-        var a = inputs.Length > 0 ? View(inputs[0]) : "";
-        var b = inputs.Length > 1 ? View(inputs[1]) : "";
-        var constant = instruction.IntegerLiteral is { } value ? NativeInteger(value) : "";
+        (string Code, LocalType Type) Input(int index) => (inputs[index], Storage(inputs[index]));
 
-        string Comparison(string name, string left, string right) =>
-            "NativeValue.FromBoolean(NativeValue." + name + "(" + left + ", " + right + "))";
+        (string Code, LocalType Type) Constant() =>
+            (BigIntegerConstant(instruction.IntegerLiteral!.Value), LocalType.Integer);
+
+        (string, LocalType) Boolean(string expression) => (expression, LocalType.Boolean);
+
+        (string, LocalType) Math(string op, (string Code, LocalType Type) right, string? multiplier = null) =>
+            (IntegerOperation(op, Input(0), right, result, multiplier: multiplier), LocalType.OptionalInteger);
+
+        if (IntegerComparison(instruction, inputs, result) is { } comparison)
+            return comparison;
 
         return instruction.Kind switch
         {
-            StackInstructionKind.Length => "NativeValue.FromInt64(" + Pine(inputs[0]) + ".GetLength())",
-            StackInstructionKind.Int_Add_Binary => "NativeValue.Add(" + a + ", " + b + ")",
-            StackInstructionKind.Int_Add_Const => "NativeValue.Add(" + a + ", " + constant + ")",
-            StackInstructionKind.Int_Mul_Binary => "NativeValue.Multiply(" + a + ", " + b + ")",
-            StackInstructionKind.Int_Mul_Const => "NativeValue.Multiply(" + a + ", " + constant + ")",
+            StackInstructionKind.Int_Add_Binary => Math("+", Input(1)),
+            StackInstructionKind.Int_Add_Const => Math("+", Constant()),
+            StackInstructionKind.Int_Mul_Binary => Math("*", Input(1)),
+            StackInstructionKind.Int_Mul_Const => Math("*", Constant()),
 
             StackInstructionKind.Int_Mul_Const_Add_Binary =>
-            "NativeValue.MultiplyAdd(" + a +
-            ", " + b + ", " + Integer(instruction.IntegerLiteral!.Value) + ")",
+            Math("+", Input(1), BigIntegerConstant(instruction.IntegerLiteral!.Value)),
 
             StackInstructionKind.Length_Equal_Const =>
-            "NativeValue.FromBoolean(" +
-            LengthEqual(inputs[0], instruction.IntegerLiteral!.Value) + ")",
+            Boolean(LengthEqual(inputs[0], instruction.IntegerLiteral!.Value)),
 
             StackInstructionKind.Equal_Binary =>
-            "NativeValue.FromBoolean(" + BinaryEquality(inputs[0], inputs[1], false) + ")",
+            Boolean(BinaryEquality(inputs[0], inputs[1], false)),
 
             StackInstructionKind.Not_Equal_Binary =>
-            "NativeValue.FromBoolean(" + BinaryEquality(inputs[0], inputs[1], true) + ")",
+            Boolean(BinaryEquality(inputs[0], inputs[1], true)),
 
             StackInstructionKind.Equal_Binary_Const =>
-            "NativeValue.FromBoolean(" +
-            Equal(inputs[0], instruction.Literal!.Evaluate()) + ")",
+            Boolean(Equal(inputs[0], instruction.Literal!.Evaluate())),
 
             StackInstructionKind.Not_Equal_Binary_Const =>
-            "NativeValue.FromBoolean(" +
-            Equal(inputs[0], instruction.Literal!.Evaluate(), negated: true) + ")",
+            Boolean(Equal(inputs[0], instruction.Literal!.Evaluate(), negated: true)),
 
-            StackInstructionKind.Is_List_Value => "NativeValue.FromBoolean(" + Pine(inputs[0]) + ".IsList())",
-            StackInstructionKind.Is_Blob_Value => "NativeValue.FromBoolean(" + Pine(inputs[0]) + ".IsBlob())",
+            StackInstructionKind.Is_List_Value => Boolean(Pine(inputs[0]) + ".IsList()"),
+            StackInstructionKind.Is_Blob_Value => Boolean(Pine(inputs[0]) + ".IsBlob()"),
 
             StackInstructionKind.Logical_And_Binary =>
-            "NativeValue.FromBoolean(" + a + ".IsTrue() && " + b + ".IsTrue())",
+            Boolean("(" + Truth(inputs[0]) + ") && (" + Truth(inputs[1]) + ")"),
 
-            StackInstructionKind.Negate when _expressionScope.Predicate(inputs[0], negated: true) is { } predicate =>
-            "NativeValue.FromBoolean(" + predicate + ")",
-
-            StackInstructionKind.Int_Less_Than_Binary => Comparison("LessThan", a, b),
-            StackInstructionKind.Int_Less_Than_Or_Equal_Binary => Comparison("LessThanOrEqual", a, b),
-            StackInstructionKind.Int_Less_Than_Const => Comparison("LessThan", a, constant),
-            StackInstructionKind.Int_Less_Than_Or_Equal_Const => Comparison("LessThanOrEqual", a, constant),
-            StackInstructionKind.Int_Greater_Than_Or_Equal_Const => Comparison("LessThanOrEqual", constant, a),
+            StackInstructionKind.Negate when Storage(inputs[0]) is LocalType.Boolean or LocalType.OptionalBoolean =>
+            ("!" + inputs[0], Storage(inputs[0])),
 
             _ =>
             null
@@ -1546,9 +1429,9 @@ internal sealed partial class PineCSharpEmitter
         "(integer_" + suffix + " " + op + " " + Integer(value) + ") : PineValueInProcess.EmptyList";
 
     private string Integer(BigInteger value) =>
-        value >= long.MinValue && value <= long.MaxValue
+        value >= int.MinValue && value <= int.MaxValue
         ?
-        value.ToString(CultureInfo.InvariantCulture) + "L"
+        value.ToString(CultureInfo.InvariantCulture)
         :
         Literal(Encodings.IntegerEncoding.EncodeSignedInteger(value)) + ".AsInteger()!.Value";
 
@@ -1637,7 +1520,7 @@ internal sealed partial class PineCSharpEmitter
 
             case ReturnValueLayout.Node.List list:
                 var items = list.Items.Select(FixedTree).ToArray();
-                return items.All(item => item is not null) ? PineValue.List(items.Select(item => item!).ToArray()) : null;
+                return items.All(item => item is not null) ? PineValue.List([.. items.Select(item => item!)]) : null;
 
             case ReturnValueLayout.Node.Component:
             case ReturnValueLayout.Node.Variant:
@@ -1687,9 +1570,11 @@ internal sealed partial class PineCSharpEmitter
 
         var identity =
             PineValue.List(
-                items.Select(
-                    item => PineValue.List(
-                        [item.Key, Encodings.IntegerEncoding.EncodeSignedInteger(item.Value)])).ToArray<PineValue>());
+                [
+                    .. items.Select(
+                        item => PineValue.List(
+                            [item.Key, Encodings.IntegerEncoding.EncodeSignedInteger(item.Value)]))
+                ]);
 
         if (!_switchTables.TryGetValue(identity, out var table))
         {
@@ -1708,7 +1593,7 @@ internal sealed partial class PineCSharpEmitter
         var items = Ordered(map).DistinctBy(item => item.Key).ToArray();
 
         var identity =
-            PineValue.List(items.Select(item => PineValue.List([item.Key, item.Value])).ToArray<PineValue>());
+            PineValue.List([.. items.Select(item => PineValue.List([item.Key, item.Value]))]);
 
         if (!_valueMaps.TryGetValue(identity, out var table))
         {
@@ -1879,13 +1764,12 @@ internal sealed partial class PineCSharpEmitter
     private string Header() =>
         "#nullable enable\n" +
         (_options.ContainerNamespace is null ? "" : "\nnamespace " + _options.ContainerNamespace + ";\n\n") +
+        "using global::System.Numerics;\n" +
         "using PineValue = global::Pine.Core.PineLanguage.PineValue;\n" +
         "using PineValueInProcess = global::Pine.Core.Internal.PineValueInProcess;\n" +
-        "using NativeValue = global::Pine.Core.DotNet.PineCSharpValue;\n" +
         "using SliceOffset = global::Pine.Core.DotNet.PineCSharpSliceOffset;\n" +
         "using Kernel = global::Pine.Core.PineLanguage.BuiltinFunction;\n" +
         "using Specialized = global::Pine.Core.Internal.BuiltinFunctionSpecialized;\n" +
-        "using global::System.Numerics;\n" +
         "using BlobMemory = global::System.ReadOnlyMemory<byte>;\n" +
         "using ListMemory = global::System.ReadOnlyMemory<global::Pine.Core.PineLanguage.PineValue>;\n" +
         string.Concat(
@@ -1969,7 +1853,7 @@ internal sealed partial class PineCSharpEmitter
         return
             constants.All(item => item is not null)
             ?
-            Literal(PineValue.List(constants.Select(item => item!).ToArray()))
+            Literal(PineValue.List([.. constants.Select(item => item!)]))
             :
             "PineValueInProcess.CreateList(new PineValueInProcess[] { " + string.Join(", ", items) + " })";
     }
@@ -2043,7 +1927,7 @@ internal sealed partial class PineCSharpEmitter
                         values.TakeLast(returned.ValueCount).SequenceEqual(original);
 
                 case PineControlFlowTerminator.Jump jump:
-                    values = jump.Arguments.Select(value => aliases[value]).ToList();
+                    values = [.. jump.Arguments.Select(value => aliases[value])];
                     next = jump.Target;
                     break;
 

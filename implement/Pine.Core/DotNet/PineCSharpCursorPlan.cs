@@ -85,7 +85,7 @@ internal sealed record PineCSharpCursorPlan(
                         if (instruction.LocalIndices.Any(index => !locals.ContainsKey(index)))
                             return null;
 
-                        results = instruction.LocalIndices.Select(index => locals[index]).ToArray();
+                        results = [.. instruction.LocalIndices.Select(index => locals[index])];
                         break;
 
                     case StackInstructionKind.Local_Get_Skip_Head_Const:
@@ -93,9 +93,11 @@ internal sealed record PineCSharpCursorPlan(
                             return null;
 
                         results =
-                            instruction.LocalIndices.Select(
+                            [
+                            .. instruction.LocalIndices.Select(
                                 index =>
-                                (Value)new Value.Projection(locals[index], instruction.SkipCount!.Value)).ToArray();
+                                (Value)new Value.Projection(locals[index], instruction.SkipCount!.Value))
+                            ];
 
                         break;
 
@@ -187,7 +189,7 @@ internal sealed record PineCSharpCursorPlan(
                     return new Decision.Return([.. stack.TakeLast(returned.ValueCount)]);
 
                 case PineControlFlowTerminator.Jump jump:
-                    return Edge(jump.Target, jump.Arguments.Select(argument => values[argument]).ToArray());
+                    return Edge(jump.Target, [.. jump.Arguments.Select(argument => values[argument])]);
 
                 case PineControlFlowTerminator.Switch choice:
                     if (choice.Kind != PineSwitchKind.SliceSkipVarEqual ||
@@ -208,7 +210,7 @@ internal sealed record PineCSharpCursorPlan(
                     foreach (var item in choice.Cases)
                     {
                         minimumLength = Math.Min(minimumLength, ((PineValue.BlobValue)item.Literal).Bytes.Length);
-                        var next = Edge(item.Target, choice.Arguments.Select(argument => values[argument]).ToArray());
+                        var next = Edge(item.Target, [.. choice.Arguments.Select(argument => values[argument])]);
 
                         if (next is null)
                             return null;
@@ -217,7 +219,7 @@ internal sealed record PineCSharpCursorPlan(
                     }
 
                     var fallback =
-                        Edge(choice.FallThrough, choice.Arguments.Select(argument => values[argument]).ToArray());
+                        Edge(choice.FallThrough, [.. choice.Arguments.Select(argument => values[argument])]);
 
                     return fallback is null ? null : new Decision.Match(cases.ToImmutable(), fallback);
 
@@ -308,9 +310,11 @@ internal sealed record PineCSharpCursorPlan(
                     {
                         supported &=
                             PineCSharpConstantMatch.CanInline(
-                                group.Select(
-                                    item =>
-                                    new PineCSharpConstantMatch.Case(item.Literal, _ => { })).ToArray(),
+                                [
+                                    .. group.Select(
+                                        item =>
+                                        new PineCSharpConstantMatch.Case(item.Literal, _ => { }))
+                                ],
                                 matchLimit);
                     }
 

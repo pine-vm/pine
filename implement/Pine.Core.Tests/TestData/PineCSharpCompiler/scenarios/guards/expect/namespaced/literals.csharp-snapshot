@@ -1,7 +1,6 @@
 #nullable enable
 
 namespace Pine.Generated.Refinement1;
-
 using PineValue = global::Pine.Core.PineLanguage.PineValue;
 using PineValueInProcess = global::Pine.Core.Internal.PineValueInProcess;
 
