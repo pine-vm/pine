@@ -221,7 +221,8 @@ public static class ElmValueEncoding
                             listValue.Items[2..],
                             additionalReusableDecodings,
                             reportNewDecoding,
-                            malformedTagIsError: true);
+                            malformedTagIsError: true)
+                        ?? throw new InvalidOperationException("Decoding an explicit choice must return a result.");
                 }
             }
 

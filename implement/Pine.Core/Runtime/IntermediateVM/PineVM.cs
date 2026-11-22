@@ -832,13 +832,13 @@ public partial class PineVM : ICancellablePineVM
             return EnforceInvocationCountLimit();
         }
 
-        EvaluationError? IncrementLoopIterationCountAndEnforceLimits(StackFrame frame)
+        EvaluationError? IncrementLoopIterationCountAndEnforceLimits(StackFrame frame, StackFrameInput frameInput)
         {
             loopIterationCount++;
             frame.LoopIterationCount++;
 
             FireEvaluationEvent(EvaluationEventKind.BackwardJump, frame);
-            FireTailLoopIteration(TailLoopIterationKind.BackwardJump, frame.Identity, frame.InputValues);
+            FireTailLoopIteration(TailLoopIterationKind.BackwardJump, frame.Identity, frameInput);
 
             return EnforceLoopIterationCountLimit();
         }
@@ -1008,32 +1008,10 @@ public partial class PineVM : ICancellablePineVM
                                 continue;
                             }
 
-                        case PrecompiledResult.StepwiseSpecialization specialization:
-                            {
-                                var newFrame =
-                                    new StackFrame(
-                                        ExpressionValue: expressionValue,
-                                        Identity: _expressionEncodingCache.GetIdentity(expression),
-                                        Instructions: null,
-                                        InputValues: null,
-                                        StackValues: null,
-                                        LocalsValues: null,
-                                        ProfilingBaseline:
-                                        new StackFrameProfilingBaseline(
-                                            BeginCountersByOrigin: CurrentCountersByOrigin(),
-                                            BeginEvalCount: evalCount,
-                                            BeginStackFrameCount: stackFrameCount),
-                                        Specialization: specialization.Stepwise);
-
-                                return
-                                    PushStackFrame(
-                                        newFrame,
-                                        replaceCurrentFrame: false);
-                            }
-
                         default:
-                            throw new Exception(
-                                "Unexpected return type from precompiled: " + precompiledResult.GetType().FullName);
+                            throw new NotImplementedException(
+                                nameof(InvokePrecompiledOrBuildStackFrame) +
+                                " does not handle precompiled result variant: " + precompiledResult.GetType().Name);
                     }
                 }
                 else
@@ -1527,7 +1505,8 @@ public partial class PineVM : ICancellablePineVM
             }
 
             if (reportEnteredStackFrame is { } reportEnteredStackFrameLocal &&
-                newFrame.Instructions is { } frameInstructions)
+                newFrame.Instructions is { } frameInstructions &&
+                newFrame.InputValues is { } frameInput)
             {
                 var enteredStackFrame =
                     new EnteredStackFrame(
@@ -1535,7 +1514,7 @@ public partial class PineVM : ICancellablePineVM
                         StackFrameDepth: stack.Count,
                         Instructions: frameInstructions,
                         Identity: newFrame.Identity,
-                        LoadFrameInput: newFrame.InputValues.DiagnosticLoader);
+                        LoadFrameInput: frameInput.DiagnosticLoader);
 
                 reportEnteredStackFrameLocal(in enteredStackFrame);
             }
@@ -1551,7 +1530,10 @@ public partial class PineVM : ICancellablePineVM
                 return;
             }
 
-            var instruction = parent.Instructions.Instructions[parent.InstructionPointer];
+            var parentInstructions =
+                parent.Instructions ?? throw new InvalidOperationException("Missing parent frame instructions.");
+
+            var instruction = parentInstructions.Instructions[parent.InstructionPointer];
 
             if (instruction.Kind is StackInstructionKind.Invoke_StackFrame_Const &&
                 instruction.OptimizedInvocation is { } direct)
@@ -1579,7 +1561,8 @@ public partial class PineVM : ICancellablePineVM
 
             FireEvaluationEvent(EvaluationEventKind.FrameExited, currentFrame);
 
-            if (currentFrame.ExpressionValue is { } currentFrameExprValue)
+            if (currentFrame.ExpressionValue is { } currentFrameExprValue &&
+                currentFrame.InputValues is { } frameInput)
             {
                 var frameTotalInstructionCount =
                     instructionCount -
@@ -1605,7 +1588,7 @@ public partial class PineVM : ICancellablePineVM
                     using var cause = _workProfile?.WithCause(PineVMWorkProfile.MaterializationCause.InvocationCache);
 
                     if (invocationCache.TryAddResult(
-                        new EvalCacheEntryKey(currentFrameExprValue, currentFrame.InputValues),
+                        new EvalCacheEntryKey(currentFrameExprValue, frameInput),
                         result))
                     {
                         lastCacheEntryInstructionCount = instructionCount;
@@ -1630,7 +1613,7 @@ public partial class PineVM : ICancellablePineVM
                     reportFunctionApplication(
                         new EvaluationReport(
                             Identity: currentFrame.Identity,
-                            currentFrame.InputValues,
+                            frameInput,
                             Counters: frameOrigins.Total,
                             ReturnValue: Canonical(),
                             ExpressionStackTrace: CompileStackTrace(10))
@@ -1842,8 +1825,13 @@ public partial class PineVM : ICancellablePineVM
                         "Unexpected step result type: " + stepResult.GetType().FullName);
                 }
 
+                if (currentFrame.Instructions is not { } frameInstructions ||
+                    currentFrame.InputValues is not { } frameInput)
+                {
+                    throw new InvalidOperationException("An instruction frame must have both instructions and inputs.");
+                }
 
-                if (currentFrame.Instructions.Instructions.Count <= currentFrame.InstructionPointer)
+                if (frameInstructions.Instructions.Count <= currentFrame.InstructionPointer)
                 {
                     return
                         BuildEvaluationError(
@@ -1851,7 +1839,7 @@ public partial class PineVM : ICancellablePineVM
                 }
 
                 var currentInstruction =
-                    currentFrame.Instructions.Instructions[currentFrame.InstructionPointer]
+                    frameInstructions.Instructions[currentFrame.InstructionPointer]
                     ??
                     throw new InvalidOperationException("currentInstruction is null");
 
@@ -1865,8 +1853,8 @@ public partial class PineVM : ICancellablePineVM
                             EvaluationStackDepth: currentFrame.StackPointer,
                             Instruction: currentInstruction,
                             Identity: currentFrame.Identity,
-                            LoadFrameInput: currentFrame.InputValues.DiagnosticLoader,
-                            FrameInstructions: currentFrame.Instructions,
+                            LoadFrameInput: frameInput.DiagnosticLoader,
+                            FrameInstructions: frameInstructions,
                             FrameIndex: currentFrame.FrameIndex);
 
                     reportExecutedStackInstruction(in executedStackInstruction);
@@ -2740,10 +2728,10 @@ public partial class PineVM : ICancellablePineVM
                         {
                             var frameReturnValue =
                                 new InvocationResult(
-                                    currentFrame.Instructions.ReturnLayout,
+                                    frameInstructions.ReturnLayout,
                                     currentFrame.StackValues.Slice(
-                                        currentFrame.StackPointer - currentFrame.Instructions.ReturnLayout.SlotCount,
-                                        currentFrame.Instructions.ReturnLayout.SlotCount));
+                                        currentFrame.StackPointer - frameInstructions.ReturnLayout.SlotCount,
+                                        frameInstructions.ReturnLayout.SlotCount));
 
                             var returnOverall =
                                 ReturnFromStackFrame(frameReturnValue);
@@ -2801,7 +2789,7 @@ public partial class PineVM : ICancellablePineVM
                             var environmentValue = currentFrame.PopTopmostFromStack();
 
                             var replaceCurrentFrame =
-                                currentFrame.Instructions.CanForwardReturn(
+                                frameInstructions.CanForwardReturn(
                                     currentFrame.InstructionPointer,
                                     ReturnValueLayout.Canonical);
 
@@ -2917,7 +2905,7 @@ public partial class PineVM : ICancellablePineVM
                                         plan,
                                         combinedEnvironments,
                                         replaceCurrentFrame:
-                                        currentFrame.Instructions.CanForwardReturn(
+                                        frameInstructions.CanForwardReturn(
                                             currentFrame.InstructionPointer, ReturnValueLayout.Canonical)) is { } error)
                                     {
                                         return error;
@@ -2975,7 +2963,7 @@ public partial class PineVM : ICancellablePineVM
                                 if (PushEvalContinuation(
                                     initialStep,
                                     replaceCurrentFrame:
-                                    currentFrame.Instructions.CanForwardReturn(
+                                    frameInstructions.CanForwardReturn(
                                         currentFrame.InstructionPointer, ReturnValueLayout.Canonical)) is { } continuationError)
                                 {
                                     return continuationError;
@@ -2993,7 +2981,7 @@ public partial class PineVM : ICancellablePineVM
                             if (PushEvalContinuation(
                                 genericInitialStep,
                                 replaceCurrentFrame:
-                                currentFrame.Instructions.CanForwardReturn(
+                                frameInstructions.CanForwardReturn(
                                     currentFrame.InstructionPointer, ReturnValueLayout.Canonical)) is { } genericError)
                             {
                                 return genericError;
@@ -3046,7 +3034,7 @@ public partial class PineVM : ICancellablePineVM
                             ++evalCount;
 
                             var replaceCurrentFrame =
-                                currentFrame.Instructions.CanForwardReturn(
+                                frameInstructions.CanForwardReturn(
                                     currentFrame.InstructionPointer,
                                     ReturnValueLayout.Canonical);
 
@@ -3115,7 +3103,7 @@ public partial class PineVM : ICancellablePineVM
 
                             if (jumpOffset < 0)
                             {
-                                if (IncrementLoopIterationCountAndEnforceLimits(currentFrame) is { } loopLimitError)
+                                if (IncrementLoopIterationCountAndEnforceLimits(currentFrame, frameInput) is { } loopLimitError)
                                 {
                                     return loopLimitError;
                                 }
@@ -3169,7 +3157,7 @@ public partial class PineVM : ICancellablePineVM
                                     directInvocation.EnvironmentConstraint);
 
                             var replaceCurrentFrame =
-                                currentFrame.Instructions.CanForwardReturn(
+                                frameInstructions.CanForwardReturn(
                                     currentFrame.InstructionPointer,
                                     directInvocation.ReturnLayout);
 
@@ -3218,7 +3206,7 @@ public partial class PineVM : ICancellablePineVM
 
                                 if (jumpOffset < 0)
                                 {
-                                    if (IncrementLoopIterationCountAndEnforceLimits(currentFrame) is { } loopLimitError)
+                                    if (IncrementLoopIterationCountAndEnforceLimits(currentFrame, frameInput) is { } loopLimitError)
                                     {
                                         return loopLimitError;
                                     }
@@ -3254,7 +3242,7 @@ public partial class PineVM : ICancellablePineVM
 
                                 if (jumpOffset < 0)
                                 {
-                                    if (IncrementLoopIterationCountAndEnforceLimits(currentFrame) is { } loopLimitError)
+                                    if (IncrementLoopIterationCountAndEnforceLimits(currentFrame, frameInput) is { } loopLimitError)
                                     {
                                         return loopLimitError;
                                     }
@@ -3299,7 +3287,7 @@ public partial class PineVM : ICancellablePineVM
                             currentFrame.InstructionPointer += jumpOffset;
 
                             if (jumpOffset < 0 &&
-                                IncrementLoopIterationCountAndEnforceLimits(currentFrame) is { } loopLimitError)
+                                IncrementLoopIterationCountAndEnforceLimits(currentFrame, frameInput) is { } loopLimitError)
                             {
                                 return loopLimitError;
                             }
@@ -3327,7 +3315,7 @@ public partial class PineVM : ICancellablePineVM
 
                                 if (jumpOffset < 0)
                                 {
-                                    if (IncrementLoopIterationCountAndEnforceLimits(currentFrame) is { } loopLimitError)
+                                    if (IncrementLoopIterationCountAndEnforceLimits(currentFrame, frameInput) is { } loopLimitError)
                                     {
                                         return loopLimitError;
                                     }
@@ -3413,7 +3401,7 @@ public partial class PineVM : ICancellablePineVM
 
                                 if (matchedJumpOffset < 0)
                                 {
-                                    if (IncrementLoopIterationCountAndEnforceLimits(currentFrame) is { } loopLimitError)
+                                    if (IncrementLoopIterationCountAndEnforceLimits(currentFrame, frameInput) is { } loopLimitError)
                                     {
                                         return loopLimitError;
                                     }

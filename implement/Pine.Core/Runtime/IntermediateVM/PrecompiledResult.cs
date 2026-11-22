@@ -4,8 +4,7 @@ namespace Pine.Core.Runtime.IntermediateVM;
 
 /// <summary>
 /// Represents the result returned by a precompiled function handler.
-/// The VM dispatches on the concrete variant to decide whether to use the value directly,
-/// continue with another parse-and-eval cycle, or proceed stepwise.
+/// The VM either uses the value directly or continues with another parse-and-eval cycle.
 /// </summary>
 public abstract record PrecompiledResult
 {
@@ -25,14 +24,6 @@ public abstract record PrecompiledResult
     public sealed record ContinueEval(
         PineValue EnvironmentValue,
         PineValue ExpressionValue)
-        : PrecompiledResult;
-
-    /// <summary>
-    /// Indicates that the precompiled function provides a stepwise continuation-based evaluation,
-    /// managed by an <see cref="ApplyStepwise"/> instance.
-    /// </summary>
-    public sealed record StepwiseSpecialization(
-        ApplyStepwise Stepwise)
         : PrecompiledResult;
 }
 

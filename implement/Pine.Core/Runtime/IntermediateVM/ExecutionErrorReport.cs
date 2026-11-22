@@ -11,8 +11,8 @@ namespace Pine.Core.Runtime.IntermediateVM;
 /// </summary>
 public record ExecutionErrorReport(
     ExpressionIdentity Identity,
-    StackFrameInput InputValues,
-    StackFrameInstructions Instructions,
+    StackFrameInput? InputValues,
+    StackFrameInstructions? Instructions,
     int FrameInstructionPointer)
 {
     /// <summary>Materializes canonical syntax only when the error is inspected or rendered.</summary>
@@ -40,13 +40,21 @@ public static class ExecutionErrorReportExtensions
 
         var exprHashBase16 = Convert.ToHexStringLower(exprHash.Span);
 
+        var environmentText =
+            errorReport.InputValues is { } inputs ? " for environment " + inputs : "";
+
+        if (errorReport.Instructions is not { } instructions)
+        {
+            yield return "Stepwise frame in expression: " + exprHashBase16[..8] + environmentText;
+            yield break;
+        }
+
         yield return
             "Instruction " + errorReport.FrameInstructionPointer +
-            " in expression: " + exprHashBase16[..8] + " for environment " +
-            errorReport.InputValues.ToString();
+            " in expression: " + exprHashBase16[..8] + environmentText;
 
         var specializationText =
-            errorReport.Instructions.TrackEnvConstraint is { } trackEnvConstraint
+            instructions.TrackEnvConstraint is { } trackEnvConstraint
             ?
             "specialized with " + trackEnvConstraint.HashBase16[0..8]
             :
@@ -54,6 +62,6 @@ public static class ExecutionErrorReportExtensions
 
         yield return
             specializationText + " has " +
-            errorReport.Instructions.Instructions.Count + " instructions";
+            instructions.Instructions.Count + " instructions";
     }
 }

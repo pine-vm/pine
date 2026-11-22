@@ -74,12 +74,12 @@ public static class CoreDictPrecompiledLeaves
     /// </summary>
     public static PineValue DictGetEnvFunctionsValue => s_dictGetLeafInfo.Value.envFunctionsValue;
 
-    private static readonly Lazy<(PineValue leafKey, PineValue envFunctionsValue)> s_dictGetLeafInfo =
-        new(() => s_dictLeafInfos.Value["get"]);
-
     private static readonly Lazy<IReadOnlyDictionary<string, (PineValue leafKey, PineValue envFunctionsValue)>>
         s_dictLeafInfos =
         new(BuildDictLeafInfos);
+
+    private static readonly Lazy<(PineValue leafKey, PineValue envFunctionsValue)> s_dictGetLeafInfo =
+        new(() => s_dictLeafInfos.Value["get"]);
 
     private static IReadOnlyDictionary<string, (PineValue leafKey, PineValue envFunctionsValue)>
         BuildDictLeafInfos()

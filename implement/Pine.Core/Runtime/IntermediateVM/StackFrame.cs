@@ -36,11 +36,11 @@ public record StackFrame
     internal InternalExpression.Expression InternalExpression =>
         Identity.InternalExpression;
 
-    /// <summary>Compiled frame instructions.</summary>
-    public StackFrameInstructions Instructions { get; init; }
+    /// <summary>Compiled frame instructions, absent for stepwise frames.</summary>
+    public StackFrameInstructions? Instructions { get; init; }
 
-    /// <summary>Arguments in the compiled frame layout.</summary>
-    public StackFrameInput InputValues { get; init; }
+    /// <summary>Frame arguments, absent for synthetic continuations.</summary>
+    public StackFrameInput? InputValues { get; init; }
 
     /// <summary>Operand storage.</summary>
     public Memory<PineValueInProcess?> StackValues { get; init; }
@@ -78,8 +78,8 @@ public record StackFrame
     internal StackFrame(
         PineValue? ExpressionValue,
         ExpressionIdentity Identity,
-        StackFrameInstructions Instructions,
-        StackFrameInput InputValues,
+        StackFrameInstructions? Instructions,
+        StackFrameInput? InputValues,
         Memory<PineValueInProcess?> StackValues,
         Memory<PineValueInProcess> LocalsValues,
         StackFrameProfilingBaseline ProfilingBaseline,
@@ -103,8 +103,8 @@ public record StackFrame
     public void Deconstruct(
         out PineValue? ExpressionValue,
         out Expression Expression,
-        out StackFrameInstructions Instructions,
-        out StackFrameInput InputValues,
+        out StackFrameInstructions? Instructions,
+        out StackFrameInput? InputValues,
         out Memory<PineValueInProcess?> StackValues,
         out Memory<PineValueInProcess> LocalsValues,
         out StackFrameProfilingBaseline ProfilingBaseline,
@@ -332,9 +332,9 @@ public record struct StackFrameProfilingBaseline(
  * */
 
 /// <summary>
-/// Manages iterative continuation-based execution for precompiled specializations.
-/// Each step either requests evaluation of a sub-expression (via <see cref="StepResult.Continue"/>)
-/// or signals completion (via <see cref="StepResult.Complete"/>).
+/// Manages the VM's stepwise execution of fused application chains.
+/// Each step requests evaluation of a known expression or an encoded expression value,
+/// or signals completion.
 /// </summary>
 public record ApplyStepwise
 {

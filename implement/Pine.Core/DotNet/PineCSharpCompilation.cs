@@ -13,6 +13,12 @@ using Conversion = Pine.Core.Runtime.InternalExpression.ExpressionConversion;
 namespace Pine.Core.DotNet;
 
 /// <summary>Options for compiling an evaluation-closed graph, without an interpreter fallback.</summary>
+/// <param name="EnableCancellation">Whether to emit cancellation support in the generated methods.</param>
+/// <param name="IncludeGenericEntry">Whether to generate a root entry point without environment constraints.</param>
+/// <param name="ClassName">Name of the generated methods class.</param>
+/// <param name="LiteralsClassName">Name of the generated literal pool class.</param>
+/// <param name="MaximumFunctionCount">Maximum number of functions in the compiled graph.</param>
+/// <param name="ContainerNamespace">Namespace for the generated classes, or <c>null</c> for the global namespace.</param>
 /// <param name="MaximumInlineMatchDifferingPositions">
 /// Maximum varying byte/item positions in an inlined constant-match group. Zero disables inlining.
 /// Common positions and length/type guards are shared independently of literal length.
